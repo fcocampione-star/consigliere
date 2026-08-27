@@ -1,0 +1,8 @@
+{
+  "autoskills": {
+    "installed_by": "consigliere",
+    "managed": true,
+    "version": "0.0.0",
+    "note": "Regenerar con `npx autoskills` tras añadir dependencias. Editar libremente."
+  }
+}

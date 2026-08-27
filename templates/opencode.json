@@ -1,0 +1,68 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "orchestrator",
+  "subagent_depth": 2,
+  "instructions": ["AGENTS.md"],
+  "agent": {
+    "orchestrator": {
+      "mode": "primary",
+      "model": "{{MODEL_ORCHESTRATOR}}"
+    },
+    "planner": {
+      "mode": "subagent",
+      "model": "{{MODEL_PLANNER}}"
+    },
+    "builder": {
+      "mode": "subagent",
+      "model": "{{MODEL_BUILDER}}",
+      "permission": {
+        "bash": {
+          "*": "ask",
+          "npm*": "allow",
+          "npx*": "allow",
+          "pnpm*": "allow",
+          "yarn*": "allow",
+          "git status*": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "git stash*": "allow",
+          "git add*": "allow",
+          "git restore*": "allow",
+          "cat*": "allow",
+          "ls*": "allow",
+          "mkdir*": "allow",
+          "cp*": "allow",
+          "mv*": "allow",
+          "node*": "allow",
+          "curl*": "allow",
+          "rm -rf*": "deny",
+          "sudo*": "deny",
+          "dd*": "deny",
+          "mkfs*": "deny",
+          "chmod 777*": "deny",
+          "git push*": "ask",
+          "git commit*": "ask",
+          "git amend*": "ask",
+          "git rebase*": "ask",
+          "git reset*": "ask"
+        }
+      }
+    },
+    "verifier": {
+      "mode": "subagent",
+      "model": "{{MODEL_VERIFIER}}"
+    },
+    "critic": {
+      "mode": "subagent",
+      "model": "{{MODEL_CRITIC}}"
+    },
+    "summarizer": {
+      "mode": "subagent",
+      "model": "{{MODEL_SUMMARIZER}}"
+    },
+    "explore": {
+      "mode": "subagent",
+      "model": "{{MODEL_EXPLORE}}"
+    }
+  }
+}
