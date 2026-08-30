@@ -25,7 +25,7 @@
 - **Models**: each subagent can have its own `model:` in `opencode.json` (placeholders set at scaffold; edit to fill).
 - **Builder safety**: a bash allowlist in `opencode.json` blocks destructive commands (`rm -rf`, `git push`, `sudo`, etc.).
 - **Commits are proposed, never automatic** (`git commit/push/amend → ask`).
-- Quick commands: `/routine <tarea>` (full plan→critique→build→verify→record cycle), `/record <contexto>` (persist progress), `/rotate-memory`, `/compact-state`.
+- Quick commands: `/discover [foco]` (audita contexto + skills presentes/faltantes), `/routine <tarea>` (full plan→critique→build→verify→record cycle), `/record <contexto>` (persist progress), `/rotate-memory`, `/compact-state`.
 
 ## Stack
 

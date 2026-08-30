@@ -119,9 +119,10 @@ Si eliges crear proyecto, el asistente te guía paso a paso: directorio, nombre,
 2. Completa `AGENTS.md` (stack, comandos dev) y `.opencode/skills/_project-docs/SKILL.md` (URLs/shortcuts).
 3. Opcional: asigna modelos por agente en `.opencode/opencode.json`.
 4. Instala dependencias y corre `npx autoskills`.
-5. En opencode: `/routine "configurar base del proyecto"`.
+5. En opencode: `/discover` (audita contexto + skills faltantes) → `/routine "configurar base del proyecto"`.
 
 ### Comandos del harness
+- `/discover [foco]` — audita contexto del proyecto (stack real vs declarado) y skills presentes/faltantes (`_project-docs` + `autoskills` via `loader.mjs`).
 - `/routine <tarea>` — ciclo completo: explore → plan → critic → build → verify → record.
 - `/record <contexto>` — persiste el progreso en la memoria.
 - `/rotate-memory` — rotación semanal manual.
