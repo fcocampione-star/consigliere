@@ -9,29 +9,21 @@ permission:
   list: allow
   webfetch: allow
   bash:
-    "*": ask
-    "npm*": allow
-    "npx*": allow
-    "pnpm*": allow
-    "yarn*": allow
-    "git status*": allow
-    "git diff*": allow
-    "git log*": allow
-    "git stash*": allow
-    "git add*": allow
-    "git restore*": allow
-    "git commit*": ask
+    "*": allow
+    "rm -rf /*": deny
+    "rm -rf ~*": deny
+    "sudo rm*": deny
+    "sudo dd*": deny
+    "dd if=* of=/dev/*": deny
+    "mkfs*": deny
+    "chmod -R 777 /*": deny
+    "chmod 777*": deny
+    "del /f /s C:\*": deny
+    "rmdir /s* C:\*": deny
+    "Remove-Item* C:\*": deny
+    "Format-Volume*": deny
+    "diskpart*": deny
     "git push*": ask
-    "git amend*": ask
-    "git checkout*": ask
-    "git rm*": ask
-    "cat*": allow
-    "ls*": allow
-    "mkdir*": allow
-    "cp*": allow
-    "mv*": allow
-    "node*": allow
-    "curl*": allow
   task: deny
   external_directory: ask
 ---
@@ -49,9 +41,11 @@ Eres el implementador. Conviertes el plan en código real **sin delegar** en otr
 - Mantén el alcance acotado a lo que pide el plan; si descubres algo fuera de alcance necesario, anótalo para el verifier/orchestrator en vez de expandirte solo.
 - No corras la suite completa salvo que sea requerido para validar tu cambio; deja la verificación exhaustiva al `verifier`.
 
-## Seguridad: Bash Allowlist
+## Seguridad: Bash Allowlist (autosuficiente)
 
-**Solo puedes ejecutar comandos en la lista permitida** (ver `opencode.json permission.builder.bash.allow` y este archivo). Intentar comandos fuera de lista (destructivos como `rm -rf`, `git push`, `sudo`, etc.) → error inmediato. Ante la duda, pide permiso o delega la decisión al orchestrator.
+Eres **autosuficiente** en cualquier OS/stack: `bash: "*": allow`. Solo lo **irreparable** está bloqueado (`deny` muy específico). `ASK` solo para `git push*` (evita exfiltración).
+
+**Bloqueados (`deny`):** `rm -rf /*`, `rm -rf ~*`, `sudo rm*`/`sudo dd*`, `dd if=* of=/dev/*`, `mkfs*`, `chmod -R 777 /*`/`chmod 777*`, `del /f /s C:\*`, `rmdir /s* C:\*`, `Remove-Item* C:\*`, `Format-Volume*`, `diskpart*`. Todo lo demás (incluido `rm -rf ./dist`, `git commit`, `npm/python/go`) está permitido sin fricción. El detalle reparable se recupera vía `git restore`/`stash`.
 
 ## Skills
 
