@@ -37,25 +37,58 @@ Un directorio de proyecto nuevo con:
 
 ## Instalación
 
-### Usar desde la carpeta (modo local)
+### Tabla por sistema operativo
+
+| OS | Método recomendado | Comando |
+|---|---|---|
+| **Cualquiera con Node 18+** (universal) | `npm` / `npx` | `npm i -g consigliere` → `consigliere-init /ruta/proyecto` <br> o sin instalar: `npx consigliere-init /ruta/proyecto` |
+| **Linux / macOS** | `bash` | `./init.sh --install-global` → `consigliere-init /ruta/proyecto` |
+| **Windows PowerShell 5.1+/7** | `PowerShell` nativo | `powershell -ExecutionPolicy Bypass -File .\init.ps1 -InstallGlobal` → `powershell -File ~\.local\bin\consigliere-init.ps1 C:\ruta\proyecto` <br> o CMD: `init.cmd C:\ruta\proyecto` |
+| **Windows Git Bash / WSL** | `bash` | `./init.sh --install-global` (requiere Git for Windows) |
+
+> `npm` es el instalador más universal: funciona en Linux, macOS y Windows sin `bash`. `brew` y `curl|bash` son vías secundarias solo Unix.
+
+### Opción A — npm/npx (universal, recomendado si tienes Node)
+
 ```bash
-cd consigliere
-./init.sh
+# Instalación global (una vez)
+npm i -g consigliere
+consigliere-init --version          # debe mostrar CONSIGLIERE v1.0.0
+consigliere-init /ruta/proyecto    # o consigliere /ruta/proyecto
+
+# Sin instalación (siempre última versión)
+npx consigliere-init /ruta/proyecto --name mi-app --stack-backend node/express --autoskills 1 --git yes
 ```
 
-### Instalar globalmente (una vez)
+### Opción B — bash (Linux/macOS/Git Bash/WSL)
+
 ```bash
 cd consigliere
-./init.sh --install-global
-# Ahora desde cualquier carpeta:
+./init.sh                          # modo interactivo
+./init.sh --install-global         # instala en ~/.local/bin/consigliere-init
 consigliere-init /ruta/proyecto
 ```
 
+### Opción C — PowerShell (Windows nativo, sin bash ni Node)
+
+```powershell
+cd consigliere
+powershell -ExecutionPolicy Bypass -File .\init.ps1          # modo interactivo
+powershell -ExecutionPolicy Bypass -File .\init.ps1 -InstallGlobal
+# Ahora desde cualquier carpeta:
+powershell -File ~\.local\bin\consigliere-init.ps1 C:\ruta\proyecto
+# Alternativa CMD:
+init.cmd C:\ruta\proyecto
+```
+
 ### Desinstalar
+
 ```bash
-consigliere-init --uninstall-global
-# o
-./init.sh --uninstall-global
+# según cómo instalaste:
+npm rm -g consigliere                              # si fue vía npm
+consigliere-init --uninstall-global                # vía Node (init.mjs)
+./init.sh --uninstall-global                       # vía bash
+powershell -File .\init.ps1 -UninstallGlobal       # vía PowerShell
 ```
 
 ## Uso interactivo
@@ -120,14 +153,21 @@ Esto carga solo los chunks necesarios y ahorra tokens.
 
 ```
 consigliere/
-├── init.sh                 # instalador + generador interactivo
+├── init.sh                 # instalador bash (Linux/macOS/Git Bash/WSL)
+├── init.ps1                # instalador PowerShell (Windows nativo)
+├── init.cmd                # shim CMD → init.ps1
+├── init.mjs                # instalador Node cross-platform (universal, npm)
+├── package.json            # publica en npm como `consigliere`
 └── templates/              # plantillas renderizables (placeholders {{VAR}})
 ```
 
 ## Dependencias
 
-- **Requeridas**: `bash 4+`, `coreutils`, `git`.
-- **Opcionales**: `gettext` (envsubst, render más limpio), `node` (autoskills y skill-loader).
+| Instalador | Requeridas | Opcionales |
+|---|---|---|
+| `init.mjs` / `npm` (universal) | `node 18+`, `git` | — |
+| `init.sh` (Unix) | `bash 4+`, `coreutils`, `git` | `gettext` (envsubst), `node` (autoskills) |
+| `init.ps1` (Windows) | `PowerShell 5.1+`, `git` | `node` (autoskills) |
 
 ## Notas de diseño
 

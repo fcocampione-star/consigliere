@@ -26,6 +26,23 @@ GLOBAL_BIN="$HOME/.local/bin/consigliere-init"
 GLOBAL_SHARE="$HOME/.local/share/consigliere"
 GLOBAL_TEMPLATES="$GLOBAL_SHARE/templates"
 
+# Portable realpath (fallbacks para macOS / Git Bash sin readlink -f)
+realpath_fallback() {
+  local p="$1"
+  if command -v realpath >/dev/null 2>&1; then
+    realpath "$p" 2>/dev/null && return
+  fi
+  if readlink -f "$p" >/dev/null 2>&1; then
+    readlink -f "$p" && return
+  fi
+  # fallback perl / python (disponible en Git Bash)
+  if command -v perl >/dev/null 2>&1; then
+    perl -MCwd -e 'print Cwd::abs_path($ARGV[0])' "$p" 2>/dev/null && return
+  fi
+  # último recurso: ruta sin resolver
+  printf '%s' "$p"
+}
+
 # Resuelve la ruta real del script (funciona invocado vía PATH o ruta relativa).
 resolve_self() {
   local src="${BASH_SOURCE[0]}"
@@ -34,7 +51,7 @@ resolve_self() {
     resolved="$(command -v "$src" 2>/dev/null || true)"
     [[ -n "$resolved" ]] && src="$resolved"
   fi
-  readlink -f "$src"
+  realpath_fallback "$src"
 }
 
 SCRIPT_PATH="$(resolve_self)"
@@ -44,7 +61,7 @@ is_installed_globally() {
 }
 
 is_global_run() {
-  [[ "$SCRIPT_PATH" == "$(readlink -f "$GLOBAL_BIN")" ]]
+  [[ "$SCRIPT_PATH" == "$(realpath_fallback "$GLOBAL_BIN")" ]]
 }
 
 # Directorio de templates efectivo

@@ -1,0 +1,37 @@
+{
+  "name": "consigliere",
+  "version": "1.0.0",
+  "description": "Harness de agentes + memoria persistente para opencode — reusable scaffold con agentes orquestados y memoria de 3 capas",
+  "type": "module",
+  "bin": {
+    "consigliere-init": "./init.mjs",
+    "consigliere": "./init.mjs"
+  },
+  "files": [
+    "init.sh",
+    "init.ps1",
+    "init.cmd",
+    "init.mjs",
+    "templates/"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "opencode",
+    "agents",
+    "harness",
+    "scaffold",
+    "ai",
+    "memory"
+  ],
+  "author": "fcocampione-star",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fcocampione-star/consigliere.git"
+  },
+  "scripts": {
+    "test": "node --check init.mjs && echo \"syntax ok\""
+  }
+}
