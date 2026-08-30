@@ -138,7 +138,7 @@ function Show-NextStepsGlobal {
   Write-Host "    3. Ejecuta: powershell -File `"$GLOBAL_BIN`" C:\ruta\proyecto"
   Write-Host "    4. Sigue el asistente: nombre -> stack -> modelos -> autoskills -> git"
   Write-Host "    5. Dentro del proyecto: edita AGENTS.md"
-  Write-Host "    6. Arranca: opencode -> /routine `"configurar base del proyecto`""
+  Write-Host "    6. Arranca: opencode -> /discover -> /routine `"configurar base del proyecto`""
 }
 
 function Uninstall-Global {
@@ -218,7 +218,14 @@ function Show-Finish($projectName, $targetDir) {
   Write-Host "  1. cd $targetDir"
   Write-Host "  2. Edita AGENTS.md"
   Write-Host "  3. Edita .opencode/skills/_project-docs/SKILL.md"
-  Write-Host "  4. Arranca opencode -> /routine `"configurar base del proyecto`""
+  Write-Host "  4. Arranca opencode -> /discover (audita contexto + skills) -> /routine `"configurar base del proyecto`""
+  Write-Host ""
+  Write-Host "Comandos del harness:"
+  Write-Host "  /discover [foco]       Audita contexto + skills presentes/faltantes"
+  Write-Host "  /routine <tarea>       Ciclo completo (plan -> critic -> build -> verify -> record)"
+  Write-Host "  /record <contexto>     Persistir progreso en la memoria"
+  Write-Host "  /rotate-memory         Rotación semanal manual"
+  Write-Host "  /compact-state         Compactar PROJECT_STATE.md"
 }
 
 function Prompt-StackItem($label, $opts) {

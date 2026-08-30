@@ -154,7 +154,13 @@ function finish(projectName, targetDir) {
   console.log(`  3. Edita .opencode/skills/_project-docs/SKILL.md → URLs/shortcuts`);
   console.log(`  4. Opcional: rellena modelos en .opencode/opencode.json`);
   console.log(`  5. Si tienes package.json → npm install`);
-  console.log(`  6. Arranca opencode → /routine "configurar base del proyecto"\n`);
+  console.log(`  6. Arranca opencode → /discover (audita contexto + skills) → /routine "configurar base del proyecto"\n`);
+  console.log(`${C.bold}Comandos del harness:${C.reset}`);
+  console.log(`  /discover [foco]       Audita contexto + skills presentes/faltantes`);
+  console.log(`  /routine <tarea>       Ciclo completo (plan → critic → build → verify → record)`);
+  console.log(`  /record <contexto>     Persistir progreso en la memoria`);
+  console.log(`  /rotate-memory         Rotación semanal manual`);
+  console.log(`  /compact-state         Compactar PROJECT_STATE.md\n`);
 }
 
 // Instalación global

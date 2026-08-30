@@ -181,7 +181,7 @@ print_next_steps_global() {
   printf '    4. Sigue el asistente: nombre → stack → modelos → autoskills → git\n'
   printf '    5. Dentro del proyecto: cd <proyecto> → edita AGENTS.md\n'
   printf '       y .opencode/skills/_project-docs/SKILL.md\n'
-  printf '    6. Arranca: opencode → /routine "configurar base del proyecto"\n'
+  printf '    6. Arranca: opencode → /discover → /routine "configurar base del proyecto"\n'
   printf '\n'
 }
 
@@ -486,8 +486,9 @@ finish() {
   printf "  3. Edita .opencode/skills/_project-docs/SKILL.md → URLs/shortcuts de tu stack\n"
   printf "  4. Opcional: rellena los modelos por agente en .opencode/opencode.json\n"
   printf "  5. Si tienes package.json → npm install\n"
-  printf "  6. Arranca opencode → primera tarea: /routine \"configurar base del proyecto\"\n\n"
+  printf "  6. Arranca opencode → /discover (audita contexto + skills) → /routine \"configurar base del proyecto\"\n\n"
   printf "${C_BOLD}Comandos del harness:${C_RESET}\n"
+  printf "  /discover [foco]       Audita contexto + skills presentes/faltantes\n"
   printf "  /routine <tarea>       Ciclo completo (plan → critic → build → verify → record)\n"
   printf "  /record <contexto>     Persistir progreso en la memoria\n"
   printf "  /rotate-memory         Rotación semanal manual\n"
@@ -553,7 +554,7 @@ FLUJO RECOMENDADO (principiantes):
   4. Crea tu proyecto: consigliere-init .    ('.' = carpeta actual)
   5. Sigue el asistente: nombre → stack → modelos → autoskills → git
   6. Dentro del proyecto: edita AGENTS.md y .opencode/skills/_project-docs/SKILL.md
-  7. Arranca: opencode → /routine "configurar base del proyecto"
+  7. Arranca: opencode → /discover → /routine "configurar base del proyecto"
 
 Para más información, consulta AGENTS.md y templates/.opencode/.
 EOF

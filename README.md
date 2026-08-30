@@ -18,6 +18,7 @@ Un directorio de proyecto nuevo con:
 │   │   ├── verifier.md            # typecheck/lint/tests
 │   │   └── summarizer.md          # memoria 3 capas + rotación + compactación
 │   ├── commands/
+│   │   ├── discover.md            # /discover → audita contexto + skills
 │   │   ├── routine.md             # /routine → ciclo completo
 │   │   ├── record.md              # /record → persistir progreso
 │   │   ├── rotate-memory.md       # rotación semanal manual
@@ -173,7 +174,7 @@ consigliere/
 ## Notas de diseño
 
 Este harness aplica "Robusto v1": corrige las fallas del diseño original de FaceIT:
-- Bash allowlist en builder (bloquea `rm -rf`, `git push`, `sudo`).
+- Bash allowlist en builder autosuficiente (`*: allow`, solo `deny` irreparable + `git push → ask`).
 - Modelo por agente (placeholders configurables).
 - Agente `critic` para revisar decisiones de diseño.
 - Rotación de memoria automática vía hook post-commit.
