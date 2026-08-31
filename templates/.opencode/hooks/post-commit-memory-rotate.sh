@@ -57,42 +57,30 @@ elif [[ "$LINES" -gt 150 ]]; then
 fi
 
 if [[ "$should_rotate" -eq 1 ]]; then
-  # Extraer la entrada más antigua (último bloque ## YYYY-MM-DD ... hasta el siguiente ## o fin).
-  # Usamos perl para localizar y capturar el último bloque de entrada.
   ENTRY="$(perl -0777 -ne '
-    # Capturar el último bloque que empieza con "## YYYY-MM-DD" y todo su contenido
-    # hasta el siguiente "## " o fin de archivo.
     if (/\n(## \s* [0-9]{4}-[0-9]{2}-[0-9]{2} .+?)(?:\n## |\z)/gs) {
       print $1;
     }
   ' "$SUMMARY")"
 
   if [[ -n "$ENTRY" ]]; then
-    # Crear/abrir changelog
     if [[ ! -f "$CHANGELOG_FILE" ]]; then
       printf '# Changelog %s\n\n> Historial semanal archivado desde SUMMARY.md. Detalle de diffs: `git log`.\n\n' "$THIS_MONDAY" > "$CHANGELOG_FILE"
     fi
     printf '%s\n\n' "$ENTRY" >> "$CHANGELOG_FILE"
-
-    # Borrar la entrada más antigua de SUMMARY.
-    # Usamos perl para quitar el último bloque ## fecha y su contenido.
     perl -0777 -pi -e '
       s/\n## \s* [0-9]{4}-[0-9]{2}-[0-9]{2} .+? (?:\n## |\z)//gs;
     ' "$SUMMARY"
-
-    # Actualizar el índice de historial archivado en PROJECT_STATE §4
-    # Buscar la sección §4 y actualizar la tabla de semanas archivadas
     if [[ -f "$PROJECT_STATE" ]]; then
-      # Añadir la semana rotada al índice si no existe
       WEEK_KEY="| $THIS_MONDAY | $CHANGELOG_FILE |"
       if ! grep -qF "$WEEK_KEY" "$PROJECT_STATE"; then
-        # Insertar después de la línea que contiene "## 4. Índice de historial archivado"
         sed -i "/^## 4. Índice de historial archivado/a $WEEK_KEY" "$PROJECT_STATE"
       fi
-      # Actualizar el resumen de la semana (opcional: mantener en ~1 línea)
-      # Nota: se asume que la compactación real la hace /compact-state manualmente
     fi
-
-    echo "🔄 CONSIGLIERE: memoria rotada → $CHANGELOG_FILE"
+    echo "🔄 CONSIGLIERE 2.0: memoria rotada → $CHANGELOG_FILE"
+    # Sync local a .consigliere/chunks/ si existe el script (no bloqueante)
+    if [[ -f "$REPO_ROOT/.opencode/scripts/memory-sync.mjs" ]] && command -v node >/dev/null 2>&1; then
+      node "$REPO_ROOT/.opencode/scripts/memory-sync.mjs" export >/dev/null 2>&1 || true
+    fi
   fi
 fi

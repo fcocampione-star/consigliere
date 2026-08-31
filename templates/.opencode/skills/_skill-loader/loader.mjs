@@ -1,29 +1,34 @@
 #!/usr/bin/env node
 /**
- * CONSIGLIERE — Skill Loader runtime
+ * CONSIGLIERE 2.0 — Skill Loader runtime con cache fingerprint
  *
- * Carga skills de documentación bajo demanda (proyecto + autoskills) y permite
- * leer solo chunks concretos de una SKILL.md para ahorrar tokens.
+ * Carga skills bajo demanda (proyecto + autoskills) + chunks.
+ * Cache: .consigliere/skill-registry.cache.json con fingerprint path+mtime+size
+ *        inspirado en Gentle AI skill-registry fingerprint.
  *
  * Uso:
- *   node loader.mjs list
- *   node loader.mjs search "query"
+ *   node loader.mjs list [--refresh|--force|--json]
+ *   node loader.mjs search "query" [--json]
  *   node loader.mjs load "skill-name"
  *   node loader.mjs chunk "skill-name" urls,shortcuts,examples
+ *   node loader.mjs refresh [--force]
  */
-import { readdirSync, readFileSync, existsSync } from 'node:fs';
+import { readdirSync, readFileSync, existsSync, statSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const PROJECT_ROOT = join(HERE, '..', '..', '..'); // .opencode/skills/_skill-loader -> proyecto
+const PROJECT_ROOT = join(HERE, '..', '..', '..');
 
 const LOCATIONS = [
   join(PROJECT_ROOT, '.opencode', 'skills'),
   join(PROJECT_ROOT, '.agents', 'skills'),
 ];
+const CACHE_DIR = join(PROJECT_ROOT, '.consigliere');
+const CACHE_FILE = join(CACHE_DIR, 'skill-registry.cache.json');
+const CACHE_VERSION = 1;
 
-function listSkills() {
+function listSkillsRaw() {
   const found = new Map();
   for (const loc of LOCATIONS) {
     if (!existsSync(loc)) continue;
@@ -38,6 +43,70 @@ function listSkills() {
     }
   }
   return [...found.values()];
+}
+
+function fingerprint(skills) {
+  const fp = [];
+  for (const s of skills) {
+    try {
+      const st = statSync(s.path);
+      fp.push({ name: s.name, path: s.path, mtime: st.mtimeMs, size: st.size, source: s.source });
+    } catch {
+      fp.push({ name: s.name, path: s.path, mtime: 0, size: 0, source: s.source });
+    }
+  }
+  return fp.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function loadCache() {
+  if (!existsSync(CACHE_FILE)) return null;
+  try {
+    const data = JSON.parse(readFileSync(CACHE_FILE, 'utf8'));
+    if (data.version !== CACHE_VERSION) return null;
+    return data;
+  } catch { return null; }
+}
+
+function saveCache(fp) {
+  try {
+    mkdirSync(CACHE_DIR, { recursive: true });
+    writeFileSync(CACHE_FILE, JSON.stringify({ version: CACHE_VERSION, generatedAt: new Date().toISOString(), entries: fp }, null, 2), 'utf8');
+  } catch {}
+}
+
+function isCacheValid(cached, currentFp) {
+  if (!cached || !cached.entries) return false;
+  if (cached.entries.length !== currentFp.length) return false;
+  const map = new Map(cached.entries.map(e => [e.name, e]));
+  for (const c of currentFp) {
+    const e = map.get(c.name);
+    if (!e || e.path !== c.path || e.mtime !== c.mtime || e.size !== c.size) return false;
+  }
+  return true;
+}
+
+function listSkillsCached(force = false) {
+  const raw = listSkillsRaw();
+  const fp = fingerprint(raw);
+  const cached = loadCache();
+  if (!force && isCacheValid(cached, fp)) {
+    return raw.map(r => {
+      const e = cached.entries.find(x => x.name === r.name);
+      return { ...r, description: e?.description || null, cached: true };
+    });
+  }
+  // enrich with description for cache next time
+  const enriched = fp.map(e => {
+    try {
+      const fm = readFrontmatter(readFileSync(e.path, 'utf8'));
+      return { ...e, description: (fm.description || '').slice(0, 120) };
+    } catch { return { ...e, description: '' }; }
+  });
+  saveCache(enriched);
+  return raw.map(r => {
+    const e = enriched.find(x => x.name === r.name);
+    return { ...r, description: e?.description || null, cached: false };
+  });
 }
 
 function readFrontmatter(content) {
@@ -72,42 +141,56 @@ function extractChunks(content, wanted) {
   return out;
 }
 
-function findSkill(name) {
-  for (const s of listSkills()) {
-    if (s.name === name) return s;
-  }
+function findSkill(name, useCache = true) {
+  const skills = useCache ? listSkillsCached(false) : listSkillsRaw();
+  for (const s of skills) if (s.name === name) return s;
   return null;
 }
 
-const [cmd, arg, arg2] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const cmd = args[0];
+const arg = args[1];
+const arg2 = args[2];
+const hasFlag = (f) => args.includes(f);
 
 switch (cmd) {
   case 'list': {
-    const skills = listSkills();
+    const force = hasFlag('--refresh') || hasFlag('--force');
+    const json = hasFlag('--json');
+    const skills = listSkillsCached(force);
     if (!skills.length) { console.log('No hay skills disponibles.'); break; }
-    for (const s of skills) {
-      const fm = readFrontmatter(readFileSync(s.path, 'utf8'));
-      console.log(`- ${s.name} [${s.source}] — ${(fm.description || '').slice(0, 80)}`);
+    if (json) {
+      console.log(JSON.stringify(skills.map(s => ({ name: s.name, source: s.source, path: s.path, description: s.description, cached: s.cached })), null, 2));
+    } else {
+      for (const s of skills) {
+        const desc = s.description ?? (() => { try { return (readFrontmatter(readFileSync(s.path, 'utf8')).description || '').slice(0,80); } catch { return ''; } })();
+        console.log(`- ${s.name} [${s.source}]${s.cached ? ' (cache)' : ''} — ${desc}`);
+      }
     }
     break;
   }
-
+  case 'refresh': {
+    const skills = listSkillsCached(true);
+    console.log(`Cache regenerada: ${skills.length} skills → ${CACHE_FILE}`);
+    break;
+  }
   case 'search': {
     const q = (arg || '').toLowerCase();
-    const skills = listSkills();
+    const json = hasFlag('--json');
+    const skills = listSkillsCached(false);
     const hits = [];
     for (const s of skills) {
       const content = readFileSync(s.path, 'utf8');
       const fm = readFrontmatter(content);
       const hay = (content + '\n' + (fm.description || '')).toLowerCase();
-      if (q && hay.includes(q)) hits.push(`- ${s.name} [${s.source}]: ${(fm.description || '').slice(0, 80)}`);
+      if (q && hay.includes(q)) hits.push({ name: s.name, source: s.source, description: (fm.description || '').slice(0, 80) });
     }
-    console.log(hits.length ? hits.join('\n') : `Sin resultados para "${arg}".`);
+    if (json) console.log(JSON.stringify(hits, null, 2));
+    else console.log(hits.length ? hits.map(h => `- ${h.name} [${h.source}]: ${h.description}`).join('\n') : `Sin resultados para "${arg}".`);
     break;
   }
-
   case 'load': {
-    const s = findSkill(arg);
+    const s = findSkill(arg, true);
     if (!s) { console.error(`Skill "${arg}" no encontrada. Usa "list" para ver disponibles.`); process.exit(1); }
     const content = readFileSync(s.path, 'utf8');
     const fm = readFrontmatter(content);
@@ -117,27 +200,23 @@ switch (cmd) {
     console.log(`Chunks: ${chunkNames(content).join(', ') || '(ninguno)'}`);
     break;
   }
-
   case 'chunk': {
-    const s = findSkill(arg);
+    const s = findSkill(arg, true);
     if (!s) { console.error(`Skill "${arg}" no encontrada.`); process.exit(1); }
     const content = readFileSync(s.path, 'utf8');
     const wanted = (arg2 || 'all').split(',').map((x) => x.trim()).filter(Boolean);
     let parts;
-    if (wanted.includes('all')) {
-      parts = extractChunks(content, chunkNames(content));
-    } else {
-      parts = extractChunks(content, wanted);
-    }
+    if (wanted.includes('all')) parts = extractChunks(content, chunkNames(content));
+    else parts = extractChunks(content, wanted);
     if (!parts.length) { console.error(`Skill "${arg}" no tiene chunks ${wanted.join(',')} (${chunkNames(content).join(',')}).`); process.exit(1); }
     console.log(parts.join('\n\n'));
     break;
   }
-
   default:
     console.log(`Uso:
-  node loader.mjs list
-  node loader.mjs search "query"
+  node loader.mjs list [--refresh|--json]
+  node loader.mjs refresh [--force]
+  node loader.mjs search "query" [--json]
   node loader.mjs load "skill-name"
   node loader.mjs chunk "skill-name" urls,shortcuts,examples`);
     process.exit(1);

@@ -14,9 +14,9 @@
 
 ---
 
-## 2. Decisiones de diseño (append-only, consolidadas)
+## 2. Decisiones de diseño (append-only, consolidadas, con review_after)
 
-- (Registra aquí cada decisión de diseño arquitectónico en 1-2 frases, fusionando duplicados. Mantener §2 < ~80 líneas; compactar via `/compact-state` cuando exceda.)
+- (Registra cada decisión en 1-2 frases + `topic: family/kebab` + `review_after: YYYY-MM-DD` (+90d). Ej: `- Usar zod para validación [topic: architecture/validation] review_after: 2026-11-30`. Upsert si topic existe. Mantener §2 < ~80; `/compact-state` si excede, `/review` lista stale.)
 
 ---
 

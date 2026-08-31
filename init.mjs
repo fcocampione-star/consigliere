@@ -1,49 +1,28 @@
 #!/usr/bin/env node
 /**
- * CONSIGLIERE — Harness de agentes + memoria persistente para opencode.
- * Instalador/generador cross-platform (Node 18+). Funciona en Linux, macOS y Windows.
+ * CONSIGLIERE 2.0 — Harness de agentes + memoria persistente para opencode.
+ * Instalador/generador SOLO por proyecto (Node 18+). Sin instalación global.
  *
  * Uso:
  *   node init.mjs                          # modo interactivo
- *   node init.mjs --install-global         # instalar globalmente (copia a ~/.local/share)
- *   node init.mjs --uninstall-global       # desinstalar
- *   node init.mjs --version                # versión
- *   node init.mjs <ruta/proyecto> [flags]  # no-interactivo
- *   npx consigliere-init /ruta/proyecto    # vía npm
+ *   npx consigliere-init /ruta/proyecto    # vía npm (recomendado)
+ *   node init.mjs /ruta/proyecto [flags]   # no-interactivo
+ *   node init.mjs --version | --help
  */
 
-import { existsSync, mkdirSync, cpSync, rmSync, readdirSync, statSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
+import { existsSync, mkdirSync, cpSync, readdirSync, readFileSync, writeFileSync, chmodSync } from 'node:fs';
 import { join, dirname, basename, resolve, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir, platform } from 'node:os';
 import { createInterface } from 'node:readline';
 import { spawnSync } from 'node:child_process';
 
-const VERSION = '1.0.0';
+const VERSION = '2.0.0';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const IS_WIN = platform() === 'win32';
 
-// Rutas globales (paridad con init.sh / init.ps1)
 const HOME = homedir();
-const GLOBAL_BIN = IS_WIN
-  ? join(HOME, '.local', 'bin', 'consigliere-init.mjs')
-  : join(HOME, '.local', 'bin', 'consigliere-init');
-const GLOBAL_SHARE = IS_WIN
-  ? (process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, 'consigliere') : join(HOME, '.local', 'share', 'consigliere'))
-  : join(HOME, '.local', 'share', 'consigliere');
-const GLOBAL_TEMPLATES = join(GLOBAL_SHARE, 'templates');
-
-// Template dir efectivo
-function getTemplateDir() {
-  // Si estamos en instalación global de npm, templates está junto a init.mjs
-  const localTemplates = join(HERE, 'templates');
-  if (existsSync(localTemplates)) return localTemplates;
-  // Fallback: instalación global previa (~/.local/share)
-  if (existsSync(GLOBAL_TEMPLATES)) return GLOBAL_TEMPLATES;
-  return localTemplates;
-}
-
-const TEMPLATE_DIR = getTemplateDir();
+const TEMPLATE_DIR = join(HERE, 'templates');
 
 // Colores
 const C = {
@@ -66,7 +45,7 @@ function banner() {
   ░███████   ░███████  ░██    ░██  ░███████  ░██ ░█████░██ ░██ ░██ ░███████  ░██       ░███████
                                                        ░██
                                                  ░███████
-${C.reset}${C.dim}  Harness Genérico — Agent Pipeline + Memoria Persistente 3 Capas (v${VERSION})${C.reset}`);
+${C.reset}${C.dim}  Harness Genérico — Agent Pipeline + Memoria Persistente 3 Capas (v${VERSION} · solo por proyecto)${C.reset}`);
 }
 
 // readline helper
@@ -82,7 +61,6 @@ function renderFile(src, dst, vars) {
     content = content.split(`{{${k}}}`).join(v ?? '');
   }
   writeFileSync(dst, content, 'utf8');
-  // intentar +x si es script
   if (src.endsWith('.sh') || src.endsWith('.mjs') || src.endsWith('.ps1')) {
     try { chmodSync(dst, 0o755); } catch {}
   }
@@ -119,7 +97,7 @@ function gitInitAndCommit(repo, templateDir) {
     spawnSync('git', ['init', '-q'], { cwd: repo, stdio: 'inherit' });
     installGitHook(repo, templateDir);
     spawnSync('git', ['add', '.'], { cwd: repo, stdio: 'inherit' });
-    spawnSync('git', ['-c', 'user.name=CONSIGLIERE', '-c', 'user.email=consigliere@local', 'commit', '-q', '-m', 'chore: scaffold harness CONSIGLIERE'], { cwd: repo, stdio: 'inherit' });
+    spawnSync('git', ['-c', 'user.name=CONSIGLIERE', '-c', 'user.email=consigliere@local', 'commit', '-q', '-m', 'chore: scaffold harness CONSIGLIERE 2.0'], { cwd: repo, stdio: 'inherit' });
     ok('Git + hook post-commit + commit inicial');
   } else {
     installGitHook(repo, templateDir);
@@ -152,43 +130,19 @@ function finish(projectName, targetDir) {
   console.log(`  1. cd ${targetDir}`);
   console.log(`  2. Edita AGENTS.md → completa el stack y los comandos dev`);
   console.log(`  3. Edita .opencode/skills/_project-docs/SKILL.md → URLs/shortcuts`);
-  console.log(`  4. Opcional: rellena modelos en .opencode/opencode.json`);
+  console.log(`  4. Opcional: rellena modelos en .opencode/opencode.json (cheap vs strong)`);
   console.log(`  5. Si tienes package.json → npm install`);
-  console.log(`  6. Arranca opencode → /discover (audita contexto + skills) → /routine "configurar base del proyecto"\n`);
+  console.log(`  6. Arranca opencode → /discover (audita contexto + skills) → /routine "configurar base del proyecto"`);
+  console.log(`  7. Verifica harness: /doctor | Memoria: node .opencode/scripts/memory-index.mjs search "query"\n`);
   console.log(`${C.bold}Comandos del harness:${C.reset}`);
   console.log(`  /discover [foco]       Audita contexto + skills presentes/faltantes`);
-  console.log(`  /routine <tarea>       Ciclo completo (plan → critic → build → verify → record)`);
+  console.log(`  /routine <tarea>       Ciclo completo (explore→plan/spec→critic→build→verify→record)`);
+  console.log(`  /doctor                Diagnóstico del harness y memoria`);
   console.log(`  /record <contexto>     Persistir progreso en la memoria`);
+  console.log(`  /review                Listar decisiones stale (review_after)`);
   console.log(`  /rotate-memory         Rotación semanal manual`);
   console.log(`  /compact-state         Compactar PROJECT_STATE.md\n`);
-}
-
-// Instalación global
-function installGlobal() {
-  step('Instalando CONSIGLIERE globalmente (Node)');
-  if (!existsSync(TEMPLATE_DIR)) { err(`No encuentro templates en '${TEMPLATE_DIR}'`); process.exit(1); }
-  mkdirSync(dirname(GLOBAL_BIN), { recursive: true });
-  mkdirSync(GLOBAL_SHARE, { recursive: true });
-  cpSync(fileURLToPath(import.meta.url), GLOBAL_BIN);
-  if (existsSync(GLOBAL_TEMPLATES)) rmSync(GLOBAL_TEMPLATES, { recursive: true, force: true });
-  cpSync(TEMPLATE_DIR, GLOBAL_TEMPLATES, { recursive: true });
-  try { chmodSync(GLOBAL_BIN, 0o755); } catch {}
-  ok('Instalado globalmente.');
-  ok(`Bin: ${GLOBAL_BIN}`);
-  ok(`Templates: ${GLOBAL_TEMPLATES}`);
-  const pathEnv = process.env.PATH || '';
-  if (!pathEnv.includes(join(HOME, '.local', 'bin'))) {
-    warn('~/.local/bin no está en PATH en esta sesión.');
-    info('Añade manualmente: export PATH="$HOME/.local/bin:$PATH"  (o setx PATH en Windows)');
-  }
-}
-
-function uninstallGlobal() {
-  step('Desinstalando versión global');
-  let removed = false;
-  if (existsSync(GLOBAL_BIN)) { rmSync(GLOBAL_BIN, { force: true }); ok(`Eliminado: ${GLOBAL_BIN}`); removed = true; }
-  if (existsSync(GLOBAL_SHARE)) { rmSync(GLOBAL_SHARE, { recursive: true, force: true }); ok(`Eliminado: ${GLOBAL_SHARE}`); removed = true; }
-  if (!removed) info('No había instalación global.');
+  console.log(`${C.dim}Instalación 100% por proyecto — sin binario global. Actualiza con: npx consigliere@latest ${targetDir} --upgrade${C.reset}\n`);
 }
 
 // Interactivo
@@ -209,7 +163,7 @@ async function promptStackItem(label, opts) {
 async function interactiveCreate() {
   banner();
   console.log();
-  step('Nuevo proyecto — CONSIGLIERE');
+  step('Nuevo proyecto — CONSIGLIERE 2.0 (solo por proyecto)');
   let targetDir = (await ask('  📁 Ruta del directorio del proyecto: ')).trim().replace(/^~/, HOME);
   if (!targetDir) { err('Ruta vacía.'); process.exit(1); }
   targetDir = isAbsolute(targetDir) ? resolve(targetDir) : resolve(process.cwd(), targetDir);
@@ -235,7 +189,7 @@ async function interactiveCreate() {
   const STACK_DEPLOY = await promptStackItem('Deploy', ['docker', 'vercel', 'fly', 'railway', 'aws']);
 
   console.log();
-  info('Modelos por subagente (opcional — déjalo vacío para heredar).');
+  info('Modelos por subagente (opcional — déjalo vacío para heredar). cheap=verifier/summarizer/explore, strong=builder/planner/critic');
   const MODEL_ORCHESTRATOR = (await ask('  Modelo [orchestrator] (Enter = heredar): ')).trim();
   const MODEL_PLANNER = (await ask('  Modelo [planner] (Enter = heredar): ')).trim();
   const MODEL_BUILDER = (await ask('  Modelo [builder] (Enter = heredar): ')).trim();
@@ -296,7 +250,9 @@ function createProject(opts) {
 
   renderTree(TEMPLATE_DIR, targetDir, vars);
   mkdirSync(join(targetDir, 'CHANGELOG'), { recursive: true });
-  ok('Harness generado (agents, commands, skills, memoria)');
+  mkdirSync(join(targetDir, '.consigliere', 'backups'), { recursive: true });
+  mkdirSync(join(targetDir, '.consigliere', 'chunks'), { recursive: true });
+  ok('Harness generado (agents, commands, skills, memoria, scripts)');
 
   if (DO_GIT) gitInitAndCommit(targetDir, TEMPLATE_DIR);
   else warn('Git no inicializado.');
@@ -307,14 +263,13 @@ function createProject(opts) {
 
 // CLI parse
 function showHelp(scriptName) {
-  console.log(`CONSIGLIERE v${VERSION} — Harness de agentes + memoria persistente para opencode.
+  console.log(`CONSIGLIERE v${VERSION} — Harness de agentes + memoria persistente para opencode (solo por proyecto).
 
 Uso:
   ${scriptName}                          modo interactivo
-  ${scriptName} --install-global         instalar globalmente
-  ${scriptName} --uninstall-global       desinstalar
   ${scriptName} --version | --help
   ${scriptName} <ruta/proyecto>          crear proyecto (con flags)
+  ${scriptName} <ruta/proyecto> --upgrade  actualizar harness existente (backup keep 5)
 
 Flags (no-interactivo):
   --dir <ruta>              directorio destino
@@ -322,6 +277,12 @@ Flags (no-interactivo):
   --stack-db/-backend/-frontend/-auth/-validation/-deploy <v>
   --autoskills <1|2|3>      1=proyecto, 2=global, 3=omitir
   --git <yes|no>            inicializar git
+  --upgrade                 actualizar harness en proyecto existente
+
+Instalación: solo por proyecto, sin binario global.
+  npx consigliere@latest /ruta/proyecto
+  node ./init.mjs /ruta/proyecto
+  bash ./init.sh --dir /ruta/proyecto
 `);
 }
 
@@ -331,7 +292,7 @@ async function main() {
 
   if (!existsSync(TEMPLATE_DIR)) {
     err(`No encuentro templates en '${TEMPLATE_DIR}'.`);
-    err('Si copiaste solo el binario, copia también la carpeta templates/.');
+    err('Si clonaste el repo, ejecuta desde la raíz: node init.mjs /ruta/proyecto');
     process.exit(1);
   }
 
@@ -340,13 +301,6 @@ async function main() {
     return;
   }
 
-  // flags globales
-  if (args[0] === '--install-global') { installGlobal(); return; }
-  if (args[0] === '--uninstall-global') {
-    const c = (await ask('  ¿Seguro? Esto borrará la instalación global. [s/N] ')).trim();
-    if (!/^s$/i.test(c)) { warn('Cancelado.'); return; }
-    uninstallGlobal(); return;
-  }
   if (args[0] === '--version' || args[0] === '-v') { console.log(`CONSIGLIERE v${VERSION}`); return; }
   if (args[0] === '--help' || args[0] === '-h') { showHelp(scriptName); return; }
 
@@ -358,6 +312,7 @@ async function main() {
   let MODEL_ORCHESTRATOR = ''; let MODEL_PLANNER = ''; let MODEL_BUILDER = '';
   let MODEL_VERIFIER = ''; let MODEL_CRITIC = ''; let MODEL_SUMMARIZER = ''; let MODEL_EXPLORE = '';
   let LANG_BACKEND = 'typescript';
+  let UPGRADE = false;
 
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -372,6 +327,7 @@ async function main() {
       case '--stack-deploy': STACK_DEPLOY = args[++i]; break;
       case '--autoskills': AUTO_CHOICE = args[++i]; break;
       case '--git': DO_GIT = args[++i] !== 'no'; break;
+      case '--upgrade': UPGRADE = true; break;
       case '--help': case '-h': showHelp(scriptName); return;
       case '--version': case '-v': console.log(`CONSIGLIERE v${VERSION}`); return;
       default:
@@ -387,7 +343,24 @@ async function main() {
   if (STACK_BACKEND.includes('python')) LANG_BACKEND = 'python';
   else if (STACK_BACKEND.includes('go')) LANG_BACKEND = 'go';
 
-  step(`Generando proyecto '${PROJECT_NAME}'`);
+  if (UPGRADE) {
+    step(`Actualizando harness en '${PROJECT_NAME}' (backup keep 5)`);
+    // backup
+    const backupDir = join(TARGET_DIR, '.consigliere', 'backups');
+    mkdirSync(backupDir, { recursive: true });
+    const ts = new Date().toISOString().replace(/[:.]/g, '-');
+    const backupFile = join(backupDir, `harness-${ts}.tgz`);
+    const tar = spawnSync('tar', ['-czf', backupFile, '-C', TARGET_DIR, '.opencode', 'AGENTS.md', 'PROJECT_STATE.md', 'SUMMARY.md'], { stdio: 'ignore' });
+    if (tar.status === 0) ok(`Backup: ${backupFile}`);
+    // prune keep 5
+    try {
+      const { readdirSync: rs, unlinkSync } = await import('node:fs');
+      const files = rs(backupDir).filter(f => f.startsWith('harness-')).sort().reverse();
+      for (const f of files.slice(5)) unlinkSync(join(backupDir, f));
+    } catch {}
+  }
+
+  step(`Generando proyecto '${PROJECT_NAME}'${UPGRADE ? ' (upgrade)' : ''}`);
   mkdirSync(TARGET_DIR, { recursive: true });
   const vars = {
     PROJECT_NAME, STACK_DB, STACK_BACKEND, STACK_FRONTEND, STACK_AUTH, STACK_VALIDATION, STACK_DEPLOY,
@@ -395,7 +368,9 @@ async function main() {
   };
   renderTree(TEMPLATE_DIR, TARGET_DIR, vars);
   mkdirSync(join(TARGET_DIR, 'CHANGELOG'), { recursive: true });
-  ok('Harness generado');
+  mkdirSync(join(TARGET_DIR, '.consigliere', 'backups'), { recursive: true });
+  mkdirSync(join(TARGET_DIR, '.consigliere', 'chunks'), { recursive: true });
+  ok(`Harness ${UPGRADE ? 'actualizado' : 'generado'}`);
   if (DO_GIT) gitInitAndCommit(TARGET_DIR, TEMPLATE_DIR);
   if (AUTO_CHOICE !== '3' && AUTO_CHOICE !== 'no') handleAutoskills(AUTO_CHOICE, TARGET_DIR);
   finish(PROJECT_NAME, TARGET_DIR);

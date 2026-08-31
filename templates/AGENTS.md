@@ -17,15 +17,15 @@
 - **Rule**: historical detail lives in `CHANGELOG/` + `git log`. Never duplicate archived entries back into `SUMMARY.md`.
 - **Anti-concurrency**: a `.memory-lock` directory guards concurrent memory writes; never leave it orphaned.
 
-## Agent pipeline
+## Agent pipeline (Consigliere 2.0 — routing orgánico + SDD-lite)
 
 - Custom agents live in `.opencode/agents/`; commands in `.opencode/commands/`.
-- `orchestrator` is the additional **primary** agent (cycle with Tab) that coordinates multi-step work: always reads `PROJECT_STATE.md` first, then delegates to `explore` (built-in), `planner`, `critic`, `builder`, `verifier`, `summarizer`.
-- **One level of depth** (orchestrator delegating); leaf agents (`planner`/`builder`/`verifier`/`critic`/`summarizer`) have `task: deny`.
-- **Models**: each subagent can have its own `model:` in `opencode.json` (placeholders set at scaffold; edit to fill).
-- **Builder safety**: a bash allowlist in `opencode.json` blocks destructive commands (`rm -rf`, `git push`, `sudo`, etc.).
-- **Commits are proposed, never automatic** (`git commit/push/amend → ask`).
-- Quick commands: `/discover [foco]` (audita contexto + skills presentes/faltantes), `/routine <tarea>` (full plan→critique→build→verify→record cycle), `/record <contexto>` (persist progress), `/rotate-memory`, `/compact-state`.
+- `orchestrator` is the additional **primary** agent (Tab) que coordina: siempre lee `PROJECT_STATE.md` primero, luego aplica **routing orgánico**: `direct` (1-3 files) vs `delegated` (4+ files / 2+ writes) vs `spec-lite` (ambigüedad duradera → spec ≤650w Given/When/Then).
+- **One level of depth** (orchestrator delega); leaf agents `task: deny` (except `planner→explore` depth 2).
+- **Models**: per-agent `model:` en `opencode.json` (placeholders `{{MODEL_*}}` → cheap=verifier/summarizer/explore, strong=builder/planner/critic).
+- **Builder safety**: bash harden `*: allow`, `deny` irreparable + `ask` sensibles (`**/.env*`, `**/*.pem`, `**/*.key`, `**/secrets/*`, `~/.ssh/*`, `git push`).
+- **Commits proposed, never automatic** (`git commit/push/amend → ask`).
+- Quick commands: `/discover [foco]`, `/routine <tarea> [--parallel --skip-verify --skip-critic]` (routing+spec-lite integrado), `/doctor`, `/record <contexto>` (5 campos + topic), `/review`, `/rotate-memory`, `/compact-state`.
 
 ## Stack
 
@@ -40,14 +40,18 @@
 
 *(Edit this table with the actual stack of {{PROJECT_NAME}}.)*
 
-## Skills
+## Skills (con cache fingerprint)
 
-- **Project docs**: `.opencode/skills/_project-docs/SKILL.md` — URLs, shortcuts, patterns, examples of the project stack. Edit it to fill in your real stack.
-- **Autoskills**: `.agents/skills/*/SKILL.md` — auto-installed via `npx autoskills` based on dependencies.
-- **Skill loader**: `.opencode/skills/_skill-loader/loader.mjs` loads only needed chunks to save tokens:
-  - `node .opencode/skills/_skill-loader/loader.mjs list`
+- **Project docs**: `.opencode/skills/_project-docs/SKILL.md` — URLs, shortcuts, patterns, examples. Edita con tu stack real.
+- **Autoskills**: `.agents/skills/*/SKILL.md` — auto `npx autoskills`.
+- **Skill loader** (cache `.consigliere/skill-registry.cache.json`):
+  - `node .opencode/skills/_skill-loader/loader.mjs list [--refresh|--json]`
+  - `node .opencode/skills/_skill-loader/loader.mjs refresh`
   - `node .opencode/skills/_skill-loader/loader.mjs search "query"`
   - `node .opencode/skills/_skill-loader/loader.mjs chunk "<skill>" urls,shortcuts,examples`
+- **Memoria buscable** (md+grep, sin SQLite): `node .opencode/scripts/memory-index.mjs search "query"` → `timeline <id>` → `get <id>`
+- **Sync local**: `node .opencode/scripts/memory-sync.mjs export|import|status` → `.consigliere/chunks/`
+- **Doctor**: `node .opencode/scripts/doctor.mjs [--json]` o `/doctor`
 
 ## Development commands
 
@@ -57,16 +61,17 @@
 
 *(Fill in the actual dev commands for {{PROJECT_NAME}}.)*
 
-## Directory structure
+## Directory structure (2.0 solo por proyecto)
 
 ```
 {{PROJECT_NAME}}/
-├── .opencode/               # opencode config: agents/, commands/, plans/, skills/
-├── .agents/skills/          # auto-installed AI skills (autoskills)
-├── PROJECT_STATE.md         # layer 0 — always loaded: phase, decisions, patterns, pending
-├── SUMMARY.md               # layer 1 — last week's entries + index, on-demand
-├── CHANGELOG/               # layer 2 — weekly archived history (by Monday)
-├── AGENTS.md                # this file
+├── .opencode/               # agents/, commands/, plans/, skills/, scripts/, hooks/
+├── .agents/skills/          # autoskills (npx autoskills)
+├── .consigliere/            # backups/ (keep 5) + chunks/ (sync) + skill-registry.cache.json
+├── PROJECT_STATE.md         # capa 0 — siempre + review_after
+├── SUMMARY.md               # capa 1 — última semana + topic
+├── CHANGELOG/               # capa 2 — semanal + DECISIONS-ARCHIVE.md
+├── AGENTS.md                # este archivo
 ├── .gitignore
 └── ... (source code)
 ```

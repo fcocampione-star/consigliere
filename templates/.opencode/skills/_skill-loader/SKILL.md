@@ -14,22 +14,24 @@ Carga skills de documentación bajo demanda para minimizar el uso de contexto/to
 - **Proyecto**: `.opencode/skills/<nombre>/SKILL.md`
 - **Autoskills**: `.agents/skills/<nombre>/SKILL.md`
 
-## Funciones
+## Funciones 2.0 (con cache fingerprint)
 
 Ejecuta el loader runtime (`loader.mjs`) con Node:
 
 ```bash
-node .opencode/skills/_skill-loader/loader.mjs list
-node .opencode/skills/_skill-loader/loader.mjs search "query"
+node .opencode/skills/_skill-loader/loader.mjs list [--refresh|--json]
+node .opencode/skills/_skill-loader/loader.mjs refresh
+node .opencode/skills/_skill-loader/loader.mjs search "query" [--json]
 node .opencode/skills/_skill-loader/loader.mjs load "skill-name"
 node .opencode/skills/_skill-loader/loader.mjs chunk "skill-name" urls
 node .opencode/skills/_skill-loader/loader.mjs chunk "skill-name" shortcuts,examples
 ```
 
-- `list` — lista todas las skills disponibles (proyecto + autoskills).
-- `search "<query>"` — busca skills/descripciones que contengan el término.
-- `load "<skill>"` — imprime el frontmatter (nombre/descripción) + índice de chunks del skill.
-- `chunk "<skill>" <chunks>` — imprime solo los chunks indicados (separados por coma).
+- `list [--refresh|--json]` — lista skills (usa cache `.consigliere/skill-registry.cache.json` fingerprint `path+mtime+size`, inspirado Gentle AI).
+- `refresh` — fuerza regeneración del cache (también `list --refresh`).
+- `search "<query>" [--json]` — busca skills/descripciones.
+- `load "<skill>"` — frontmatter + índice chunks.
+- `chunk "<skill>" <chunks>` — solo chunks indicados (coma).
 
 ## Formato de chunks en una SKILL.md
 

@@ -36,8 +36,9 @@ tmp/
 *.tmp
 *.bak
 
-# CONSIGLIERE — memoria persistente
+# CONSIGLIERE 2.0 — memoria persistente (solo por proyecto)
 .memory-lock/
-
-# Autoskills (regenerable via `npx autoskills`)
+.consigliere/skill-registry.cache.json
+.consigliere/backups/
+# .consigliere/chunks/  ← descomenta si no quieres versionar sync local
 # .agents/skills/   ← descomenta para no versionar autoskills

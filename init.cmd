@@ -1,4 +1,4 @@
 @echo off
-REM CONSIGLIERE — Shim CMD para Windows
-REM Delega a PowerShell. Uso: init.cmd [args] o consigliere-init
+REM CONSIGLIERE 2.0 — Shim CMD solo por proyecto (sin global)
+REM Uso: init.cmd [ruta\proyecto]  o  npx consigliere-init [ruta]
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0init.ps1" %*

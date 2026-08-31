@@ -40,19 +40,41 @@ Antes de cualquier otra acción, lee:
 
 Nunca cargues `CHANGELOG/*` por defecto. No dupliques contenido archivado en SUMMARY. Técnica general del proyecto: `AGENTS.md`.
 
-## 2. Descompone la tarea
+## 2. Routing orgánico (inspirado Gentle AI trigger-rules, md+grep)
 
-Cuando el usuario pida algo complejo:
+Decide la ruta mínima antes de descomponer (conteo de files = contexto necesario, no riesgo):
 
-1. **Explora** SIEMPRE que la tarea requiera conocer el estado actual del código: delega en el subagente `explore` (solo investigación, read-only).
-2. **Planifica**: delega en `planner` para diseñar el enfoque y las verificaciones.
-3. **Critica** (si la tarea es arquitectónica): delega en `critic` para validar el plan contra `PROJECT_STATE.md §2` y `AGENTS.md`.
-4. **Implementa**: delega en `builder` para escribir/cambiar el código.
-5. **Verifica**: delega en `verifier` para correr typecheck/lint/tests y reportar fallos.
-6. **Itera** entre builder y verifier hasta que pase.
-7. **Registra**: al terminar una fase o hito, delega en `summarizer` para actualizar `SUMMARY.md` y consolidar decisiones en `PROJECT_STATE.md`.
+| Ruta | Cuando | Acción |
+|------|--------|--------|
+| **Direct** | 1-3 files, o 1 file mecánico ya entendido, sin research | Responde inline (si no requiere leer repo) o delega 1 `explore`/`builder` sin SDD |
+| **Delegated** | 4+ files, o writer toca 2+ files no triviales, o research amplia | `explore → planner → critic → builder → verifier` clásico |
+| **Spec-lite** | Ambigüedad duradera o diseño con impacto >1 semana | `planner` genera spec Given/When/Then ≤650w (ver §2.1) antes de `builder` |
 
-Regla de estado actual: si para responder (una sugerencia, un diagnóstico, un reporte) necesitas saber qué hay en el repo, **obligatorio delegar en `explore`** antes de responder. Resuelve tú directamente SOLO las tareas que no impliquen leer código ni archivos (decisiones, respuestas conceptuales, resúmenes de lo ya cargado). Ante la duda, delega: un subagente extra es más barato que ensuciar tu ventana.
+File counts = contexto necesario para la acción actual, no threshold SDD. Tests/builds/review pueden usar workers frescos sin crear SDD. Estados públicos: Working → Checking → Ready → Needs your decision (solo preguntar si cambia scope/destructivo/permiso).
+
+### 2.1 SDD-lite (integrado por defecto en `routine`)
+
+Cuando `planner` detecte ambigüedad alta, incluye en su entrega:
+
+1. **Spec** ≤650 palabras, RFC2119 MUST/SHOULD + Given/When/Then por criterio.
+2. **Diseño** breve (si aplica) y **Tasks** checklist ordenado.
+3. Delegas `critic` si spec toca arquitectura.
+
+No crear `openspec/` por defecto; `summarizer` guarda spec como entrada `topic: sdd/<name>/spec` en `SUMMARY.md`.
+
+## 2.2 Descompone la tarea
+
+Cuando el usuario pida algo complejo (ruta Delegated o Spec-lite):
+
+1. **Explora** SIEMPRE que requiera estado del código: delega en `explore` (read-only).
+2. **Planifica** (+ spec si Spec-lite): delega en `planner`.
+3. **Critica** (si arquitectónica): delega en `critic` para validar contra `PROJECT_STATE.md §2` y `AGENTS.md`.
+4. **Implementa**: delega en `builder` (respeta bash harden + `AGENTS.md`).
+5. **Verifica**: delega en `verifier` (typecheck/lint/tests; barato primero).
+6. **Itera** builder↔verifier hasta pasar.
+7. **Registra**: al terminar fase/hito, delega en `summarizer` (topic upsert + session summary).
+
+Regla de estado actual: si para responder necesitas saber qué hay en el repo, **obligatorio delegar en `explore`** antes de responder. Resuelve tú directo SOLO tareas sin leer código (decisiones conceptuales, resúmenes de lo ya cargado). Ante la duda, delega.
 
 ### Delegación paralela (opcional)
 

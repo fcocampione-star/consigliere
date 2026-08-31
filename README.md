@@ -1,183 +1,161 @@
-# CONSIGLIERE — Harness de agentes + memoria persistente para opencode
+# CONSIGLIERE 2.0 — Harness de agentes + memoria persistente para opencode
 
-Reusable scaffold que arranca cada proyecto con un sistema de **agentes/subagentes** orquestados y una **memoria persistente de 3 capas**, para hacer el diseño de aplicaciones más eficiente y el uso de tokens más económico.
+> **Solo por proyecto, sin instalación global.** Reusable scaffold que arranca cada proyecto con **agentes/subagentes** orquestados y **memoria persistente de 3 capas** (progresiva + buscable) + routing orgánico + SDD-lite integrado.
 
 ## ¿Qué genera?
-
-Un directorio de proyecto nuevo con:
 
 ```
 <proyecto>/
 ├── .opencode/
-│   ├── opencode.json              # default_agent, modelos, bash allowlist
+│   ├── opencode.json              # default_agent, modelos cheap vs strong, bash harden
 │   ├── agents/
-│   │   ├── orchestrator.md        # primario, solo delega vía task
-│   │   ├── planner.md             # diseña sin tocar código
+│   │   ├── orchestrator.md        # primario, routing 1-3 vs 4+ files + SDD-lite
+│   │   ├── planner.md             # diseña + spec Given/When/Then (≤650w)
 │   │   ├── critic.md              # revisa decisiones de diseño
-│   │   ├── builder.md             # implementa (con bash allowlist)
+│   │   ├── builder.md             # implementa (bash harden)
 │   │   ├── verifier.md            # typecheck/lint/tests
-│   │   └── summarizer.md          # memoria 3 capas + rotación + compactación
+│   │   └── summarizer.md          # memoria 3 capas + topic upsert + session summary
 │   ├── commands/
 │   │   ├── discover.md            # /discover → audita contexto + skills
-│   │   ├── routine.md             # /routine → ciclo completo
-│   │   ├── record.md              # /record → persistir progreso
+│   │   ├── routine.md             # /routine → explore→plan/spec→critic→build→verify→record
+│   │   ├── doctor.md              # /doctor → diagnóstico harness + memoria
+│   │   ├── record.md              # /record → persistir progreso (5 campos)
+│   │   ├── review.md              # /review → decisiones stale (review_after)
 │   │   ├── rotate-memory.md       # rotación semanal manual
 │   │   └── compact-state.md       # compactar PROJECT_STATE.md
 │   ├── plans/                     # AGENT-ORCHESTRATION.md, MEMORY-SYSTEM.md
 │   ├── skills/
 │   │   ├── _project-docs/         # plantilla de docs del stack
-│   │   └── _skill-loader/         # carga chunks de skills bajo demanda
-│   └── hooks/                     # post-commit-memory-rotate.sh
+│   │   └── _skill-loader/         # loader.mjs + cache.mjs (fingerprint)
+│   ├── scripts/
+│   │   ├── memory-index.mjs       # search/timeline/get (md+grep)
+│   │   ├── memory-sync.mjs        # export/import chunks locales
+│   │   └── doctor.mjs             # health check
+│   └── hooks/                     # post-commit-memory-rotate.sh + sync
+├── .consigliere/
+│   ├── backups/                   # harness-*.tgz keep 5 (upgrade)
+│   ├── chunks/                    # memoria sync local (git-tracked opcional)
+│   └── skill-registry.cache.json  # fingerprint cache
 ├── AGENTS.md                      # instrucciones raíz + stack + comandos dev
-├── PROJECT_STATE.md               # CAPA 0 — siempre cargada
-├── SUMMARY.md                     # CAPA 1 — última semana (on-demand)
+├── PROJECT_STATE.md               # CAPA 0 — siempre cargada + review_after
+├── SUMMARY.md                     # CAPA 1 — última semana + topic (on-demand)
 ├── CHANGELOG/                     # CAPA 2 — historial semanal archivado
 ├── .gitignore
 └── skills-lock.json
 ```
 
-## Instalación
+## Instalación — solo por proyecto
 
-### Tabla por sistema operativo
-
-| OS | Método recomendado | Comando |
-|---|---|---|
-| **Cualquiera con Node 18+** (universal) | `npm` / `npx` | `npm i -g consigliere` → `consigliere-init /ruta/proyecto` <br> o sin instalar: `npx consigliere-init /ruta/proyecto` |
-| **Linux / macOS** | `bash` | `./init.sh --install-global` → `consigliere-init /ruta/proyecto` |
-| **Windows PowerShell 5.1+/7** | `PowerShell` nativo | `powershell -ExecutionPolicy Bypass -File .\init.ps1 -InstallGlobal` → `powershell -File ~\.local\bin\consigliere-init.ps1 C:\ruta\proyecto` <br> o CMD: `init.cmd C:\ruta\proyecto` |
-| **Windows Git Bash / WSL** | `bash` | `./init.sh --install-global` (requiere Git for Windows) |
-
-> `npm` es el instalador más universal: funciona en Linux, macOS y Windows sin `bash`. `brew` y `curl|bash` son vías secundarias solo Unix.
-
-### Opción A — npm/npx (universal, recomendado si tienes Node)
+**No hay instalación global.** Usa uno de estos (todos 100% por proyecto):
 
 ```bash
-# Instalación global (una vez)
-npm i -g consigliere
-consigliere-init --version          # debe mostrar CONSIGLIERE v1.0.0
-consigliere-init /ruta/proyecto    # o consigliere /ruta/proyecto
+# Recomendado — npx (siempre última versión, sin instalar)
+npx consigliere@latest /ruta/proyecto --name mi-app --stack-backend node/express --autoskills 1 --git yes
 
-# Sin instalación (siempre última versión)
-npx consigliere-init /ruta/proyecto --name mi-app --stack-backend node/express --autoskills 1 --git yes
+# Desde clon del repo
+git clone https://github.com/fcocampione-star/consigliere.git
+node consigliere/init.mjs /ruta/proyecto
+bash consigliere/init.sh --dir /ruta/proyecto
+powershell -File consigliere/init.ps1 C:\ruta\proyecto   # Windows
+init.cmd C:\ruta\proyecto                                  # CMD shim
+
+# Actualizar harness existente (backup keep 5 en .consigliere/backups/)
+npx consigliere@latest /ruta/proyecto --upgrade
+node consigliere/init.mjs /ruta/proyecto --upgrade
 ```
 
-### Opción B — bash (Linux/macOS/Git Bash/WSL)
-
-```bash
-cd consigliere
-./init.sh                          # modo interactivo
-./init.sh --install-global         # instala en ~/.local/bin/consigliere-init
-consigliere-init /ruta/proyecto
-```
-
-### Opción C — PowerShell (Windows nativo, sin bash ni Node)
-
-```powershell
-cd consigliere
-powershell -ExecutionPolicy Bypass -File .\init.ps1          # modo interactivo
-powershell -ExecutionPolicy Bypass -File .\init.ps1 -InstallGlobal
-# Ahora desde cualquier carpeta:
-powershell -File ~\.local\bin\consigliere-init.ps1 C:\ruta\proyecto
-# Alternativa CMD:
-init.cmd C:\ruta\proyecto
-```
-
-### Desinstalar
-
-```bash
-# según cómo instalaste:
-npm rm -g consigliere                              # si fue vía npm
-consigliere-init --uninstall-global                # vía Node (init.mjs)
-./init.sh --uninstall-global                       # vía bash
-powershell -File .\init.ps1 -UninstallGlobal       # vía PowerShell
-```
+> Si tenías instalación global previa (`~/.local/bin/consigliere-*` / `~/.local/share/consigliere`), bórrala: `rm -rf ~/.local/bin/consigliere* ~/.local/share/consigliere` (o `npm rm -g consigliere` si fue vía npm).
 
 ## Uso interactivo
 
+```bash
+./init.sh          # o node init.mjs  o  powershell -File init.ps1
+# → Nuevo proyecto — asistente guiado: directorio → nombre → stack → modelos cheap vs strong → autoskills → git
 ```
-$ ./init.sh
-  ¿Qué quieres hacer?
-  1) Instalar globalmente
-  2) Crear un nuevo proyecto (harness)
-  3) Desinstalar la versión global
-  4) Salir
-```
-
-Si eliges crear proyecto, el asistente te guía paso a paso: directorio, nombre, stack, modelos por agente, autoskills y git.
 
 ## Uso no-interactivo (CI / scripts)
 
 ```bash
-./init.sh --dir /ruta/proyecto --name mi-app \
+npx consigliere@latest --dir /ruta/proyecto --name mi-app \
   --stack-db postgresql --stack-backend node/express --stack-frontend react/vite \
   --stack-auth jwt --stack-validation zod --stack-deploy docker \
   --autoskills 1 --git yes
+
+# actualizar
+npx consigliere@latest --dir /ruta/proyecto --upgrade
 ```
 
 ## Flujo de trabajo en cada proyecto
 
 1. **cd** al proyecto generado.
-2. Completa `AGENTS.md` (stack, comandos dev) y `.opencode/skills/_project-docs/SKILL.md` (URLs/shortcuts).
-3. Opcional: asigna modelos por agente en `.opencode/opencode.json`.
-4. Instala dependencias y corre `npx autoskills`.
-5. En opencode: `/discover` (audita contexto + skills faltantes) → `/routine "configurar base del proyecto"`.
+2. Completa `AGENTS.md` (stack, comandos dev) y `.opencode/skills/_project-docs/SKILL.md`.
+3. Opcional: asigna modelos por agente en `.opencode/opencode.json` (`cheap`=verifier/summarizer/explore, `strong`=builder/planner/critic).
+4. `npm install && npx autoskills` (si `package.json` existe).
+5. En opencode: `/discover` → `/routine "configurar base del proyecto"` → `/doctor` para verificar.
 
 ### Comandos del harness
-- `/discover [foco]` — audita contexto del proyecto (stack real vs declarado) y skills presentes/faltantes (`_project-docs` + `autoskills` via `loader.mjs`).
-- `/routine <tarea>` — ciclo completo: explore → plan → critic → build → verify → record.
-- `/record <contexto>` — persiste el progreso en la memoria.
-- `/rotate-memory` — rotación semanal manual.
-- `/compact-state` — compacta `PROJECT_STATE.md`.
 
-## Sistema de memoria (3 capas)
+- `/discover [foco]` — audita stack real vs declarado + skills presentes/faltantes.
+- `/routine <tarea> [--parallel --skip-verify --skip-critic]` — routing orgánico: direct 1-3 files vs delegated 4+, plan/spec≤650w → critic → build → verify (stash rollback, 3 intentos) → record. SDD-lite integrado por defecto.
+- `/doctor` — diagnóstico: `opencode.json`, memoria `<100/<150`, hook, lock huérfano, skills.
+- `/record <contexto>` — persiste con formato 5 campos `Goal/Discoveries/Accomplished/Next/Files` (compat `Qué/Verificación`).
+- `/review` — lista decisiones stale (`review_after` +90d).
+- `/rotate-memory` — rotación semanal manual.
+- `/compact-state` — compacta `PROJECT_STATE.md` §2 (dedup + archive).
+
+## Sistema de memoria (3 capas, inspirado Engram pero md+grep)
 
 | Capa | Archivo | Carga | Contenido |
 |------|---------|-------|-----------|
-| 0 | `PROJECT_STATE.md` | siempre | fase, decisiones, patrones, pendientes (<100 líneas) |
-| 1 | `SUMMARY.md` | on-demand | última semana + índice (<150 líneas) |
-| 2 | `CHANGELOG/YYYY-MM-DD.md` | rare | historial semanal (nombrado por lunes) |
+| 0 | `PROJECT_STATE.md` | siempre | fase, decisiones + `review_after`, patrones, pendientes (<100 líneas) |
+| 1 | `SUMMARY.md` | on-demand | última semana + `topic: family/kebab` + índice (<150 líneas) |
+| 2 | `CHANGELOG/YYYY-MM-DD.md` | rare | historial semanal (lunes) + `DECISIONS-ARCHIVE.md` |
 
-- **Rotación semanal automática**: hook `post-commit` mueve entradas antiguas a `CHANGELOG/`.
-- **Anti-concurrencia**: `.memory-lock` guarda escrituras simultáneas.
-- **Compactación**: `§2` de decisiones se compacta a `CHANGELOG/DECISIONS-ARCHIVE.md` cuando crece.
+- **Topic upsert**: `topic: architecture/auth-model` 2 niveles; mismo topic → upsert no duplicado.
+- **Búsqueda progresiva (sin SQLite)**: `node .opencode/scripts/memory-index.mjs search "query"` → IDs, `timeline <id>`, `get <id>` (grep+perl, fallback si `sqlite3` ausente).
+- **Rotación**: automática `post-commit` (lunes o >150 líneas) + `flock` + `.memory-lock`.
+- **Sync local**: `node .opencode/scripts/memory-sync.mjs export` → `.consigliere/chunks/<monday>.json` (git-tracked), `import` restaura en clone.
+- **Session summary**: 5 campos `Goal/Discoveries/Accomplished/Next Steps/Files`.
+- **Stale**: `/review` lista `needs_review` si `review_after` pasado.
 
-## Skills para subagentes
+## Skills
 
-Los agentes (planner/builder/verifier/critic) pueden consultar skills vía `_skill-loader`:
 ```bash
 node .opencode/skills/_skill-loader/loader.mjs list
 node .opencode/skills/_skill-loader/loader.mjs search "query"
 node .opencode/skills/_skill-loader/loader.mjs chunk "<skill>" urls,shortcuts,examples
+node .opencode/scripts/memory-index.mjs search "auth middleware"
+node .opencode/scripts/doctor.mjs
+node .opencode/scripts/memory-sync.mjs export --all
 ```
-Esto carga solo los chunks necesarios y ahorra tokens.
+
+Cache fingerprint: `.consigliere/skill-registry.cache.json` (mtime+size), refresh con `loader.mjs refresh --force`.
 
 ## Estructura de este repositorio
 
 ```
 consigliere/
-├── init.sh                 # instalador bash (Linux/macOS/Git Bash/WSL)
-├── init.ps1                # instalador PowerShell (Windows nativo)
+├── init.sh                 # instalador bash solo proyecto
+├── init.ps1                # instalador PowerShell solo proyecto
 ├── init.cmd                # shim CMD → init.ps1
-├── init.mjs                # instalador Node cross-platform (universal, npm)
-├── package.json            # publica en npm como `consigliere`
-└── templates/              # plantillas renderizables (placeholders {{VAR}})
+├── init.mjs                # instalador Node universal (npx)
+├── package.json            # publica en npm como `consigliere` v2.0.0
+└── templates/              # plantillas {{VAR}} + scripts + cache
 ```
 
 ## Dependencias
 
 | Instalador | Requeridas | Opcionales |
 |---|---|---|
-| `init.mjs` / `npm` (universal) | `node 18+`, `git` | — |
-| `init.sh` (Unix) | `bash 4+`, `coreutils`, `git` | `gettext` (envsubst), `node` (autoskills) |
-| `init.ps1` (Windows) | `PowerShell 5.1+`, `git` | `node` (autoskills) |
+| `npx` / `init.mjs` | `node 18+`, `git` | `tar` (backups) |
+| `init.sh` | `bash 4+`, `coreutils`, `git` | `node` (autoskills) |
+| `init.ps1` | `PowerShell 5.1+`, `git` | `node` (autoskills) |
 
-## Notas de diseño
+## Notas de diseño v2.0
 
-Este harness aplica "Robusto v1": corrige las fallas del diseño original de FaceIT:
-- Bash allowlist en builder autosuficiente (`*: allow`, solo `deny` irreparable + `git push → ask`).
-- Modelo por agente (placeholders configurables).
-- Agente `critic` para revisar decisiones de diseño.
-- Rotación de memoria automática vía hook post-commit.
-- Locking anti-concurrencia en memoria.
-- Compactación de decisiones.
-- Carga de skills bajo demanda (chunks) para ahorrar tokens.
+- **Solo por proyecto** (inspirado `gentle-ai --scope workspace`): cero `~/.local/bin`, cero `PATH`, cero drift.
+- **Routing orgánico**: 1-3 files direct vs 4+ delegated (Gentle AI `trigger-rules.md`).
+- **SDD-lite integrado en `routine`** (≤650w Given/When/Then), no 10 fases pesadas.
+- **Harden bash**: deny extendido `**/*.pem,**/*.key,**/.env*,~/.ssh/*,**/secrets/*` (Gentle AI permissions).
+- **Memoria md+grep**: topic upsert + stale + sync local (Engram SQLite → md+grep sin deps).
+- **Ops**: `/doctor` + backups keep 5 + ` --upgrade`.
