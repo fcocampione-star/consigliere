@@ -66,12 +66,30 @@ node consigliere/init.mjs /ruta/proyecto --upgrade
 
 > Si tenías instalación global previa (`~/.local/bin/consigliere-*` / `~/.local/share/consigliere`), bórrala: `rm -rf ~/.local/bin/consigliere* ~/.local/share/consigliere` (o `npm rm -g consigliere` si fue vía npm).
 
-## Uso interactivo
+## Uso interactivo (guiado)
+
+Todos estos son **guiados** — no necesitas pasar ruta por adelantado, te preguntan `📁 Ruta → Nombre → Stack → Modelos cheap vs strong → Autoskills → Git`:
 
 ```bash
-./init.sh          # o node init.mjs  o  powershell -File init.ps1
-# → Nuevo proyecto — asistente guiado: directorio → nombre → stack → modelos cheap vs strong → autoskills → git
+# npx guiado (sin clonar, Windows/macOS/Linux idéntico — recomendado)
+npx consigliere@latest
+# o
+npx consigliere-init
+
+# con git clone (sin npx)
+git clone https://github.com/fcocampione-star/consigliere.git
+cd consigliere && git checkout consigliere-2.0
+node init.mjs                # universal
+./init.sh                    # macOS/Linux/Git Bash
+powershell -File init.ps1    # Windows
+init.cmd                     # CMD
+
+# download ZIP (sin git clone)
+# Descarga ZIP desde GitHub → descomprime → cd consigliere-main
+node init.mjs          # o ./init.sh / powershell -File init.ps1
 ```
+
+> Pasos tras descarga: 1) `cd consigliere` (o carpeta descomprimida) → 2) ejecuta uno de los comandos guiados arriba → 3) responde `📁 Ruta` con la ruta de tu proyecto (ej `C:\ruta\mi-app` o `/tmp/mi-app`) → 4) sigue Stack/Modelos/Git → 5) `cd /ruta/mi-app` → `AGENTS.md` → `/discover` → `/routine` → `/doctor`.
 
 ## Uso no-interactivo (CI / scripts)
 
