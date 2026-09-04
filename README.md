@@ -7,7 +7,6 @@
 ```
 <proyecto>/
 ├── .opencode/
-│   ├── opencode.json              # default_agent, modelos cheap vs strong, bash harden
 │   ├── agents/
 │   │   ├── orchestrator.md        # primario, routing 1-3 vs 4+ files + SDD-lite
 │   │   ├── planner.md             # diseña + spec Given/When/Then (≤650w)
@@ -33,13 +32,15 @@
 │   │   └── doctor.mjs             # health check
 │   └── hooks/                     # post-commit-memory-rotate.sh + sync
 ├── .consigliere/
-│   ├── backups/                   # harness-*.tgz keep 5 (upgrade)
+│   ├── backups/                   # harness-*.tgz completo keep 5 (upgrade)
 │   ├── chunks/                    # memoria sync local (git-tracked opcional)
 │   └── skill-registry.cache.json  # fingerprint cache
 ├── AGENTS.md                      # instrucciones raíz + stack + comandos dev
+├── opencode.json                  # default_agent, modelos cheap vs strong, bash harden
 ├── PROJECT_STATE.md               # CAPA 0 — siempre cargada + review_after
 ├── SUMMARY.md                     # CAPA 1 — última semana + topic (on-demand)
 ├── CHANGELOG/                     # CAPA 2 — historial semanal archivado
+├── scripts/                       # check-memory-limits.sh/.ps1 (límites 100/150)
 ├── .gitignore
 └── skills-lock.json
 ```
@@ -59,9 +60,13 @@ bash consigliere/init.sh --dir /ruta/proyecto
 powershell -File consigliere/init.ps1 C:\ruta\proyecto   # Windows
 init.cmd C:\ruta\proyecto                                  # CMD shim
 
-# Actualizar harness existente (backup keep 5 en .consigliere/backups/)
+# Actualizar harness existente: --upgrade NO requiere --force, hace backup completo keep 5
+# (incluye .opencode/, AGENTS.md, PROJECT_STATE.md, SUMMARY.md, CHANGELOG/, .consigliere/,
+#  opencode.json, .gitignore, skills-lock.json, scripts/) y preserva la memoria/config
+# (PROJECT_STATE.md, SUMMARY.md, opencode.json, AGENTS.md, .gitignore). Si el backup falla, aborta.
 npx consigliere@latest /ruta/proyecto --upgrade
 node consigliere/init.mjs /ruta/proyecto --upgrade
+bash consigliere/init.sh --dir /ruta/proyecto --upgrade
 ```
 
 ## Uso interactivo (guiado)
@@ -97,15 +102,19 @@ npx consigliere@latest --dir /ruta/proyecto --name mi-app \
   --stack-auth jwt --stack-validation zod --stack-deploy docker \
   --autoskills 1 --git yes
 
-# actualizar
+# actualizar (backup completo keep 5 + preserva memoria/config; sin --force)
 npx consigliere@latest --dir /ruta/proyecto --upgrade
+
+# simular sin escribir nada / sobrescribir un destino no vacío sin harness (a tu riesgo)
+npx consigliere@latest --dir /ruta/proyecto --dry-run
+npx consigliere@latest --dir /ruta/proyecto --force
 ```
 
 ## Flujo de trabajo en cada proyecto
 
 1. **cd** al proyecto generado.
 2. Completa `AGENTS.md` (stack, comandos dev) y `.opencode/skills/_project-docs/SKILL.md`.
-3. Opcional: asigna modelos por agente en `.opencode/opencode.json` (`cheap`=verifier/summarizer/explore, `strong`=builder/planner/critic).
+3. Opcional: asigna modelos por agente en `opencode.json` (raíz; `cheap`=verifier/summarizer/explore, `strong`=builder/planner/critic).
 4. `npm install && npx autoskills` (si `package.json` existe).
 5. En opencode: `/discover` → `/routine "configurar base del proyecto"` → `/doctor` para verificar.
 
@@ -163,9 +172,9 @@ consigliere/
 
 | Instalador | Requeridas | Opcionales |
 |---|---|---|
-| `npx` / `init.mjs` | `node 18+`, `git` | `tar` (backups) |
-| `init.sh` | `bash 4+`, `coreutils`, `git` | `node` (autoskills) |
-| `init.ps1` | `PowerShell 5.1+`, `git` | `node` (autoskills) |
+| `npx` / `init.mjs` | `node 18+`, `git`, `tar` (requerido para `--upgrade`) | — |
+| `init.sh` | `bash 4+`, `coreutils`, `git`, `tar` (requerido para `--upgrade`) | `node` (autoskills) |
+| `init.ps1` | `PowerShell 5.1+`, `git`, `tar` (requerido para `--upgrade`) | `node` (autoskills) |
 
 ## Notas de diseño v2.0
 
@@ -174,4 +183,4 @@ consigliere/
 - **SDD-lite integrado en `routine`** (≤650w Given/When/Then), no 10 fases pesadas.
 - **Harden bash**: deny extendido `**/*.pem,**/*.key,**/.env*,~/.ssh/*,**/secrets/*`.
 - **Memoria md+grep**: topic upsert + stale + sync local (Engram SQLite → md+grep sin deps).
-- **Ops**: `/doctor` + backups keep 5 + ` --upgrade`.
+- **Ops**: `/doctor` + backups completos keep 5 + ` --upgrade` (preserva memoria/config; aborta si el backup falla).

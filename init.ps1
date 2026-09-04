@@ -36,6 +36,9 @@ if (-not $HOME_DIR) { $HOME_DIR = $env:USERPROFILE }
 $TEMPLATE_DIR = Join-Path (Split-Path $SCRIPT_PATH -Parent) "templates"
 $SCRIPT_NAME = Split-Path $SCRIPT_PATH -Leaf
 
+$BACKUP_ITEMS = @('.opencode','AGENTS.md','PROJECT_STATE.md','SUMMARY.md','CHANGELOG','.consigliere','opencode.json','.gitignore','skills-lock.json','scripts')
+$PRESERVED = @('PROJECT_STATE.md','SUMMARY.md','opencode.json','AGENTS.md','.gitignore')
+
 function Write-Info($msg) { Write-Host "ℹ️  $msg" -ForegroundColor Cyan }
 function Write-Ok($msg) { Write-Host "✅ $msg" -ForegroundColor Green }
 function Write-Warn($msg) { Write-Host "⚠️  $msg" -ForegroundColor Yellow }
@@ -72,9 +75,9 @@ Uso:
   .\init.ps1                          modo interactivo
   .\init.ps1 -Version | -Help
   .\init.ps1 <ruta\proyecto>           crear proyecto
-  .\init.ps1 <ruta\proyecto> -Upgrade  actualizar harness (backup keep 5)
+  .\init.ps1 <ruta\proyecto> -Upgrade  actualizar harness (backup keep 5, preserva memoria/config; no requiere -Force)
   .\init.ps1 <ruta\proyecto> -DryRun   simulación sin escribir
-  .\init.ps1 <ruta\proyecto> -Force    sobrescribir destino no vacío
+  .\init.ps1 <ruta\proyecto> -Force    sobrescribir destino no vacío (solo sin -Upgrade)
 
 Flags:
   -Dir <ruta>              directorio destino
@@ -82,9 +85,9 @@ Flags:
   -StackDb/-StackBackend/-StackFrontend/-StackAuth/-StackValidation/-StackDeploy <v>
   -Autoskills <1|2|3>      1=proyecto, 2=global, 3=omitir
   -Git <yes|no>            inicializar git
-  -Upgrade                 actualizar harness
+  -Upgrade                 actualizar harness (backup keep 5, preserva memoria/config; no requiere -Force)
   -DryRun                  no escribir, solo loguear
-  -Force                   sobrescribir destino no vacío
+  -Force                   sobrescribir destino no vacío (solo sin -Upgrade)
 
 Instalación: solo por proyecto, sin binario global.
   npx consigliere@latest C:\ruta\proyecto
@@ -306,21 +309,44 @@ if ($Dir -or $Name -or $StackDb -or $StackBackend) {
   $lang = "typescript"; if ($StackBackend -like "*python*") { $lang = "python" } elseif ($StackBackend -like "*go*") { $lang = "go" }
   $doGit = $Git -ne "no"
 
+  $hasHarness = (Test-Path (Join-Path $targetDir ".opencode")) -or (Test-Path (Join-Path $targetDir "AGENTS.md"))
   if ((Test-Path $targetDir) -and ((Get-ChildItem -Path $targetDir -Force | Measure-Object).Count -gt 0) -and -not $Force -and -not $DryRun) {
-    Write-Err "El directorio '$targetDir' existe y no está vacío. Usa -Force para sobrescribir o -DryRun para simular."
-    exit 1
+    if ($Upgrade -and $hasHarness) {
+      # eximido: harness previo presente → backup + render
+    } elseif ($Upgrade) {
+      Write-Err "El directorio '$targetDir' no es un proyecto consigliere/harness (sin .opencode/ ni AGENTS.md). -Upgrade requiere un harness previo; usa -Force solo si quieres sobrescribir."
+      exit 1
+    } else {
+      Write-Err "El directorio '$targetDir' existe y no está vacío. Usa -Force para sobrescribir, -DryRun para simular, o -Upgrade para actualizar un harness existente."
+      exit 1
+    }
   }
 
+  $items = @($BACKUP_ITEMS | Where-Object { Test-Path (Join-Path $targetDir $_) })
+  $bf = ""
   if ($Upgrade) {
-    if ($DryRun) {
-      Write-Host "ℹ️  [dry-run] would backup $targetDir -> .consigliere/backups/harness-*.tgz (keep 5)" -ForegroundColor Cyan
+    if ($items.Count -eq 0) {
+      Write-Info "Sin harness previo que respaldar (directorio vacío/inexistente)"
+    } elseif ($DryRun) {
+      Write-Host "ℹ️  [dry-run] backup -> .consigliere/backups/harness-<ts>.tgz (keep 5): $($items -join ', ')" -ForegroundColor Cyan
+      $preview = @($PRESERVED | Where-Object { $items -contains $_ })
+      if ($preview.Count -gt 0) { Write-Host "ℹ️  [dry-run] restore -> $($preview -join ', ')" -ForegroundColor Cyan }
     } else {
       Write-Step "Actualizando harness en '$projectName' (backup keep 5)"
       $backupDir = Join-Path $targetDir ".consigliere\backups"
       New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
       $ts = Get-Date -Format "yyyyMMddTHHmmssZ"
       $bf = Join-Path $backupDir "harness-$ts.tgz"
-      try { & tar -czf $bf -C $targetDir .opencode AGENTS.md PROJECT_STATE.md SUMMARY.md 2>$null; Write-Ok "Backup: $bf" } catch { Write-Warn "Backup falló" }
+      try {
+        & tar -czf $bf -C $targetDir --exclude=.consigliere/backups --exclude=.memory-lock @items 2>$null
+      } catch {
+        $global:LASTEXITCODE = 1
+      }
+      if ($LASTEXITCODE -ne 0) {
+        Write-Err "Backup falló: $bf"
+        exit 1
+      }
+      Write-Ok "Backup: $bf ($($items.Count) ítems)"
       Get-ChildItem -Path $backupDir -Filter "harness-*.tgz" | Sort-Object Name -Descending | Select-Object -Skip 5 | Remove-Item -Force -ErrorAction SilentlyContinue
     }
   }
@@ -343,6 +369,20 @@ if ($Dir -or $Name -or $StackDb -or $StackBackend) {
   New-Item -ItemType Directory -Force -Path (Join-Path $targetDir "CHANGELOG") | Out-Null
   New-Item -ItemType Directory -Force -Path (Join-Path $targetDir ".consigliere\backups") | Out-Null
   New-Item -ItemType Directory -Force -Path (Join-Path $targetDir ".consigliere\chunks") | Out-Null
+  if ($items.Count -gt 0 -and $bf) {
+    $restored = @($PRESERVED | Where-Object { $items -contains $_ })
+    if ($restored.Count -gt 0) {
+      $rc = 0
+      try {
+        & tar -xzf $bf -C $targetDir @restored 2>$null
+        $rc = $LASTEXITCODE
+      } catch {
+        $rc = 1
+      }
+      if ($rc -eq 0) { Write-Ok "Memoria/config preservadas: $($restored -join ', ')" }
+      else { Write-Warn "Restauración de memoria/config falló (backup en $bf)" }
+    }
+  }
   Write-Ok "Harness ${projectName} generado"
   if ($doGit) { Git-InitAndCommit $targetDir }
   if ($Autoskills -ne "3" -and $Autoskills -ne "no") { Handle-Autoskills $Autoskills $targetDir }

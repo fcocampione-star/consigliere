@@ -14,6 +14,9 @@ set -euo pipefail
 
 VERSION="2.0.0"
 
+BACKUP_ITEMS=(.opencode AGENTS.md PROJECT_STATE.md SUMMARY.md CHANGELOG .consigliere opencode.json .gitignore skills-lock.json scripts)
+PRESERVED=(PROJECT_STATE.md SUMMARY.md opencode.json AGENTS.md .gitignore)
+
 if ((BASH_VERSINFO[0] < 4)); then echo "❌ Bash >=4 requerido. Actual: ${BASH_VERSION}" >&2; exit 1; fi
 
 SCRIPT_PATH="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
@@ -294,7 +297,7 @@ finish() {
   printf "  1. cd %s\n" "$TARGET_DIR"
   printf "  2. Edita AGENTS.md → completa el stack y los comandos dev\n"
   printf "  3. Edita .opencode/skills/_project-docs/SKILL.md → URLs/shortcuts de tu stack\n"
-  printf "  4. Opcional: rellena los modelos por agente en .opencode/opencode.json (cheap vs strong)\n"
+  printf "  4. Opcional: rellena los modelos por agente en opencode.json (cheap vs strong)\n"
   printf "  5. Si tienes package.json → npm install\n"
   printf "  6. Arranca opencode → /discover (audita contexto + skills) → /routine \"configurar base del proyecto\"\n"
   printf "  7. Verifica: /doctor · node .opencode/scripts/memory-index.mjs search \"query\"\n\n"
@@ -342,7 +345,7 @@ Uso:
   $SCRIPT_NAME                          modo interactivo
   $SCRIPT_NAME --version | --help
   $SCRIPT_NAME <ruta/proyecto>          crear proyecto (no-interactivo, con flags)
-  $SCRIPT_NAME <ruta/proyecto> --upgrade  actualizar harness existente (backup keep 5)
+  $SCRIPT_NAME <ruta/proyecto> --upgrade  actualizar harness existente (backup keep 5, preserva memoria/config; no requiere --force)
   $SCRIPT_NAME <ruta/proyecto> --dry-run  simulación sin escribir
   $SCRIPT_NAME <ruta/proyecto> --force    sobrescribir destino no vacío
 
@@ -352,9 +355,9 @@ Flags (no-interactivo):
   --stack-db/-backend/-frontend/-auth/-validation/-deploy <v>   stack
   --autoskills <1|2|3>      1=proyecto, 2=global, 3=omitir
   --git <yes|no>            inicializar git
-  --upgrade                 actualizar harness (backup .consigliere/backups/)
+  --upgrade                 actualizar harness (backup keep 5, preserva memoria/config; no requiere --force)
   --dry-run                 no escribir, solo loguear
-  --force                   sobrescribir destino no vacío
+  --force                   sobrescribir destino no vacío (solo sin --upgrade)
 
 Genera: .opencode/ (agents, commands, plans, skills, scripts), AGENTS.md,
 PROJECT_STATE.md, SUMMARY.md, CHANGELOG/, .consigliere/, .gitignore, skills-lock.json.
@@ -403,25 +406,49 @@ main() {
   case "$STACK_BACKEND" in *python*) LANG_BACKEND="python";; *go*) LANG_BACKEND="go";; *) LANG_BACKEND="typescript";; esac
   TARGET_DIR="${TARGET_DIR/#\~/$HOME}"
 
+  local has_harness=0
+  [[ -d "$TARGET_DIR/.opencode" || -f "$TARGET_DIR/AGENTS.md" ]] && has_harness=1
   if [[ -e "$TARGET_DIR" ]] && [[ -n "$(ls -A "$TARGET_DIR" 2>/dev/null)" ]] && [[ "$FORCE" -eq 0 ]] && [[ "$DRY_RUN" -eq 0 ]]; then
-    err "El directorio '$TARGET_DIR' existe y no está vacío. Usa --force para sobrescribir o --dry-run para simular."
-    exit 1
+    if [[ "$UPGRADE" -eq 1 ]] && [[ "$has_harness" -eq 1 ]]; then
+      : # eximido: harness previo presente → backup + render
+    elif [[ "$UPGRADE" -eq 1 ]]; then
+      err "El directorio '$TARGET_DIR' no es un proyecto consigliere/harness (sin .opencode/ ni AGENTS.md). --upgrade requiere un harness previo; usa --force solo si quieres sobrescribir."
+      exit 1
+    else
+      err "El directorio '$TARGET_DIR' existe y no está vacío. Usa --force para sobrescribir, --dry-run para simular, o --upgrade para actualizar un harness existente."
+      exit 1
+    fi
   fi
 
+  local -a items=()
+  local bf="" c p
   if [[ "$UPGRADE" -eq 1 ]]; then
-    if [[ "$DRY_RUN" -eq 1 ]]; then
-      info "[dry-run] would backup $TARGET_DIR -> .consigliere/backups/harness-*.tgz (keep 5)"
+    for c in "${BACKUP_ITEMS[@]}"; do
+      [[ -e "$TARGET_DIR/$c" ]] && items+=("$c")
+    done
+    if [[ "${#items[@]}" -eq 0 ]]; then
+      info "Sin harness previo que respaldar (directorio vacío/inexistente)"
+    elif [[ "$DRY_RUN" -eq 1 ]]; then
+      info "[dry-run] backup -> .consigliere/backups/harness-<ts>.tgz (keep 5): ${items[*]}"
+      local -a preview=()
+      for c in "${PRESERVED[@]}"; do
+        [[ " ${items[*]} " == *" $c "* ]] && preview+=("$c")
+      done
+      if [[ "${#preview[@]}" -gt 0 ]]; then
+        info "[dry-run] restore -> ${preview[*]}"
+      fi
     else
       step "Actualizando harness en '$PROJECT_NAME' (backup keep 5)"
       mkdir -p "$TARGET_DIR/.consigliere/backups"
       local ts; ts="$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null || date +%Y%m%d%H%M%S)"
-      local bf="$TARGET_DIR/.consigliere/backups/harness-${ts}.tgz"
-      tar -czf "$bf" -C "$TARGET_DIR" .opencode AGENTS.md PROJECT_STATE.md SUMMARY.md 2>/dev/null && ok "Backup: $bf" || warn "Backup falló (continuando)"
-      # prune keep 5
-      local count; count="$(ls -1 "$TARGET_DIR/.consigliere/backups"/harness-*.tgz 2>/dev/null | wc -l)"
-      if [[ "$count" -gt 5 ]]; then
-        ls -1t "$TARGET_DIR/.consigliere/backups"/harness-*.tgz | tail -n +6 | xargs rm -f 2>/dev/null || true
+      bf="$TARGET_DIR/.consigliere/backups/harness-${ts}.tgz"
+      if ! tar -czf "$bf" -C "$TARGET_DIR" --exclude=.consigliere/backups --exclude=.memory-lock "${items[@]}" 2>/dev/null; then
+        err "Backup falló: $bf"
+        exit 1
       fi
+      ok "Backup: $bf (${#items[@]} ítems)"
+      # prune keep 5 (lexicográfico por nombre; paridad mjs/ps1)
+      ls -1 "$TARGET_DIR/.consigliere/backups"/harness-*.tgz 2>/dev/null | sort -r | tail -n +6 | xargs -r rm -f 2>/dev/null || true
     fi
   fi
 
@@ -438,6 +465,19 @@ main() {
   mkdir -p "$TARGET_DIR/CHANGELOG"
   mkdir -p "$TARGET_DIR/.consigliere/backups"
   mkdir -p "$TARGET_DIR/.consigliere/chunks"
+  if [[ "${#items[@]}" -gt 0 ]] && [[ -n "$bf" ]]; then
+    local -a restored=()
+    for p in "${PRESERVED[@]}"; do
+      [[ " ${items[*]} " == *" $p "* ]] && restored+=("$p")
+    done
+    if (( ${#restored[@]} > 0 )); then
+      if tar -xzf "$bf" -C "$TARGET_DIR" "${restored[@]}" 2>/dev/null; then
+        ok "Memoria/config preservadas: ${restored[*]}"
+      else
+        warn "Restauración de memoria/config falló (backup en $bf)"
+      fi
+    fi
+  fi
   ok "Harness ${UPGRADE:+actualizado }generado"
   if [[ "$DO_GIT" -eq 1 ]]; then
     git_init_and_commit "$TARGET_DIR"
