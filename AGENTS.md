@@ -38,8 +38,6 @@
 | Validation | node --check syntax (npm test = check init.mjs + loader + doctor + memory-index + memory-sync) |
 | Deploy | npm registry consigliere@latest v2.0.0 via npx / init.mjs + init.sh + init.ps1 per-project, --upgrade con backup keep 5 en .consigliere/backups/ |
 
-*(Edit this table with the actual stack of consigliere.)*
-
 ## Skills (con cache fingerprint)
 
 - **Project docs**: `.opencode/skills/_project-docs/SKILL.md` — URLs, shortcuts, patterns, examples. Edita con tu stack real.
@@ -57,13 +55,14 @@
 
 ```bash
 npm test                                              # node --check init.mjs + loader + doctor + memory scripts
-node init.mjs /tmp/demo --name demo                   # probar instalador universal
-node .opencode/scripts/doctor.mjs --json              # diagnóstico harness
-node .opencode/skills/_skill-loader/loader.mjs list --json  # listar skills
+node --check init.mjs && node --check .opencode/scripts/doctor.mjs  # validación ESM syntax
+node .opencode/scripts/doctor.mjs --json              # diagnóstico harness (14 checks)
+node .opencode/skills/_skill-loader/loader.mjs list --json  # listar skills (cache fingerprint)
 node .opencode/scripts/memory-index.mjs search "query"      # búsqueda memoria md+grep
+node .opencode/scripts/memory-sync.mjs status         # estado sync local chunks
+bash scripts/check-memory-limits.sh                   # límites 100/150 líneas (PROJECT_STATE/SUMMARY)
+node init.mjs /tmp/demo --name demo                   # probar instalador universal
 ```
-
-*(Fill in the actual dev commands for consigliere.)*
 
 ## Directory structure (2.0 solo por proyecto)
 

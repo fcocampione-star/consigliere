@@ -8,23 +8,25 @@
 
 | Fase | Descripción | Estado |
 |------|-------------|--------|
-| (fase inicial) | Definir el objetivo, stack y estructura base del proyecto | ⏳ Pendiente |
+| Fase 0 Bootstrap — Harness CLI por proyecto | Harness-only: Node >=18 ESM + Bash 4+ / PowerShell 5.1+ + git/tar; memoria 3 capas md+grep (PROJECT_STATE/SUMMARY/CHANGELOG), routing orgánico y SDD-lite integrados | ✅ Completada |
 
-> Próximo hito recomendado: configurar la base del proyecto (`AGENTS.md`, stack, estructura). Ver `.opencode/plans/` para planes de trabajo del agente.
+> Próximo hito: Fase 1 — validar harness en proyecto demo (init.mjs --upgrade, doctor 14/14, flujo /discover → /routine → /record).
 
 ---
 
 ## 2. Decisiones de diseño (append-only, consolidadas, con review_after)
 
-- (Registra cada decisión en 1-2 frases + `topic: family/kebab` + `review_after: YYYY-MM-DD` (+90d). Ej: `- Usar zod para validación [topic: architecture/validation] review_after: 2026-11-30`. Upsert si topic existe. Mantener §2 < ~80; `/compact-state` si excede, `/review` lista stale.)
+- Harness-only sin runtime de app: Node >=18 ESM + Bash/PowerShell + git/tar; sin DB/app server, scaffolding por proyecto vía init.mjs/init.sh/init.ps1 [topic: architecture/harness-scope] review_after: 2026-12-03
+- Memoria 3 capas md+grep (PROJECT_STATE/SUMMARY/CHANGELOG) con búsqueda grep+perl y cache fingerprint; SQLite solo fallback [topic: architecture/stack-md-grep] review_after: 2026-12-03
+- Skill loader con cache fingerprint `.consigliere/skill-registry.cache.json` (path+mtime+size) y chunks urls/patterns/shortcuts/examples/commands bajo demanda [topic: dx/skill-loader-cache] review_after: 2026-12-03
 
 ---
 
 ## 3. Pendientes inmediatos
 
-- [ ] Definir objetivo y alcance inicial del proyecto.
-- [ ] Completar `AGENTS.md` (stack, comandos dev) y `.opencode/skills/_project-docs/SKILL.md`.
-- [ ] Configurar la estructura base del proyecto.
+- [x] Definir objetivo y alcance inicial del proyecto. (Fase 0 harness-only definido)
+- [x] Completar `AGENTS.md` (stack, comandos dev) y `.opencode/skills/_project-docs/SKILL.md`. (Stack harness documentado)
+- [x] Configurar la estructura base del proyecto. (Templates sincronizados)
 
 ---
 
@@ -46,7 +48,8 @@
 
 | Patrón | Archivo/Ejemplo | Descripción |
 |--------|-----------------|-------------|
-| (aún sin patrones) | — | — |
+| memory/search | `node .opencode/scripts/memory-index.mjs search "query"` → `timeline <id>` → `get <id>` | Búsqueda md+grep progresiva sin SQLite (fallback sqlite3 opcional) |
+| skill/chunk-load | `node .opencode/skills/_skill-loader/loader.mjs chunk "_project-docs" urls,patterns` | Carga solo chunks necesarios para ahorrar tokens |
 
 ---
 

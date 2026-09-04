@@ -5,6 +5,16 @@
 
 ---
 
+## 2026-09-04 — Fase 0 Bootstrap spec-lite → verifier PASS
+
+topic: sdd/bootstrap-initial/spec
+**Goal:** Cerrar ambigüedad harness-only y desbloquear fase inicial (3 pendientes PROJECT_STATE §3).
+**Discoveries:** Stack harness ya definido pero con placeholders `Edit this table`, SKILL chunks vacíos, cache fingerprint stale, templates drift riesgo.
+**Accomplished:** PROJECT_STATE §1 reescrita Fase 0 Bootstrap (61 líneas), §2 3 decisiones `architecture/harness-scope`, `architecture/stack-md-grep`, `dx/skill-loader-cache` review_after 2026-12-03, §5 2 patrones `memory/search` + `skill/chunk-load`; AGENTS stack real + 8 dev commands; SKILL _project-docs 5 chunks rellenados (6 URLs); sync templates 3 espejos diff 0; spec sdd/bootstrap-initial ≤650w R1-R7 Given/When/Then critic APROBADO.
+**Next:** Push rama consigliere-2.0 (commit propuesto pendiente), activar sync chunks `.consigliere/chunks/`, iniciar Fase 1 dogfooding `/discover` → `/routine`.
+**Files:** `git log --oneline -5` → d75e476, f940b8a, 4113bcb, 9d1ce97, b92eb8c — 6 modificados root+templates, sin src, sin tocar init.mjs/opencode.json
+**Verificación:** `verifier PASS` 14/14 doctor, `node .opencode/skills/_skill-loader/loader.mjs list` 2 skills, `memory-index search` ok, `npm test` syntax v2.0.0, `wc -l` PROJECT_STATE 61 SUMMARY <150
+
 ## 2026-09-03 — Auditoría harness y hardening repo privado
 
 topic: repo/hardening

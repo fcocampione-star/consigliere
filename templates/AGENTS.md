@@ -31,14 +31,12 @@
 
 | Layer | Choice |
 |-------|--------|
-| DB | {{STACK_DB}} |
-| Backend | {{STACK_BACKEND}} |
-| Frontend | {{STACK_FRONTEND}} |
-| Auth | {{STACK_AUTH}} |
-| Validation | {{STACK_VALIDATION}} |
-| Deploy | {{STACK_DEPLOY}} |
-
-*(Edit this table with the actual stack of {{PROJECT_NAME}}.)*
+| DB | N/A — Markdown + grep (PROJECT_STATE.md / SUMMARY.md / CHANGELOG/YYYY-MM-DD.md + memory-index.mjs grep+perl, cache .consigliere/skill-registry.cache.json; sqlite3 solo fallback) |
+| Backend | Node.js >=18 ESM (init.mjs) + Bash 4+ / PowerShell 5.1+ + git/tar — harness CLI (scripts .opencode/scripts/*.mjs, loader.mjs) |
+| Frontend | N/A — harness CLI sin UI (genera .opencode/ para opencode TUI; instalador para proyecto vacío) |
+| Auth | N/A — local sin auth; bash harden opencode.json (*:allow, deny rm/dd/mkfs, ask **/.env*/**/*.pem/**/.key/**/secrets/*/~/.ssh/* + git push) |
+| Validation | node --check syntax (npm test = check init.mjs + loader + doctor + memory-index + memory-sync) |
+| Deploy | npm registry consigliere@latest v2.0.0 via npx / init.mjs + init.sh + init.ps1 per-project, --upgrade con backup keep 5 en .consigliere/backups/ |
 
 ## Skills (con cache fingerprint)
 
@@ -56,10 +54,15 @@
 ## Development commands
 
 ```bash
-{{DEV_COMMANDS}}
+npm test                                              # node --check init.mjs + loader + doctor + memory scripts
+node --check init.mjs && node --check .opencode/scripts/doctor.mjs  # validación ESM syntax
+node .opencode/scripts/doctor.mjs --json              # diagnóstico harness (14 checks)
+node .opencode/skills/_skill-loader/loader.mjs list --json  # listar skills (cache fingerprint)
+node .opencode/scripts/memory-index.mjs search "query"      # búsqueda memoria md+grep
+node .opencode/scripts/memory-sync.mjs status         # estado sync local chunks
+bash scripts/check-memory-limits.sh                   # límites 100/150 líneas (PROJECT_STATE/SUMMARY)
+node init.mjs /tmp/demo --name demo                   # probar instalador universal
 ```
-
-*(Fill in the actual dev commands for {{PROJECT_NAME}}.)*
 
 ## Directory structure (2.0 solo por proyecto)
 

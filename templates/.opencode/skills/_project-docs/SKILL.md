@@ -10,43 +10,47 @@ metadata:
 
 # {{PROJECT_NAME}} — Project Documentation
 
-> Plantilla de documentación del stack. **Edita este archivo** para completar URLs, shortcuts, patrones y ejemplos de tu stack real.
+> Harness CLI por proyecto — Node >=18 ESM + Bash/PowerShell + git/tar, memoria 3 capas md+grep, routing orgánico y SDD-lite.
 
 ## 1. Official URLs Table
 
 <!-- CHUNK: urls -->
 | Technology | Official Docs | API Reference | GitHub | Notes |
 |------------|---------------|---------------|--------|-------|
-| {{STACK_DB}} | | | | |
-| {{STACK_BACKEND}} | | | | |
-| {{STACK_FRONTEND}} | | | | |
-| {{STACK_AUTH}} | | | | |
-| {{STACK_VALIDATION}} | | | | |
-| {{STACK_DEPLOY}} | | | | |
-
-*(Rellena cada fila con la URL oficial de docs, API ref y GitHub.)*
-
----
-
-## 2. Fetch Patterns (Common Queries)
+| Node.js >=18 ESM | https://nodejs.org/docs/latest/api/ | https://nodejs.org/api/esm.html | https://github.com/nodejs/node | ESM native, node --check |
+| opencode | https://opencode.ai/docs | https://opencode.ai/docs/cli | https://github.com/sst/opencode | TUI harness, agents/commands |
+| npm consigliere | https://www.npmjs.com/package/consigliere | https://github.com/fcocampione-star/consigliere#readme | https://github.com/fcocampione-star/consigliere | v2.0.0 via npx consigliere@latest |
+| Git SCM | https://git-scm.com/doc | https://git-scm.com/docs/git-init | https://github.com/git/git | git/tar backups keep 5 |
+| Bash 4+ / PowerShell 5.1+ | https://www.gnu.org/software/bash/manual/ | https://learn.microsoft.com/en-us/powershell/ | https://git.savannah.gnu.org/cgit/bash.git | init.sh / init.ps1 |
+| grep + perl (memory-index) | https://www.gnu.org/software/grep/manual/ | https://perldoc.perl.org/perlre | — | md+grep sin SQLite fallback |
 
 <!-- /CHUNK -->
 <!-- CHUNK: patterns -->
-Use `webfetch` con estas queries para documentación en vivo. *(Edita según tu stack.)*
+Use `webfetch` con estas queries para documentación en vivo.
 
-### {{STACK_BACKEND}}
+### Node.js ESM + node --check
 ```bash
-webfetch "<URL_OFFICIAL>/<ruta>" --format markdown
+webfetch "https://nodejs.org/api/esm.html" --format markdown
 ```
 
-### {{STACK_FRONTEND}}
+### opencode agents & commands
 ```bash
-webfetch "<URL_OFFICIAL>/<ruta>" --format markdown
+webfetch "https://opencode.ai/docs" --format markdown
 ```
 
-### {{STACK_DB}}
+### npm consigliere registry
 ```bash
-webfetch "<URL_OFFICIAL>/<ruta>" --format markdown
+webfetch "https://www.npmjs.com/package/consigliere" --format markdown
+```
+
+### Git SCM + tar backups
+```bash
+webfetch "https://git-scm.com/doc" --format markdown
+```
+
+### Bash manual / PowerShell docs
+```bash
+webfetch "https://www.gnu.org/software/bash/manual/" --format markdown
 ```
 
 ---
@@ -55,15 +59,15 @@ webfetch "<URL_OFFICIAL>/<ruta>" --format markdown
 
 <!-- /CHUNK -->
 <!-- CHUNK: shortcuts -->
-*(Define aliases cortos para queries y patrones frecuentes.)*
-
 | Shortcut | Expands To | Use Case |
 |----------|------------|----------|
-| `{{STACK_DB}}-tx` | transacción/transacción | Manejo de transacciones |
-| `{{STACK_BACKEND}}-router` | rutas/endpoints | Definición de rutas |
-| `{{STACK_FRONTEND}}-hook` | hook/patrón | Hooks y estado |
-| `{{STACK_AUTH}}-token` | verificación de token | Auth |
-| `{{STACK_VALIDATION}}-schema` | validación de esquema | Validación de entrada |
+| `/discover` | `node .opencode/scripts/doctor.mjs` + skill audit | Audita stack real vs declarado |
+| `/routine` | routing orgánico direct/delegated + spec-lite ≤650w | Flujo explore→plan→critic→build→verify→record |
+| `/doctor` | `node .opencode/scripts/doctor.mjs --json` | Diagnóstico 14 checks |
+| `/record` | 5 campos Goal/Discoveries/Accomplished/Next/Files + topic | Persistir memoria |
+| `/review` | stale review_after +90d | Listar decisiones caducadas |
+| `memory/search` | `node .opencode/scripts/memory-index.mjs search "query"` | Búsqueda md+grep |
+| `skill/load` | `node .opencode/skills/_skill-loader/loader.mjs chunk "<skill>" urls,patterns` | Carga chunks bajo demanda |
 
 ---
 
@@ -71,16 +75,34 @@ webfetch "<URL_OFFICIAL>/<ruta>" --format markdown
 
 <!-- /CHUNK -->
 <!-- CHUNK: examples -->
-*(Pega aquí ejemplos funcionales de tu stack.)*
-
-### 4.1 {{STACK_BACKEND}} Setup
-```{{LANG_BACKEND}}
-// template de ejemplo
+### 4.1 Harness install (Node ESM universal)
+```bash
+npx consigliere@latest /ruta/proyecto --name mi-app --stack-backend node/express --git yes
+node init.mjs /tmp/demo --name demo
+bash init.sh --dir /tmp/demo --name demo
 ```
 
-### 4.2 {{STACK_DB}} Query
-```sql
--- template de ejemplo
+### 4.2 Memory search (md+grep)
+```bash
+node .opencode/scripts/memory-index.mjs search "harness"
+node .opencode/scripts/memory-index.mjs timeline <id>
+node .opencode/scripts/memory-index.mjs get <id>
+```
+
+### 4.3 Skill loader cache fingerprint
+```bash
+node .opencode/skills/_skill-loader/loader.mjs list --json
+node .opencode/skills/_skill-loader/loader.mjs chunk "_project-docs" urls,shortcuts,examples
+node .opencode/skills/_skill-loader/loader.mjs refresh --force
+# cache: .consigliere/skill-registry.cache.json (path+mtime+size)
+```
+
+### 4.4 Memory limits & sync
+```bash
+bash scripts/check-memory-limits.sh
+node .opencode/scripts/memory-sync.mjs status
+node .opencode/scripts/memory-sync.mjs export --all
+node .opencode/scripts/doctor.mjs --json
 ```
 
 ---
@@ -90,8 +112,15 @@ webfetch "<URL_OFFICIAL>/<ruta>" --format markdown
 <!-- /CHUNK -->
 <!-- CHUNK: commands -->
 ```bash
-# Dev
-{{DEV_COMMANDS}}
+# Dev — harness CLI por proyecto
+npm test                                              # node --check init.mjs + loader + doctor + memory scripts
+node --check init.mjs && node --check .opencode/scripts/doctor.mjs  # validación ESM syntax
+node .opencode/scripts/doctor.mjs --json              # diagnóstico harness (14 checks)
+node .opencode/skills/_skill-loader/loader.mjs list --json  # listar skills (cache fingerprint)
+node .opencode/scripts/memory-index.mjs search "query"      # búsqueda memoria md+grep
+node .opencode/scripts/memory-sync.mjs status         # estado sync local chunks
+bash scripts/check-memory-limits.sh                   # límites 100/150 líneas (PROJECT_STATE/SUMMARY)
+node init.mjs /tmp/demo --name demo                   # probar instalador universal
 ```
 
 ---
@@ -100,7 +129,10 @@ webfetch "<URL_OFFICIAL>/<ruta>" --format markdown
 
 | Need | Command |
 |------|---------|
-| (rellenar) | `webfetch "<URL>"` |
+| doctor 14/14 | `node .opencode/scripts/doctor.mjs --json` |
+| list skills | `node .opencode/skills/_skill-loader/loader.mjs list --json` |
+| search memoria | `node .opencode/scripts/memory-index.mjs search "query"` |
+| check límites | `bash scripts/check-memory-limits.sh` |
 
 ---
 
