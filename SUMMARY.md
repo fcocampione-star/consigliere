@@ -5,6 +5,31 @@
 
 ---
 
+## 2026-09-04 — Fix docs/instaladores: consigliere-init roto → npx consigliere@latest
+
+topic: dx/docs-fix-consigliere-init
+**Goal:** Cerrar 3 huecos (P0/P1/P2) de docs/instaladores del harness v2.0.0 que rompían la primera experiencia del paquete.
+**Discoveries:** `npx consigliere-init` no existe (es bin del paquete `consigliere`, no paquete npm propio); `/compact-state` y `/rotate-memory` NO son flags CLI de init.mjs (el parser los trataría como ruta de proyecto) sino slash-commands de `.opencode/commands/`; README referenciaba `cache.mjs` inexistente (loader real = `loader.mjs` + SKILL.md con cache fingerprint en `.consigliere/`).
+**Accomplished:** Reemplazado `npx consigliere-init` por `npx consigliere@latest` en README/init.mjs/init.sh/init.cmd; check-memory-limits.{sh,ps1} (raíz+templates) referencian `'/compact-state'`/`'/rotate-memory'` en opencode; árbol de agents incluye `explore.md` (orden real); descripción _skill-loader corregida (sin cache.mjs); nuevo bloque "Primeros pasos (30 segundos)" tras tagline + blockquote descarga adelgazado reenviando al paso 2. Decisión: en mensajes de instalador, slash-commands opencode ≠ flags CLI de init.mjs.
+**Next:** Fase 1 dogfooding: validar `npx consigliere@latest` en proyecto demo real + flujo `/discover → /routine → /record`.
+**Files:** `git log --oneline -5` → 1bdd711, f585133, eaddba7, d75e476, f940b8a (fix aún en working tree, sin commit)
+**Verificación:** `rg "consigliere-init"` solo package.json:7 (bin legítimo); `rg "cache.mjs"` 0; `node --check init.mjs` + `bash -n` ok; `npm test` ok (syntax v2.0.0); `doctor.mjs` 14/14; diff templates↔raíz sin salida.
+
+## 2026-09-04 — Fix gap --upgrade: preservación memoria/config viva
+
+topic: architecture/upgrade-preserve
+**Goal:** Cerrar gap `--upgrade` en instalación previa (init.mjs/init.sh/init.ps1 + README): preservar memoria/config viva al refrescar solo el código harness.
+**Discoveries:** El gate dir-no-vacío bloqueaba upgrade en proyectos existentes; sin backup completo el re-render pisaba PROJECT_STATE/SUMMARY/opencode.json; flags `--model-*` no aplican en no-interactivo (modelos van ''), opencode.json se restaura del backup.
+**Accomplished:** Gate eximido solo con marcador de harness (`.opencode/` o `AGENTS.md`); backup completo keep 5 con excludes (`.consigliere/backups`, `.memory-lock`); auto-restauración de PROJECT_STATE/SUMMARY/opencode.json/AGENTS.md/.gitignore desde backup tras re-render; aborta (exit≠0) si el backup falla; `--dry-run` planifica backup+restore sin escribir; help/README actualizados (tar requerido para --upgrade, opencode.json en raíz). Decisión consolidada en PROJECT_STATE §2.
+**Next:** Validar `--upgrade` en proyecto demo real (Fase 1 dogfooding) y push rama consigliere-2.0.
+**Files:** `git log --oneline -5` → f585133, eaddba7, d75e476, f940b8a, 4113bcb
+**Verificación:** `node --check init.mjs` + `bash -n init.sh` + `npm test` ok; `doctor.mjs --json` 14/14; smoke `/tmp`: marcas custom sobreviven, tar sin recursividad, keep 5, gate sin marcador aborta.
+
+## 2026-09-04 — Spec SDD-lite upgrade-preserve
+
+topic: sdd/installer-upgrade-preserve
+Spec SDD-lite ≤650w (RFC2119, Given/When/Then por criterio): C1 gate eximido con marcador harness (`.opencode/` o `AGENTS.md`); C2 backup completo keep 5 + excludes (`.consigliere/backups`, `.memory-lock`); C3 restauración memoria/config tras re-render + aborto (exit≠0) si backup falla; C4 mensajes claros + `--dry-run` plan backup+restore sin escribir.
+
 ## 2026-09-04 — Fase 0 Bootstrap spec-lite → verifier PASS
 
 topic: sdd/bootstrap-initial/spec
