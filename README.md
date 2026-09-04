@@ -2,6 +2,11 @@
 
 > **Solo por proyecto.** Reusable scaffold que arranca cada proyecto con **agentes/subagentes** orquestados y **memoria persistente de 3 capas** (progresiva + buscable) + routing orgánico + SDD-lite integrado.
 
+> **Primeros pasos (30 segundos):**
+> 1. `npx consigliere@latest` → responde el asistente (`📁 Ruta → Nombre → Stack → Modelos → Autoskills → Git`)
+> 2. `cd /ruta/mi-app` → abre `opencode`
+> 3. `/discover` (audita contexto + skills) → `/routine "configurar base del proyecto"` → `/doctor`
+
 ## ¿Qué genera?
 
 ```
@@ -9,6 +14,7 @@
 ├── .opencode/
 │   ├── agents/
 │   │   ├── orchestrator.md        # primario, routing 1-3 vs 4+ files + SDD-lite
+│   │   ├── explore.md             # audita contexto + skills (leaf, depth 2)
 │   │   ├── planner.md             # diseña + spec Given/When/Then (≤650w)
 │   │   ├── critic.md              # revisa decisiones de diseño
 │   │   ├── builder.md             # implementa (bash harden)
@@ -25,7 +31,7 @@
 │   ├── plans/                     # AGENT-ORCHESTRATION.md, MEMORY-SYSTEM.md
 │   ├── skills/
 │   │   ├── _project-docs/         # plantilla de docs del stack
-│   │   └── _skill-loader/         # loader.mjs + cache.mjs (fingerprint)
+│   │   └── _skill-loader/         # loader.mjs + SKILL.md (cache fingerprint en .consigliere/)
 │   ├── scripts/
 │   │   ├── memory-index.mjs       # search/timeline/get (md+grep)
 │   │   ├── memory-sync.mjs        # export/import chunks locales
@@ -76,8 +82,6 @@ Todos estos son **guiados** — no necesitas pasar ruta por adelantado, te pregu
 ```bash
 # npx guiado (sin clonar, Windows/macOS/Linux idéntico — recomendado)
 npx consigliere@latest
-# o
-npx consigliere-init
 
 # con git clone (sin npx)
 git clone https://github.com/fcocampione-star/consigliere.git
@@ -92,7 +96,7 @@ init.cmd                     # CMD
 node init.mjs          # o ./init.sh / powershell -File init.ps1
 ```
 
-> Pasos tras descarga: 1) `cd consigliere` (o carpeta descomprimida) → 2) ejecuta uno de los comandos guiados arriba → 3) responde `📁 Ruta` con la ruta de tu proyecto (ej `C:\ruta\mi-app` o `/tmp/mi-app`) → 4) sigue Stack/Modelos/Git → 5) `cd /ruta/mi-app` → `AGENTS.md` → `/discover` → `/routine` → `/doctor`.
+> Descarga ZIP / git clone: 1) `cd consigliere` (o carpeta descomprimida) → 2) ejecuta un comando guiado de la sección anterior → 3) responde `📁 Ruta` (ej `C:\ruta\mi-app` o `/tmp/mi-app`) → 4) sigue Stack/Modelos/Git → 5) continúa en el paso 2 de **Primeros pasos** (cd /ruta/mi-app → opencode → /discover → /routine → /doctor).
 
 ## Uso no-interactivo (CI / scripts)
 

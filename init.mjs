@@ -5,7 +5,7 @@
  *
  * Uso:
  *   node init.mjs                          # modo interactivo
- *   npx consigliere-init /ruta/proyecto    # vía npm (recomendado)
+ *   npx consigliere@latest /ruta/proyecto  # vía npm (recomendado)
  *   node init.mjs /ruta/proyecto [flags]   # no-interactivo
  *   node init.mjs --version | --help
  */

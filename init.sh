@@ -7,7 +7,7 @@
 #   ./init.sh                          # modo interactivo
 #   ./init.sh --version | --help
 #   ./init.sh [--dir <ruta>] [--name <n>] [--stack-db <v>] ...   # no-interactivo
-#   npx consigliere-init /ruta/proyecto                            # vía npm (recomendado)
+#   npx consigliere@latest /ruta/proyecto                          # vía npm (recomendado)
 #
 
 set -euo pipefail

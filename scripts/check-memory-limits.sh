@@ -28,7 +28,7 @@ if [[ -f "$PROJECT_STATE" ]]; then
   ps_lines="$(wc -l < "$PROJECT_STATE")"
   if [[ "$ps_lines" -gt 100 ]]; then
     warn "PROJECT_STATE.md tiene $ps_lines líneas (límite: 100)."
-    info "Ejecuta 'consigliere-init /compact-state' para compactar §2 (decisiones) y §5 (patrones)."
+    info "Ejecuta '/compact-state' en opencode para compactar §2 (decisiones) y §5 (patrones)."
     errors=$((errors + 1))
   else
     ok "PROJECT_STATE.md tiene $ps_lines líneas (dentro del límite de 100)."
@@ -44,7 +44,7 @@ if [[ -f "$SUMMARY" ]]; then
   if [[ "$s_lines" -gt 150 ]]; then
     warn "SUMMARY.md tiene $s_lines líneas (límite: 150)."
     info "Es probable que sea hora de rotar la entrada más antigua a CHANGELOG/"
-    info "Ejecuta 'consigliere-init /rotate-memory' para rotación manual."
+    info "Ejecuta '/rotate-memory' en opencode para rotación manual."
     errors=$((errors + 1))
   else
     ok "SUMMARY.md tiene $s_lines líneas (dentro del límite de 150)."

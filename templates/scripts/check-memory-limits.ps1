@@ -24,7 +24,7 @@ if (Test-Path $projectState) {
   $lines = (Get-Content $projectState | Measure-Object -Line).Lines
   if ($lines -gt 100) {
     Write-Warn "PROJECT_STATE.md tiene $lines líneas (límite: 100)."
-    Write-Info "Ejecuta 'npx consigliere-init --compact-state' o '/compact-state' para compactar."
+    Write-Info "Ejecuta '/compact-state' en opencode para compactar."
     $errors++
   } else {
     Write-Ok "PROJECT_STATE.md tiene $lines líneas (dentro del límite de 100)."
@@ -40,7 +40,7 @@ if (Test-Path $summary) {
   if ($lines -gt 150) {
     Write-Warn "SUMMARY.md tiene $lines líneas (límite: 150)."
     Write-Info "Es probable que sea hora de rotar la entrada más antigua a CHANGELOG/"
-    Write-Info "Ejecuta '/rotate-memory' para rotación manual."
+    Write-Info "Ejecuta '/rotate-memory' en opencode para rotación manual."
     $errors++
   } else {
     Write-Ok "SUMMARY.md tiene $lines líneas (dentro del límite de 150)."
