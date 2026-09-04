@@ -23,6 +23,13 @@ permission:
     "Remove-Item* C:\*": deny
     "Format-Volume*": deny
     "diskpart*": deny
+    "cat **/.env*": ask
+    "cat **/*.pem": ask
+    "cat **/*.key": ask
+    "cat **/secrets/*": ask
+    "cat ~/.ssh/*": ask
+    "cat ~/.aws/credentials*": ask
+    "cat ~/.config/gh/hosts.yml": ask
     "git push*": ask
   task: deny
   external_directory: ask
