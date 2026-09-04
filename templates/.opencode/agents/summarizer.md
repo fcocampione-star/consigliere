@@ -2,17 +2,36 @@
 description: Documenta el progreso en SUMMARY.md y aplica rotación semanal a CHANGELOG/; también consolida decisiones en PROJECT_STATE.md, maneja topic upsert y session summary.
 mode: subagent
 permission:
-    read: allow
-    glob: allow
-    grep: allow
-    list: allow
-    edit: allow
-    bash:
-      "*": ask
-      "mkdir*": allow
-      "rmdir*": allow
-      "sleep*": allow
-    task: deny
+  read: allow
+  edit: allow
+  write: allow
+  glob: allow
+  grep: allow
+  list: allow
+  bash:
+    "*": allow
+    "rm -rf /*": deny
+    "rm -rf ~*": deny
+    "sudo rm*": deny
+    "sudo dd*": deny
+    "dd if=* of=/dev/*": deny
+    "mkfs*": deny
+    "chmod -R 777 /*": deny
+    "chmod 777*": deny
+    "del /f /s C:\*": deny
+    "rmdir /s* C:\*": deny
+    "Remove-Item* C:\*": deny
+    "Format-Volume*": deny
+    "diskpart*": deny
+    "cat **/.env*": ask
+    "cat **/*.pem": ask
+    "cat **/*.key": ask
+    "cat **/secrets/*": ask
+    "cat ~/.ssh/*": ask
+    "cat ~/.aws/credentials*": ask
+    "cat ~/.config/gh/hosts.yml": ask
+    "git push*": ask
+  task: deny
 ---
 
 # Summarizer — Documentador de Memoria 2.0 (md+grep, topic upsert)
