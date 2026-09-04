@@ -2,8 +2,10 @@
 
 > **Solo por proyecto.** Reusable scaffold que arranca cada proyecto con **agentes/subagentes** orquestados y **memoria persistente de 3 capas** (progresiva + buscable) + routing orgánico + SDD-lite integrado.
 
+> **⚠️ Disponibilidad de `npx`:** la instalación vía `npx consigliere-harness@latest` requiere que el paquete esté publicado en npm (hito futuro, aún no publicado). **Hoy solo funcionan las instrucciones locales** (`git clone` + `node init.mjs` / `bash init.sh` / `powershell -File init.ps1`). Tras el publish, la vía `npx` quedará disponible sin cambios de uso.
+
 > **Primeros pasos (30 segundos):**
-> 1. `npx consigliere-harness@latest` → responde el asistente (`📁 Ruta → Nombre → Stack → Modelos → Autoskills → Git`)
+> 1. `git clone https://github.com/fcocampione-star/consigliere.git && cd consigliere && node init.mjs` → responde el asistente (`📁 Ruta → Nombre → Stack → Modelos → Autoskills → Git`)
 > 2. `cd /ruta/mi-app` → abre `opencode`
 > 3. `/discover` (audita contexto + skills) → `/routine "configurar base del proyecto"` → `/doctor`
 
@@ -56,23 +58,22 @@
 Usa uno de estos (todos 100% por proyecto):
 
 ```bash
-# Recomendado — npx (siempre última versión, sin instalar)
-npx consigliere-harness@latest /ruta/proyecto --name mi-app --stack-backend node/express --autoskills 1 --git yes
-
-# Desde clon del repo
+# Recomendado — desde clon del repo (la vía npx vendrá con el publish a npm)
 git clone https://github.com/fcocampione-star/consigliere.git
-node consigliere/init.mjs /ruta/proyecto
-bash consigliere/init.sh --dir /ruta/proyecto
-powershell -File consigliere/init.ps1 C:\ruta\proyecto   # Windows
-init.cmd C:\ruta\proyecto                                  # CMD shim
+node consigliere/init.mjs /ruta/proyecto --name mi-app --stack-backend node/express --autoskills 1 --git yes
 
-# Actualizar harness existente: --upgrade NO requiere --force, hace backup completo keep 5
+# Mismo clon, otros instaladores
+bash consigliere/init.sh --dir /ruta/proyecto --name mi-app --stack-backend node/express --autoskills 1 --git yes
+powershell -File consigliere/init.ps1 C:\ruta\proyecto -Name mi-app -StackBackend node/express -Autoskills 1 -Git yes
+init.cmd C:\ruta\proyecto
+
+# Actualizar harness existente: --upgrade hace backup completo keep 5
 # (incluye .opencode/, AGENTS.md, PROJECT_STATE.md, SUMMARY.md, CHANGELOG/, .consigliere/,
-#  opencode.json, .gitignore, skills-lock.json, scripts/) y preserva la memoria/config
+#  opencode.json, .gitignore, skills-lock.json, scripts/) y preserva memoria/config
 # (PROJECT_STATE.md, SUMMARY.md, opencode.json, AGENTS.md, .gitignore). Si el backup falla, aborta.
-npx consigliere-harness@latest /ruta/proyecto --upgrade
 node consigliere/init.mjs /ruta/proyecto --upgrade
 bash consigliere/init.sh --dir /ruta/proyecto --upgrade
+powershell -File consigliere/init.ps1 C:\ruta\proyecto -Upgrade
 ```
 
 ## Uso interactivo (guiado)
@@ -80,12 +81,9 @@ bash consigliere/init.sh --dir /ruta/proyecto --upgrade
 Todos estos son **guiados** — no necesitas pasar ruta por adelantado, te preguntan `📁 Ruta → Nombre → Stack → Modelos cheap vs strong → Autoskills → Git`:
 
 ```bash
-# npx guiado (sin clonar, Windows/macOS/Linux idéntico — recomendado)
-npx consigliere-harness@latest
-
-# con git clone (sin npx)
+# guiado — con git clone (recomendado; la vía npx llegará con el publish a npm)
 git clone https://github.com/fcocampione-star/consigliere.git
-cd consigliere && git checkout consigliere-2.0
+cd consigliere
 node init.mjs                # universal
 ./init.sh                    # macOS/Linux/Git Bash
 powershell -File init.ps1    # Windows
@@ -101,17 +99,18 @@ node init.mjs          # o ./init.sh / powershell -File init.ps1
 ## Uso no-interactivo (CI / scripts)
 
 ```bash
-npx consigliere-harness@latest --dir /ruta/proyecto --name mi-app \
+# Mismo CLI que ofrecerá el paquete npm cuando se publique (hoy: desde el clon del repo)
+node consigliere/init.mjs --dir /ruta/proyecto --name mi-app \
   --stack-db postgresql --stack-backend node/express --stack-frontend react/vite \
   --stack-auth jwt --stack-validation zod --stack-deploy docker \
   --autoskills 1 --git yes
 
 # actualizar (backup completo keep 5 + preserva memoria/config; sin --force)
-npx consigliere-harness@latest --dir /ruta/proyecto --upgrade
+node consigliere/init.mjs --dir /ruta/proyecto --upgrade
 
 # simular sin escribir nada / sobrescribir un destino no vacío sin harness (a tu riesgo)
-npx consigliere-harness@latest --dir /ruta/proyecto --dry-run
-npx consigliere-harness@latest --dir /ruta/proyecto --force
+node consigliere/init.mjs --dir /ruta/proyecto --dry-run
+node consigliere/init.mjs --dir /ruta/proyecto --force
 ```
 
 ## Flujo de trabajo en cada proyecto
@@ -167,7 +166,7 @@ consigliere/
 ├── init.sh                 # instalador bash solo proyecto
 ├── init.ps1                # instalador PowerShell solo proyecto
 ├── init.cmd                # shim CMD → init.ps1
-├── init.mjs                # instalador Node universal (npx)
+├── init.mjs                # instalador Node universal (o `npx` cuando esté publicado)
 ├── package.json            # publica en npm como `consigliere-harness` v2.0.0
 └── templates/              # plantillas {{VAR}} + scripts + cache
 ```
@@ -176,7 +175,7 @@ consigliere/
 
 | Instalador | Requeridas | Opcionales |
 |---|---|---|
-| `npx` / `init.mjs` | `node 18+`, `git`, `tar` (requerido para `--upgrade`) | — |
+| `init.mjs` (node) | `node 18+`, `git`, `tar` (requerido para `--upgrade`) | — |
 | `init.sh` | `bash 4+`, `coreutils`, `git`, `tar` (requerido para `--upgrade`) | `node` (autoskills) |
 | `init.ps1` | `PowerShell 5.1+`, `git`, `tar` (requerido para `--upgrade`) | `node` (autoskills) |
 
