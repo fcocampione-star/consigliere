@@ -1,6 +1,6 @@
 # CONSIGLIERE 2.0 — Harness de agentes + memoria persistente para opencode
 
-> **Solo por proyecto, sin instalación global.** Reusable scaffold que arranca cada proyecto con **agentes/subagentes** orquestados y **memoria persistente de 3 capas** (progresiva + buscable) + routing orgánico + SDD-lite integrado.
+> **Solo por proyecto.** Reusable scaffold que arranca cada proyecto con **agentes/subagentes** orquestados y **memoria persistente de 3 capas** (progresiva + buscable) + routing orgánico + SDD-lite integrado.
 
 ## ¿Qué genera?
 
@@ -46,7 +46,7 @@
 
 ## Instalación — solo por proyecto
 
-**No hay instalación global.** Usa uno de estos (todos 100% por proyecto):
+Usa uno de estos (todos 100% por proyecto):
 
 ```bash
 # Recomendado — npx (siempre última versión, sin instalar)
@@ -63,8 +63,6 @@ init.cmd C:\ruta\proyecto                                  # CMD shim
 npx consigliere@latest /ruta/proyecto --upgrade
 node consigliere/init.mjs /ruta/proyecto --upgrade
 ```
-
-> Si tenías instalación global previa (`~/.local/bin/consigliere-*` / `~/.local/share/consigliere`), bórrala: `rm -rf ~/.local/bin/consigliere* ~/.local/share/consigliere` (o `npm rm -g consigliere` si fue vía npm).
 
 ## Uso interactivo (guiado)
 
@@ -171,9 +169,9 @@ consigliere/
 
 ## Notas de diseño v2.0
 
-- **Solo por proyecto** (inspirado `gentle-ai --scope workspace`): cero `~/.local/bin`, cero `PATH`, cero drift.
-- **Routing orgánico**: 1-3 files direct vs 4+ delegated (Gentle AI `trigger-rules.md`).
+- **Solo por proyecto**: cero `~/.local/bin`, cero `PATH`, cero drift.
+- **Routing orgánico**: 1-3 files direct vs 4+ delegated.
 - **SDD-lite integrado en `routine`** (≤650w Given/When/Then), no 10 fases pesadas.
-- **Harden bash**: deny extendido `**/*.pem,**/*.key,**/.env*,~/.ssh/*,**/secrets/*` (Gentle AI permissions).
+- **Harden bash**: deny extendido `**/*.pem,**/*.key,**/.env*,~/.ssh/*,**/secrets/*`.
 - **Memoria md+grep**: topic upsert + stale + sync local (Engram SQLite → md+grep sin deps).
 - **Ops**: `/doctor` + backups keep 5 + ` --upgrade`.
