@@ -24,6 +24,8 @@ const IS_WIN = platform() === 'win32';
 const HOME = homedir();
 const TEMPLATE_DIR = join(HERE, 'templates');
 
+if (+process.versions.node.split('.')[0] < 18) { console.error(`❌ Node >=18 requerido. Actual: ${process.versions.node}`); process.exit(1); }
+
 // Colores
 const C = {
   reset: '\x1b[0m', bold: '\x1b[1m', green: '\x1b[32m', cyan: '\x1b[36m', yellow: '\x1b[33m', red: '\x1b[31m', dim: '\x1b[2m',
@@ -262,6 +264,14 @@ function createProject(opts) {
 }
 
 // CLI parse
+function needValue(flag, val) {
+  if (val === undefined || val.startsWith('--')) {
+    err(`Flag ${flag} requiere un valor.`);
+    process.exit(1);
+  }
+  return val;
+}
+
 function showHelp(scriptName) {
   console.log(`CONSIGLIERE v${VERSION} — Harness de agentes + memoria persistente para opencode (solo por proyecto).
 
@@ -270,6 +280,8 @@ Uso:
   ${scriptName} --version | --help
   ${scriptName} <ruta/proyecto>          crear proyecto (con flags)
   ${scriptName} <ruta/proyecto> --upgrade  actualizar harness existente (backup keep 5)
+  ${scriptName} <ruta/proyecto> --dry-run  simulación sin escribir
+  ${scriptName} <ruta/proyecto> --force    sobrescribir destino no vacío
 
 Flags (no-interactivo):
   --dir <ruta>              directorio destino
@@ -278,6 +290,8 @@ Flags (no-interactivo):
   --autoskills <1|2|3>      1=proyecto, 2=global, 3=omitir
   --git <yes|no>            inicializar git
   --upgrade                 actualizar harness en proyecto existente
+  --dry-run                 no escribir, solo loguear
+  --force                   sobrescribir destino no vacío
 
 Instalación: solo por proyecto, sin binario global.
   npx consigliere@latest /ruta/proyecto
@@ -287,6 +301,8 @@ Instalación: solo por proyecto, sin binario global.
 }
 
 async function main() {
+  const major = +process.versions.node.split('.')[0];
+  if (major < 18) { console.error(`❌ Node >=18 requerido. Actual: ${process.versions.node}`); process.exit(1); }
   const args = process.argv.slice(2);
   const scriptName = basename(fileURLToPath(import.meta.url));
 
@@ -313,21 +329,24 @@ async function main() {
   let MODEL_VERIFIER = ''; let MODEL_CRITIC = ''; let MODEL_SUMMARIZER = ''; let MODEL_EXPLORE = '';
   let LANG_BACKEND = 'typescript';
   let UPGRADE = false;
+  let DRY_RUN = false; let FORCE = false;
 
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     switch (a) {
-      case '--dir': TARGET_DIR = args[++i]; break;
-      case '--name': PROJECT_NAME = args[++i]; break;
-      case '--stack-db': STACK_DB = args[++i]; break;
-      case '--stack-backend': STACK_BACKEND = args[++i]; break;
-      case '--stack-frontend': STACK_FRONTEND = args[++i]; break;
-      case '--stack-auth': STACK_AUTH = args[++i]; break;
-      case '--stack-validation': STACK_VALIDATION = args[++i]; break;
-      case '--stack-deploy': STACK_DEPLOY = args[++i]; break;
-      case '--autoskills': AUTO_CHOICE = args[++i]; break;
-      case '--git': DO_GIT = args[++i] !== 'no'; break;
+      case '--dir': { if (i + 1 >= args.length) needValue(a, undefined); TARGET_DIR = needValue(a, args[++i]); break; }
+      case '--name': { if (i + 1 >= args.length) needValue(a, undefined); PROJECT_NAME = needValue(a, args[++i]); break; }
+      case '--stack-db': { if (i + 1 >= args.length) needValue(a, undefined); STACK_DB = needValue(a, args[++i]); break; }
+      case '--stack-backend': { if (i + 1 >= args.length) needValue(a, undefined); STACK_BACKEND = needValue(a, args[++i]); break; }
+      case '--stack-frontend': { if (i + 1 >= args.length) needValue(a, undefined); STACK_FRONTEND = needValue(a, args[++i]); break; }
+      case '--stack-auth': { if (i + 1 >= args.length) needValue(a, undefined); STACK_AUTH = needValue(a, args[++i]); break; }
+      case '--stack-validation': { if (i + 1 >= args.length) needValue(a, undefined); STACK_VALIDATION = needValue(a, args[++i]); break; }
+      case '--stack-deploy': { if (i + 1 >= args.length) needValue(a, undefined); STACK_DEPLOY = needValue(a, args[++i]); break; }
+      case '--autoskills': { if (i + 1 >= args.length) needValue(a, undefined); AUTO_CHOICE = needValue(a, args[++i]); break; }
+      case '--git': { if (i + 1 >= args.length) needValue(a, undefined); const gv = needValue(a, args[++i]); DO_GIT = gv !== 'no'; break; }
       case '--upgrade': UPGRADE = true; break;
+      case '--dry-run': DRY_RUN = true; break;
+      case '--force': FORCE = true; break;
       case '--help': case '-h': showHelp(scriptName); return;
       case '--version': case '-v': console.log(`CONSIGLIERE v${VERSION}`); return;
       default:
@@ -343,21 +362,36 @@ async function main() {
   if (STACK_BACKEND.includes('python')) LANG_BACKEND = 'python';
   else if (STACK_BACKEND.includes('go')) LANG_BACKEND = 'go';
 
+  if (existsSync(TARGET_DIR) && readdirSync(TARGET_DIR).length > 0 && !FORCE && !DRY_RUN) {
+    err(`El directorio '${TARGET_DIR}' existe y no está vacío. Usa --force para sobrescribir o --dry-run para simular.`);
+    process.exit(1);
+  }
+
   if (UPGRADE) {
-    step(`Actualizando harness en '${PROJECT_NAME}' (backup keep 5)`);
-    // backup
-    const backupDir = join(TARGET_DIR, '.consigliere', 'backups');
-    mkdirSync(backupDir, { recursive: true });
-    const ts = new Date().toISOString().replace(/[:.]/g, '-');
-    const backupFile = join(backupDir, `harness-${ts}.tgz`);
-    const tar = spawnSync('tar', ['-czf', backupFile, '-C', TARGET_DIR, '.opencode', 'AGENTS.md', 'PROJECT_STATE.md', 'SUMMARY.md'], { stdio: 'ignore' });
-    if (tar.status === 0) ok(`Backup: ${backupFile}`);
-    // prune keep 5
-    try {
-      const { readdirSync: rs, unlinkSync } = await import('node:fs');
-      const files = rs(backupDir).filter(f => f.startsWith('harness-')).sort().reverse();
-      for (const f of files.slice(5)) unlinkSync(join(backupDir, f));
-    } catch {}
+    if (DRY_RUN) {
+      info(`[dry-run] would backup ${TARGET_DIR} -> .consigliere/backups/harness-*.tgz (keep 5)`);
+    } else {
+      step(`Actualizando harness en '${PROJECT_NAME}' (backup keep 5)`);
+      const backupDir = join(TARGET_DIR, '.consigliere', 'backups');
+      mkdirSync(backupDir, { recursive: true });
+      const ts = new Date().toISOString().replace(/[:.]/g, '-');
+      const backupFile = join(backupDir, `harness-${ts}.tgz`);
+      const tar = spawnSync('tar', ['-czf', backupFile, '-C', TARGET_DIR, '.opencode', 'AGENTS.md', 'PROJECT_STATE.md', 'SUMMARY.md'], { stdio: 'ignore' });
+      if (tar.status === 0) ok(`Backup: ${backupFile}`);
+      // prune keep 5
+      try {
+        const { readdirSync: rs, unlinkSync } = await import('node:fs');
+        const files = rs(backupDir).filter(f => f.startsWith('harness-')).sort().reverse();
+        for (const f of files.slice(5)) unlinkSync(join(backupDir, f));
+      } catch {}
+    }
+  }
+
+  if (DRY_RUN) {
+    info(`[dry-run] would render ${TEMPLATE_DIR} -> ${TARGET_DIR} (project: ${PROJECT_NAME})`);
+    info('[dry-run] no se escribió nada en disco');
+    finish(PROJECT_NAME, TARGET_DIR);
+    return;
   }
 
   step(`Generando proyecto '${PROJECT_NAME}'${UPGRADE ? ' (upgrade)' : ''}`);

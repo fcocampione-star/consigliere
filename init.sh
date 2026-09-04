@@ -14,6 +14,8 @@ set -euo pipefail
 
 VERSION="2.0.0"
 
+if ((BASH_VERSINFO[0] < 4)); then echo "❌ Bash >=4 requerido. Actual: ${BASH_VERSION}" >&2; exit 1; fi
+
 SCRIPT_PATH="$(realpath "${BASH_SOURCE[0]}" 2>/dev/null || readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
 TEMPLATE_DIR="$(dirname "$SCRIPT_PATH")/templates"
 SCRIPT_NAME="$(basename "$SCRIPT_PATH")"
@@ -27,6 +29,13 @@ ok()    { printf "${C_GREEN}✅ %s${C_RESET}\n" "$*"; }
 warn()  { printf "${C_YELLOW}⚠️  %s${C_RESET}\n" "$*"; }
 err()   { printf "${C_RED}❌ %s${C_RESET}\n" "$*"; }
 step()  { printf "\n${C_BOLD}▶ %s${C_RESET}\n" "$*"; }
+
+needValue() {
+  if [[ $# -lt 2 ]] || [[ -z "${2:-}" ]] || [[ "${2:-}" == --* ]]; then
+    err "Flag $1 requiere un valor."
+    exit 1
+  fi
+}
 
 banner() {
   printf "${C_CYAN}"
@@ -102,7 +111,7 @@ render_tree() {
     local rel="${f#"$src"}"; rel="${rel#/}"
     local out="$dst/$rel"
     case "$rel" in
-      *.md|*.json|*.mjs|*.sh)
+      *.md|*.json|*.mjs|*.sh|*.ps1)
         render_file "$f" "$out"
         chmod --quiet +x "$out" 2>/dev/null || true
         ;;
@@ -306,17 +315,20 @@ parse_args() {
     case "$1" in
       --version|-v) echo "CONSIGLIERE v$VERSION"; exit 0 ;;
       --help|-h) show_help; exit 0 ;;
-      --dir) TARGET_DIR="$2"; shift 2 ;;
-      --name) PROJECT_NAME="$2"; shift 2 ;;
-      --stack-db) STACK_DB="$2"; shift 2 ;;
-      --stack-backend) STACK_BACKEND="$2"; shift 2 ;;
-      --stack-frontend) STACK_FRONTEND="$2"; shift 2 ;;
-      --stack-auth) STACK_AUTH="$2"; shift 2 ;;
-      --stack-validation) STACK_VALIDATION="$2"; shift 2 ;;
-      --stack-deploy) STACK_DEPLOY="$2"; shift 2 ;;
-      --autoskills) AUTO_CHOICE="$2"; shift 2 ;;
-      --git) DO_GIT="$([ "$2" = yes ] && echo 1 || echo 0)"; shift 2 ;;
+      --dir) needValue "$1" "${2:-}"; TARGET_DIR="$2"; shift 2 ;;
+      --name) needValue "$1" "${2:-}"; PROJECT_NAME="$2"; shift 2 ;;
+      --stack-db) needValue "$1" "${2:-}"; STACK_DB="$2"; shift 2 ;;
+      --stack-backend) needValue "$1" "${2:-}"; STACK_BACKEND="$2"; shift 2 ;;
+      --stack-frontend) needValue "$1" "${2:-}"; STACK_FRONTEND="$2"; shift 2 ;;
+      --stack-auth) needValue "$1" "${2:-}"; STACK_AUTH="$2"; shift 2 ;;
+      --stack-validation) needValue "$1" "${2:-}"; STACK_VALIDATION="$2"; shift 2 ;;
+      --stack-deploy) needValue "$1" "${2:-}"; STACK_DEPLOY="$2"; shift 2 ;;
+      --autoskills) needValue "$1" "${2:-}"; AUTO_CHOICE="$2"; shift 2 ;;
+      --git) needValue "$1" "${2:-}"; DO_GIT="$([ "$2" = yes ] && echo 1 || echo 0)"; shift 2 ;;
       --upgrade) UPGRADE=1; shift ;;
+      --dry-run) DRY_RUN=1; shift ;;
+      --force) FORCE=1; shift ;;
+      --*) warn "Flag desconocido: $1"; shift ;;
       *) TARGET_DIR="${1/#\~/$HOME}"; shift ;;
     esac
   done
@@ -331,6 +343,8 @@ Uso:
   $SCRIPT_NAME --version | --help
   $SCRIPT_NAME <ruta/proyecto>          crear proyecto (no-interactivo, con flags)
   $SCRIPT_NAME <ruta/proyecto> --upgrade  actualizar harness existente (backup keep 5)
+  $SCRIPT_NAME <ruta/proyecto> --dry-run  simulación sin escribir
+  $SCRIPT_NAME <ruta/proyecto> --force    sobrescribir destino no vacío
 
 Flags (no-interactivo):
   --dir <ruta>              directorio destino
@@ -339,6 +353,8 @@ Flags (no-interactivo):
   --autoskills <1|2|3>      1=proyecto, 2=global, 3=omitir
   --git <yes|no>            inicializar git
   --upgrade                 actualizar harness (backup .consigliere/backups/)
+  --dry-run                 no escribir, solo loguear
+  --force                   sobrescribir destino no vacío
 
 Genera: .opencode/ (agents, commands, plans, skills, scripts), AGENTS.md,
 PROJECT_STATE.md, SUMMARY.md, CHANGELOG/, .consigliere/, .gitignore, skills-lock.json.
@@ -376,7 +392,7 @@ main() {
   if [[ "$arg0" == "--help" || "$arg0" == "-h" ]]; then show_help; exit 0; fi
 
   TARGET_DIR=""; PROJECT_NAME=""; STACK_DB=""; STACK_BACKEND=""; STACK_FRONTEND=""
-  STACK_AUTH=""; STACK_VALIDATION=""; STACK_DEPLOY=""; AUTO_CHOICE="1"; DO_GIT="1"; UPGRADE=0
+  STACK_AUTH=""; STACK_VALIDATION=""; STACK_DEPLOY=""; AUTO_CHOICE="1"; DO_GIT="1"; UPGRADE=0; DRY_RUN=0; FORCE=0
   parse_args "$@"
 
   if [[ -z "$TARGET_DIR" ]]; then
@@ -387,17 +403,33 @@ main() {
   case "$STACK_BACKEND" in *python*) LANG_BACKEND="python";; *go*) LANG_BACKEND="go";; *) LANG_BACKEND="typescript";; esac
   TARGET_DIR="${TARGET_DIR/#\~/$HOME}"
 
+  if [[ -e "$TARGET_DIR" ]] && [[ -n "$(ls -A "$TARGET_DIR" 2>/dev/null)" ]] && [[ "$FORCE" -eq 0 ]] && [[ "$DRY_RUN" -eq 0 ]]; then
+    err "El directorio '$TARGET_DIR' existe y no está vacío. Usa --force para sobrescribir o --dry-run para simular."
+    exit 1
+  fi
+
   if [[ "$UPGRADE" -eq 1 ]]; then
-    step "Actualizando harness en '$PROJECT_NAME' (backup keep 5)"
-    mkdir -p "$TARGET_DIR/.consigliere/backups"
-    local ts; ts="$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null || date +%Y%m%d%H%M%S)"
-    local bf="$TARGET_DIR/.consigliere/backups/harness-${ts}.tgz"
-    tar -czf "$bf" -C "$TARGET_DIR" .opencode AGENTS.md PROJECT_STATE.md SUMMARY.md 2>/dev/null && ok "Backup: $bf" || warn "Backup falló (continuando)"
-    # prune keep 5
-    local count; count="$(ls -1 "$TARGET_DIR/.consigliere/backups"/harness-*.tgz 2>/dev/null | wc -l)"
-    if [[ "$count" -gt 5 ]]; then
-      ls -1t "$TARGET_DIR/.consigliere/backups"/harness-*.tgz | tail -n +6 | xargs rm -f 2>/dev/null || true
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      info "[dry-run] would backup $TARGET_DIR -> .consigliere/backups/harness-*.tgz (keep 5)"
+    else
+      step "Actualizando harness en '$PROJECT_NAME' (backup keep 5)"
+      mkdir -p "$TARGET_DIR/.consigliere/backups"
+      local ts; ts="$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null || date +%Y%m%d%H%M%S)"
+      local bf="$TARGET_DIR/.consigliere/backups/harness-${ts}.tgz"
+      tar -czf "$bf" -C "$TARGET_DIR" .opencode AGENTS.md PROJECT_STATE.md SUMMARY.md 2>/dev/null && ok "Backup: $bf" || warn "Backup falló (continuando)"
+      # prune keep 5
+      local count; count="$(ls -1 "$TARGET_DIR/.consigliere/backups"/harness-*.tgz 2>/dev/null | wc -l)"
+      if [[ "$count" -gt 5 ]]; then
+        ls -1t "$TARGET_DIR/.consigliere/backups"/harness-*.tgz | tail -n +6 | xargs rm -f 2>/dev/null || true
+      fi
     fi
+  fi
+
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    info "[dry-run] would render $TEMPLATE_DIR -> $TARGET_DIR (project: $PROJECT_NAME)"
+    info "[dry-run] no se escribió nada en disco"
+    finish
+    exit 0
   fi
 
   step "Generando proyecto '$PROJECT_NAME'${UPGRADE:+ (upgrade)}"

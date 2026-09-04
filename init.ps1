@@ -23,6 +23,8 @@ param(
   [string]$Autoskills = "1",
   [string]$Git = "yes",
   [switch]$Upgrade,
+  [switch]$DryRun,
+  [switch]$Force,
   [Parameter(ValueFromRemainingArguments = $true)][string[]]$Remaining
 )
 
@@ -39,6 +41,11 @@ function Write-Ok($msg) { Write-Host "✅ $msg" -ForegroundColor Green }
 function Write-Warn($msg) { Write-Host "⚠️  $msg" -ForegroundColor Yellow }
 function Write-Err($msg) { Write-Host "❌ $msg" -ForegroundColor Red }
 function Write-Step($msg) { Write-Host "`n▶ $msg" -ForegroundColor White -BackgroundColor DarkBlue }
+
+if ($PSVersionTable.PSVersion.Major -lt 5 -or ($PSVersionTable.PSVersion.Major -eq 5 -and $PSVersionTable.PSVersion.Minor -lt 1)) {
+  Write-Err "PowerShell >=5.1 requerido. Actual: $($PSVersionTable.PSVersion)"
+  exit 1
+}
 
 function Show-Banner {
   Write-Host @"
@@ -66,6 +73,8 @@ Uso:
   .\init.ps1 -Version | -Help
   .\init.ps1 <ruta\proyecto>           crear proyecto
   .\init.ps1 <ruta\proyecto> -Upgrade  actualizar harness (backup keep 5)
+  .\init.ps1 <ruta\proyecto> -DryRun   simulación sin escribir
+  .\init.ps1 <ruta\proyecto> -Force    sobrescribir destino no vacío
 
 Flags:
   -Dir <ruta>              directorio destino
@@ -74,6 +83,8 @@ Flags:
   -Autoskills <1|2|3>      1=proyecto, 2=global, 3=omitir
   -Git <yes|no>            inicializar git
   -Upgrade                 actualizar harness
+  -DryRun                  no escribir, solo loguear
+  -Force                   sobrescribir destino no vacío
 
 Instalación: solo por proyecto, sin binario global.
   npx consigliere@latest C:\ruta\proyecto
@@ -88,7 +99,8 @@ function Render-File($src, $dst, $vars) {
   }
   $dir = Split-Path $dst -Parent
   if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
-  Set-Content -Path $dst -Value $content -Encoding utf8 -NoNewline
+  $utf8NoBOM = New-Object System.Text.UTF8Encoding $false
+  [System.IO.File]::WriteAllText($dst, $content, $utf8NoBOM)
 }
 
 function Render-Tree($src, $dst, $vars) {
@@ -239,7 +251,53 @@ function Invoke-CreateProject {
 # ---- Dispatch ----
 if ($Version) { Write-Host "CONSIGLIERE v$VERSION"; exit 0 }
 if ($Help) { Show-Help; exit 0 }
-if ($Remaining -and -not $Dir) { $Dir = $Remaining[0] }
+
+# Parse Remaining: support --dry-run/--force/--upgrade and --dir style for parity
+if ($Remaining) {
+  for ($ri = 0; $ri -lt $Remaining.Count; $ri++) {
+    $r = $Remaining[$ri]
+    switch ($r) {
+      "--dry-run" { $DryRun = $true; continue }
+      "-DryRun" { $DryRun = $true; continue }
+      "--force" { $Force = $true; continue }
+      "-Force" { $Force = $true; continue }
+      "--upgrade" { $Upgrade = $true; continue }
+      "--dir" { if ($ri+1 -ge $Remaining.Count -or $Remaining[$ri+1].StartsWith('-')) { Write-Err "Flag --dir requiere un valor."; exit 1 }; $Dir = $Remaining[++$ri]; continue }
+      "--name" { if ($ri+1 -ge $Remaining.Count -or $Remaining[$ri+1].StartsWith('-')) { Write-Err "Flag --name requiere un valor."; exit 1 }; $Name = $Remaining[++$ri]; continue }
+      "--stack-db" { if ($ri+1 -ge $Remaining.Count -or $Remaining[$ri+1].StartsWith('-')) { Write-Err "Flag --stack-db requiere un valor."; exit 1 }; $StackDb = $Remaining[++$ri]; continue }
+      "--stack-backend" { if ($ri+1 -ge $Remaining.Count -or $Remaining[$ri+1].StartsWith('-')) { Write-Err "Flag --stack-backend requiere un valor."; exit 1 }; $StackBackend = $Remaining[++$ri]; continue }
+      "--stack-frontend" { if ($ri+1 -ge $Remaining.Count -or $Remaining[$ri+1].StartsWith('-')) { Write-Err "Flag --stack-frontend requiere un valor."; exit 1 }; $StackFrontend = $Remaining[++$ri]; continue }
+      "--stack-auth" { if ($ri+1 -ge $Remaining.Count -or $Remaining[$ri+1].StartsWith('-')) { Write-Err "Flag --stack-auth requiere un valor."; exit 1 }; $StackAuth = $Remaining[++$ri]; continue }
+      "--stack-validation" { if ($ri+1 -ge $Remaining.Count -or $Remaining[$ri+1].StartsWith('-')) { Write-Err "Flag --stack-validation requiere un valor."; exit 1 }; $StackValidation = $Remaining[++$ri]; continue }
+      "--stack-deploy" { if ($ri+1 -ge $Remaining.Count -or $Remaining[$ri+1].StartsWith('-')) { Write-Err "Flag --stack-deploy requiere un valor."; exit 1 }; $StackDeploy = $Remaining[++$ri]; continue }
+      "--autoskills" { if ($ri+1 -ge $Remaining.Count -or $Remaining[$ri+1].StartsWith('-')) { Write-Err "Flag --autoskills requiere un valor."; exit 1 }; $Autoskills = $Remaining[++$ri]; continue }
+      "--git" { if ($ri+1 -ge $Remaining.Count -or $Remaining[$ri+1].StartsWith('-')) { Write-Err "Flag --git requiere un valor."; exit 1 }; $Git = $Remaining[++$ri]; continue }
+      default {
+        if ($r.StartsWith('-') -and $r -notin @('--help','-h','--version','-v')) {
+          if ($r -match '^(-Dir|-Name|-StackDb|-StackBackend|-StackFrontend|-StackAuth|-StackValidation|-StackDeploy|-Autoskills|-Git)$') {
+            Write-Err "Flag $r requiere un valor."
+            exit 1
+          }
+          if ($r.StartsWith('--')) { Write-Host "⚠️  Flag desconocido: $r" -ForegroundColor Yellow }
+        }
+        if (-not $Dir -and -not $r.StartsWith('-')) { $Dir = $r }
+      }
+    }
+  }
+}
+
+# Validate named params not empty/flag-like
+if ($PSBoundParameters.ContainsKey('Dir') -and $Dir) { if ($Dir.StartsWith('-')) { Write-Err "Flag -Dir requiere un valor."; exit 1 } }
+if ($PSBoundParameters.ContainsKey('Name') -and $Name) { if ($Name.StartsWith('-')) { Write-Err "Flag -Name requiere un valor."; exit 1 } }
+if ($PSBoundParameters.ContainsKey('StackDb') -and $StackDb -and $StackDb.StartsWith('-')) { Write-Err "Flag -StackDb requiere un valor."; exit 1 }
+if ($PSBoundParameters.ContainsKey('StackBackend') -and $StackBackend -and $StackBackend.StartsWith('-')) { Write-Err "Flag -StackBackend requiere un valor."; exit 1 }
+if ($PSBoundParameters.ContainsKey('StackFrontend') -and $StackFrontend -and $StackFrontend.StartsWith('-')) { Write-Err "Flag -StackFrontend requiere un valor."; exit 1 }
+if ($PSBoundParameters.ContainsKey('StackAuth') -and $StackAuth -and $StackAuth.StartsWith('-')) { Write-Err "Flag -StackAuth requiere un valor."; exit 1 }
+if ($PSBoundParameters.ContainsKey('StackValidation') -and $StackValidation -and $StackValidation.StartsWith('-')) { Write-Err "Flag -StackValidation requiere un valor."; exit 1 }
+if ($PSBoundParameters.ContainsKey('StackDeploy') -and $StackDeploy -and $StackDeploy.StartsWith('-')) { Write-Err "Flag -StackDeploy requiere un valor."; exit 1 }
+if ($PSBoundParameters.ContainsKey('Autoskills') -and $Autoskills -and $Autoskills.StartsWith('-')) { Write-Err "Flag -Autoskills requiere un valor."; exit 1 }
+if ($PSBoundParameters.ContainsKey('Git') -and $Git -and $Git.StartsWith('-')) { Write-Err "Flag -Git requiere un valor."; exit 1 }
+
 if ($Dir -or $Name -or $StackDb -or $StackBackend) {
   if (-not $Dir) { Write-Err "Falta el directorio destino. Usa -Dir <ruta>"; Show-Help; exit 1 }
   $targetDir = $Dir.Replace("~", $HOME_DIR)
@@ -247,14 +305,33 @@ if ($Dir -or $Name -or $StackDb -or $StackBackend) {
   $projectName = if ($Name) { $Name } else { Split-Path $targetDir -Leaf }
   $lang = "typescript"; if ($StackBackend -like "*python*") { $lang = "python" } elseif ($StackBackend -like "*go*") { $lang = "go" }
   $doGit = $Git -ne "no"
-  if ($Upgrade) {
-    Write-Step "Actualizando harness en '$projectName' (backup keep 5)"
-    $backupDir = Join-Path $targetDir ".consigliere\backups"
-    New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
-    $ts = Get-Date -Format "yyyyMMddTHHmmssZ"
-    $bf = Join-Path $backupDir "harness-$ts.tgz"
-    try { & tar -czf $bf -C $targetDir .opencode 2>$null; Write-Ok "Backup: $bf" } catch { Write-Warn "Backup falló" }
+
+  if ((Test-Path $targetDir) -and ((Get-ChildItem -Path $targetDir -Force | Measure-Object).Count -gt 0) -and -not $Force -and -not $DryRun) {
+    Write-Err "El directorio '$targetDir' existe y no está vacío. Usa -Force para sobrescribir o -DryRun para simular."
+    exit 1
   }
+
+  if ($Upgrade) {
+    if ($DryRun) {
+      Write-Host "ℹ️  [dry-run] would backup $targetDir -> .consigliere/backups/harness-*.tgz (keep 5)" -ForegroundColor Cyan
+    } else {
+      Write-Step "Actualizando harness en '$projectName' (backup keep 5)"
+      $backupDir = Join-Path $targetDir ".consigliere\backups"
+      New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
+      $ts = Get-Date -Format "yyyyMMddTHHmmssZ"
+      $bf = Join-Path $backupDir "harness-$ts.tgz"
+      try { & tar -czf $bf -C $targetDir .opencode AGENTS.md PROJECT_STATE.md SUMMARY.md 2>$null; Write-Ok "Backup: $bf" } catch { Write-Warn "Backup falló" }
+      Get-ChildItem -Path $backupDir -Filter "harness-*.tgz" | Sort-Object Name -Descending | Select-Object -Skip 5 | Remove-Item -Force -ErrorAction SilentlyContinue
+    }
+  }
+
+  if ($DryRun) {
+    Write-Host "ℹ️  [dry-run] would render $TEMPLATE_DIR -> $targetDir (project: $projectName)" -ForegroundColor Cyan
+    Write-Host "ℹ️  [dry-run] no se escribió nada en disco" -ForegroundColor Cyan
+    Show-Finish $projectName $targetDir
+    exit 0
+  }
+
   Write-Step "Generando proyecto '$projectName'"
   New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
   $vars = @{
