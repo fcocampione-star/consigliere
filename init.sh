@@ -7,7 +7,7 @@
 #   ./init.sh                          # modo interactivo
 #   ./init.sh --version | --help
 #   ./init.sh [--dir <ruta>] [--name <n>] [--stack-db <v>] ...   # no-interactivo
-#   npx consigliere@latest /ruta/proyecto                          # vía npm (recomendado)
+#   npx consigliere-harness@latest /ruta/proyecto                          # vía npm (recomendado)
 #
 
 set -euo pipefail
@@ -309,7 +309,7 @@ finish() {
   printf "  /review                Listar decisiones stale (review_after)\n"
   printf "  /rotate-memory         Rotación semanal manual\n"
   printf "  /compact-state         Compactar PROJECT_STATE.md\n\n"
-  printf "${C_DIM}Instalación 100%% por proyecto — sin binario global. Actualiza con: npx consigliere@latest %s --upgrade${C_RESET}\n" "$TARGET_DIR"
+  printf "${C_DIM}Instalación 100%% por proyecto — sin binario global. Actualiza con: npx consigliere-harness@latest %s --upgrade${C_RESET}\n" "$TARGET_DIR"
 }
 
 # Parser de argumentos / despacho
@@ -363,17 +363,17 @@ Genera: .opencode/ (agents, commands, plans, skills, scripts), AGENTS.md,
 PROJECT_STATE.md, SUMMARY.md, CHANGELOG/, .consigliere/, .gitignore, skills-lock.json.
 
 Instalación — solo por proyecto, sin binario global:
-  npx consigliere@latest /ruta/proyecto
+  npx consigliere-harness@latest /ruta/proyecto
   node ./init.mjs /ruta/proyecto
   ./init.sh --dir /ruta/proyecto --stack-backend node/express
 
 FLUJO RECOMENDADO:
-  1. npx consigliere@latest .    ('.' = carpeta actual)
+  1. npx consigliere-harness@latest .    ('.' = carpeta actual)
   2. Sigue el asistente: nombre → stack → modelos (cheap vs strong) → autoskills → git
   3. Dentro del proyecto: edita AGENTS.md y .opencode/skills/_project-docs/SKILL.md
   4. Arranca: opencode → /discover → /routine "configurar base del proyecto" → /doctor
 
-Actualización: npx consigliere@latest . --upgrade  (backup keep 5 en .consigliere/backups/)
+Actualización: npx consigliere-harness@latest . --upgrade  (backup keep 5 en .consigliere/backups/)
 EOF
 }
 

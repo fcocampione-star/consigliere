@@ -5,7 +5,7 @@
  *
  * Uso:
  *   node init.mjs                          # modo interactivo
- *   npx consigliere@latest /ruta/proyecto  # vía npm (recomendado)
+ *   npx consigliere-harness@latest /ruta/proyecto  # vía npm (recomendado)
  *   node init.mjs /ruta/proyecto [flags]   # no-interactivo
  *   node init.mjs --version | --help
  */
@@ -147,7 +147,7 @@ function finish(projectName, targetDir) {
   console.log(`  /review                Listar decisiones stale (review_after)`);
   console.log(`  /rotate-memory         Rotación semanal manual`);
   console.log(`  /compact-state         Compactar PROJECT_STATE.md\n`);
-  console.log(`${C.dim}Instalación 100% por proyecto — sin binario global. Actualiza con: npx consigliere@latest ${targetDir} --upgrade${C.reset}\n`);
+  console.log(`${C.dim}Instalación 100% por proyecto — sin binario global. Actualiza con: npx consigliere-harness@latest ${targetDir} --upgrade${C.reset}\n`);
 }
 
 // Interactivo
@@ -297,7 +297,7 @@ Flags (no-interactivo):
   --force                   sobrescribir destino no vacío (solo sin --upgrade)
 
 Instalación: solo por proyecto, sin binario global.
-  npx consigliere@latest /ruta/proyecto
+  npx consigliere-harness@latest /ruta/proyecto
   node ./init.mjs /ruta/proyecto
   bash ./init.sh --dir /ruta/proyecto
 `);

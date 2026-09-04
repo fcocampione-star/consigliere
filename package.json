@@ -1,9 +1,10 @@
 {
-  "name": "consigliere",
+  "name": "consigliere-harness",
   "version": "2.0.0",
   "description": "Harness de agentes + memoria persistente para opencode — reusable scaffold con agentes orquestados y memoria de 3 capas (Consigliere 2.0, solo por proyecto)",
   "type": "module",
   "bin": {
+    "consigliere-harness": "./init.mjs",
     "consigliere-init": "./init.mjs",
     "consigliere": "./init.mjs"
   },

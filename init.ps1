@@ -3,7 +3,7 @@
 .SYNOPSIS
   CONSIGLIERE 2.0 — Harness de agentes + memoria persistente para opencode (solo por proyecto).
 .DESCRIPTION
-  Sin instalación global. Uso: npx consigliere@latest <ruta> o powershell -File init.ps1 <ruta>
+  Sin instalación global. Uso: npx consigliere-harness@latest <ruta> o powershell -File init.ps1 <ruta>
 .EXAMPLE
   .\init.ps1                          # modo interactivo
   .\init.ps1 -Version                 # versión
@@ -90,7 +90,7 @@ Flags:
   -Force                   sobrescribir destino no vacío (solo sin -Upgrade)
 
 Instalación: solo por proyecto, sin binario global.
-  npx consigliere@latest C:\ruta\proyecto
+  npx consigliere-harness@latest C:\ruta\proyecto
   powershell -File init.ps1 C:\ruta\proyecto
 "@
 }
@@ -161,7 +161,7 @@ function Handle-Autoskills($mode, $dir) {
 function Show-Finish($projectName, $targetDir) {
   Write-Host "`n═══════════════════════════════════════════════════════════════════" -ForegroundColor Green
   Write-Host "🎉  ¡Proyecto '$projectName' listo en $targetDir!" -ForegroundColor White
-  Write-Host "  Instalación 100% por proyecto — sin binario global. Actualiza: npx consigliere@latest $targetDir --upgrade"
+  Write-Host "  Instalación 100% por proyecto — sin binario global. Actualiza: npx consigliere-harness@latest $targetDir --upgrade"
   Write-Host "`nComandos: /discover, /routine, /doctor, /record, /review, /rotate-memory, /compact-state"
 }
 

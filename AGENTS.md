@@ -36,7 +36,7 @@
 | Frontend | N/A — harness CLI sin UI (genera .opencode/ para opencode TUI; instalador para proyecto vacío) |
 | Auth | N/A — local sin auth; bash harden opencode.json (*:allow, deny rm/dd/mkfs, ask **/.env*/**/*.pem/**/.key/**/secrets/*/~/.ssh/* + git push) |
 | Validation | node --check syntax (npm test = check init.mjs + loader + doctor + memory-index + memory-sync) |
-| Deploy | npm registry consigliere@latest v2.0.0 via npx / init.mjs + init.sh + init.ps1 per-project, --upgrade con backup keep 5 en .consigliere/backups/ |
+| Deploy | npm registry consigliere-harness@latest v2.0.0 via npx / init.mjs + init.sh + init.ps1 per-project, --upgrade con backup keep 5 en .consigliere/backups/ |
 
 ## Skills (con cache fingerprint)
 

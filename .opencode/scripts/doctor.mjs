@@ -23,7 +23,7 @@ try {
   const b = j.agent?.builder?.permission?.bash;
   if (b && b['cat **/.env*']==='ask') add('bash harden','✅','deny+ask sensibles presentes');
   else add('bash harden','⚠️','falta harden v2.0 (cat **/.env* -> ask)','Re-render init.mjs --upgrade');
-} catch(e){ add('opencode.json','❌',e.message,'npx consigliere@latest . --upgrade'); }
+} catch(e){ add('opencode.json','❌',e.message,'npx consigliere-harness@latest . --upgrade'); }
 
 // 2 memoria sizes
 const ps = join(ROOT,'PROJECT_STATE.md');
@@ -68,7 +68,7 @@ if (existsSync(cache)) {
 // 6 scripts
 for (const s of ['memory-index.mjs','memory-sync.mjs','doctor.mjs']) {
   const p = join(ROOT,'.opencode','scripts',s);
-  add(`script ${s}`, existsSync(p)?'✅':'❌', existsSync(p)?'presente':'falta','npx consigliere@latest . --upgrade');
+  add(`script ${s}`, existsSync(p)?'✅':'❌', existsSync(p)?'presente':'falta','npx consigliere-harness@latest . --upgrade');
 }
 
 // 7 dirs
