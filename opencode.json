@@ -1,0 +1,62 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "orchestrator",
+  "subagent_depth": 2,
+  "instructions": ["AGENTS.md"],
+  "agent": {
+    "orchestrator": {
+      "mode": "primary",
+      "model": ""
+    },
+    "planner": {
+      "mode": "subagent",
+      "model": ""
+    },
+    "builder": {
+      "mode": "subagent",
+      "model": "",
+      "permission": {
+        "bash": {
+          "*": "allow",
+          "rm -rf /*": "deny",
+          "rm -rf ~*": "deny",
+          "sudo rm*": "deny",
+          "sudo dd*": "deny",
+          "dd if=* of=/dev/*": "deny",
+          "mkfs*": "deny",
+          "chmod -R 777 /*": "deny",
+          "chmod 777*": "deny",
+          "del /f /s C:\\*": "deny",
+          "rmdir /s* C:\\*": "deny",
+          "Remove-Item* C:\\*": "deny",
+          "Format-Volume*": "deny",
+          "diskpart*": "deny",
+          "cat **/.env*": "ask",
+          "cat **/*.pem": "ask",
+          "cat **/*.key": "ask",
+          "cat **/secrets/*": "ask",
+          "cat ~/.ssh/*": "ask",
+          "cat ~/.aws/credentials*": "ask",
+          "cat ~/.config/gh/hosts.yml": "ask",
+          "git push*": "ask"
+        }
+      }
+    },
+    "verifier": {
+      "mode": "subagent",
+      "model": ""
+    },
+    "critic": {
+      "mode": "subagent",
+      "model": ""
+    },
+    "summarizer": {
+      "mode": "subagent",
+      "model": ""
+    },
+    "explore": {
+      "mode": "subagent",
+      "model": ""
+    }
+  }
+}
