@@ -36,10 +36,14 @@ tmp/
 *.tmp
 *.bak
 
-# CONSIGLIERE 2.0 — memoria persistente (solo por proyecto)
+# ADVISOR 2.0 — memoria persistente (solo por proyecto)
 .memory-lock/
-.consigliere/skill-registry.cache.json
+.advisor/skill-registry.cache.json
+.advisor/backups/
+.advisor/cache/
+# legacy pre-rename (read-only fallback, no escribir)
 .consigliere/backups/
+.consigliere/skill-registry.cache.json
 .consigliere/cache/
 .agents/skills/
 .opencode/node_modules/

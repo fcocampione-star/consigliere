@@ -5,6 +5,21 @@
 
 ---
 
+## 2026-09-09 — Rename consigliere→Advisor + install modular + skill sdd-lite
+
+topic: architecture/advisor-rename
+**Goal:** Completar pipeline rename consigliere→Advisor en rama chore/rename-consigliere-to-advisor (base 85a72a2) sin commitear.
+**Discoveries:** sdd-lite no existía como skill (solo concepto en orchestrator); doctor 12/14 por warnings ambientales (hook/backups), no bloqueantes.
+**Accomplished:** Rename display Advisor, npm advisor-harness, bin triple + alias consigliere-harness; dual-dir .advisor/ vivo + fallback .consigliere/ read-only + .migrated; CACHE_VERSION 2, prune ^(harness|advisor)- keep5, --upgrade=--part all, scripts install/uninstall/update --part harness|memoria|autoskills + --status/--dry-run/--force/--restore, skill nueva _sdd-lite (3 skills); decisión §2 architecture/advisor-rename review_after 2027-03-04. Iteraciones builder↔verifier: 0 (PASS a la primera, sin stash).
+**Next:** Commitear + push rama (propuesto, no automático); Fase 1 dogfooding install modular en proyecto demo.
+**Files:** rama chore/rename-consigliere-to-advisor sobre 85a72a2, working tree modificado sin commits ni push (ver `git status --short`)
+**Verificación:** npm test OK, node --check x9 OK, bash -n OK, pwsh 0 errores, npm pack advisor-harness@2.0.0 OK, doctor 12/14 (2 warnings ambientales), loader 3/3 + chunk OK, diff solo placeholders, rg solo allowlist, memory-index encuentra topic
+
+## 2026-09-09 — Spec SDD-lite advisor-rename-modular-install
+
+topic: sdd/advisor-rename-modular-install/spec
+Spec SDD-lite ≤650w (RFC2119, Given/When/Then por criterio): rename display/npm/bin + dual-dir vivo/fallback + migración copia; --upgrade=--part all + prune combinado keep5; install modular por partes con --status/--dry-run/--force/--restore; skill _sdd-lite como 3ª skill cargable.
+
 ## 2026-09-04 — Fix docs/instaladores: consigliere-init roto → npx consigliere@latest
 
 topic: dx/docs-fix-consigliere-init

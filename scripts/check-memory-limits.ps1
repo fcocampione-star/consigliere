@@ -1,4 +1,4 @@
-# CONSIGLIERE — Verificación de límites de memoria persistente (Windows PowerShell).
+﻿# ADVISOR — Verificación de límites de memoria persistente (Windows PowerShell).
 # Equivalente a check-memory-limits.sh para proyectos en Windows puro.
 #
 # Uso:

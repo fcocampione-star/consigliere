@@ -36,9 +36,12 @@ tmp/
 *.tmp
 *.bak
 
-# CONSIGLIERE 2.0 — memoria persistente (solo por proyecto)
+# ADVISOR 2.0 — memoria persistente (solo por proyecto)
 .memory-lock/
+.advisor/skill-registry.cache.json
+.advisor/backups/
+# legacy pre-rename (read-only fallback, no escribir)
 .consigliere/skill-registry.cache.json
 .consigliere/backups/
-# .consigliere/chunks/  ← descomenta si no quieres versionar sync local
+# .advisor/chunks/  ← descomenta si no quieres versionar sync local
 # .agents/skills/   ← descomenta para no versionar autoskills

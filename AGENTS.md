@@ -1,4 +1,4 @@
-# consigliere — Project Context
+# advisor — Project Context
 
 ## Session workflow
 
@@ -17,7 +17,7 @@
 - **Rule**: historical detail lives in `CHANGELOG/` + `git log`. Never duplicate archived entries back into `SUMMARY.md`.
 - **Anti-concurrency**: a `.memory-lock` directory guards concurrent memory writes; never leave it orphaned.
 
-## Agent pipeline (Consigliere 2.0 — routing orgánico + SDD-lite)
+## Agent pipeline (Advisor 2.0 — routing orgánico + SDD-lite)
 
 - Custom agents live in `.opencode/agents/`; commands in `.opencode/commands/`.
 - `orchestrator` is the additional **primary** agent (Tab) que coordina: siempre lee `PROJECT_STATE.md` primero, luego aplica **routing orgánico**: `direct` (1-3 files) vs `delegated` (4+ files / 2+ writes) vs `spec-lite` (ambigüedad duradera → spec ≤650w Given/When/Then).
@@ -31,25 +31,26 @@
 
 | Layer | Choice |
 |-------|--------|
-| DB | N/A — Markdown + grep (PROJECT_STATE.md / SUMMARY.md / CHANGELOG/YYYY-MM-DD.md + memory-index.mjs grep+perl, cache .consigliere/skill-registry.cache.json; sqlite3 solo fallback) |
+| DB | N/A — Markdown + grep (PROJECT_STATE.md / SUMMARY.md / CHANGELOG/YYYY-MM-DD.md + memory-index.mjs grep+perl, cache .advisor/skill-registry.cache.json; sqlite3 solo fallback) |
 | Backend | Node.js >=18 ESM (init.mjs) + Bash 4+ / PowerShell 5.1+ + git/tar — harness CLI (scripts .opencode/scripts/*.mjs, loader.mjs) |
 | Frontend | N/A — harness CLI sin UI (genera .opencode/ para opencode TUI; instalador para proyecto vacío) |
 | Auth | N/A — local sin auth; bash harden opencode.json (*:allow, deny rm/dd/mkfs, ask **/.env*/**/*.pem/**/.key/**/secrets/*/~/.ssh/* + git push) |
 | Validation | node --check syntax (npm test = check init.mjs + loader + doctor + memory-index + memory-sync) |
-| Deploy | npm registry consigliere-harness@latest v2.0.0 via npx / init.mjs + init.sh + init.ps1 per-project, --upgrade con backup keep 5 en .consigliere/backups/ |
+| Deploy | npm registry advisor-harness@latest v2.0.0 via npx / init.mjs + init.sh + init.ps1 per-project, --upgrade con backup keep 5 en .advisor/backups/ |
 
 ## Skills (con cache fingerprint)
 
 - **Project docs**: `.opencode/skills/_project-docs/SKILL.md` — URLs, shortcuts, patterns, examples. Edita con tu stack real.
 - **Autoskills**: `.agents/skills/*/SKILL.md` — auto `npx autoskills`.
-- **Skill loader** (cache `.consigliere/skill-registry.cache.json`):
+- **Skill loader** (cache `.advisor/skill-registry.cache.json`):
   - `node .opencode/skills/_skill-loader/loader.mjs list [--refresh|--json]`
   - `node .opencode/skills/_skill-loader/loader.mjs refresh`
   - `node .opencode/skills/_skill-loader/loader.mjs search "query"`
   - `node .opencode/skills/_skill-loader/loader.mjs chunk "<skill>" urls,shortcuts,examples`
 - **Memoria buscable** (md+grep, sin SQLite): `node .opencode/scripts/memory-index.mjs search "query"` → `timeline <id>` → `get <id>`
-- **Sync local**: `node .opencode/scripts/memory-sync.mjs export|import|status` → `.consigliere/chunks/`
+- **Sync local**: `node .opencode/scripts/memory-sync.mjs export|import|status` → `.advisor/chunks/` (fallback lectura legacy `.consigliere/chunks/`)
 - **Doctor**: `node .opencode/scripts/doctor.mjs [--json]` o `/doctor`
+- **Estado dual-dir**: vivo `.advisor/` + fallback read-only legacy (migración copia + `.migrated`, sin symlink); instala/actualiza modular con `node init.mjs <dir> --upgrade [--part harness|memoria|autoskills|all]`, `--status`, `--restore --from`, `--uninstall --part` (memoria exige backup previo + `--force`)
 
 ## Development commands
 
@@ -67,10 +68,10 @@ node init.mjs /tmp/demo --name demo                   # probar instalador univer
 ## Directory structure (2.0 solo por proyecto)
 
 ```
-consigliere/
+advisor/
 ├── .opencode/               # agents/, commands/, plans/, skills/, scripts/, hooks/
 ├── .agents/skills/          # autoskills (npx autoskills)
-├── .consigliere/            # backups/ (keep 5) + chunks/ (sync) + skill-registry.cache.json
+├── .advisor/            # backups/ (keep 5) + chunks/ (sync) + skill-registry.cache.json
 ├── PROJECT_STATE.md         # capa 0 — siempre + review_after
 ├── SUMMARY.md               # capa 1 — última semana + topic
 ├── CHANGELOG/               # capa 2 — semanal + DECISIONS-ARCHIVE.md

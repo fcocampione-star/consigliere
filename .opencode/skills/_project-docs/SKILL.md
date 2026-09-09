@@ -1,14 +1,14 @@
 ---
 name: _project-docs
 description: |
-  Documentación específica del proyecto consigliere. Carga bajo demanda via _skill-loader.
-  Use when you need: official URLs, fetch patterns, shortcuts, and best practices for the consigliere stack.
+  Documentación específica del proyecto advisor. Carga bajo demanda via _skill-loader.
+  Use when you need: official URLs, fetch patterns, shortcuts, and best practices for the advisor stack.
 chunks: [urls, patterns, shortcuts, examples, commands]
 metadata:
   version: 1.0.0
 ---
 
-# consigliere — Project Documentation
+# advisor — Project Documentation
 
 > Harness CLI por proyecto — Node >=18 ESM + Bash/PowerShell + git/tar, memoria 3 capas md+grep, routing orgánico y SDD-lite.
 
@@ -19,7 +19,7 @@ metadata:
 |------------|---------------|---------------|--------|-------|
 | Node.js >=18 ESM | https://nodejs.org/docs/latest/api/ | https://nodejs.org/api/esm.html | https://github.com/nodejs/node | ESM native, node --check |
 | opencode | https://opencode.ai/docs | https://opencode.ai/docs/cli | https://github.com/sst/opencode | TUI harness, agents/commands |
-| npm consigliere-harness | https://www.npmjs.com/package/consigliere-harness | https://github.com/fcocampione-star/consigliere#readme | https://github.com/fcocampione-star/consigliere | v2.0.0 via npx consigliere-harness@latest |
+| npm advisor-harness | https://www.npmjs.com/package/advisor-harness | https://github.com/fcocampione-star/advisor#readme | https://github.com/fcocampione-star/advisor | v2.0.0 via npx advisor-harness@latest |
 | Git SCM | https://git-scm.com/doc | https://git-scm.com/docs/git-init | https://github.com/git/git | git/tar backups keep 5 |
 | Bash 4+ / PowerShell 5.1+ | https://www.gnu.org/software/bash/manual/ | https://learn.microsoft.com/en-us/powershell/ | https://git.savannah.gnu.org/cgit/bash.git | init.sh / init.ps1 |
 | grep + perl (memory-index) | https://www.gnu.org/software/grep/manual/ | https://perldoc.perl.org/perlre | — | md+grep sin SQLite fallback |
@@ -38,9 +38,9 @@ webfetch "https://nodejs.org/api/esm.html" --format markdown
 webfetch "https://opencode.ai/docs" --format markdown
 ```
 
-### npm consigliere-harness registry
+### npm advisor-harness registry
 ```bash
-webfetch "https://www.npmjs.com/package/consigliere-harness" --format markdown
+webfetch "https://www.npmjs.com/package/advisor-harness" --format markdown
 ```
 
 ### Git SCM + tar backups
@@ -77,7 +77,7 @@ webfetch "https://www.gnu.org/software/bash/manual/" --format markdown
 <!-- CHUNK: examples -->
 ### 4.1 Harness install (Node ESM universal)
 ```bash
-npx consigliere-harness@latest /ruta/proyecto --name mi-app --stack-backend node/express --git yes
+npx advisor-harness@latest /ruta/proyecto --name mi-app --stack-backend node/express --git yes
 node init.mjs /tmp/demo --name demo
 bash init.sh --dir /tmp/demo --name demo
 ```
@@ -94,7 +94,8 @@ node .opencode/scripts/memory-index.mjs get <id>
 node .opencode/skills/_skill-loader/loader.mjs list --json
 node .opencode/skills/_skill-loader/loader.mjs chunk "_project-docs" urls,shortcuts,examples
 node .opencode/skills/_skill-loader/loader.mjs refresh --force
-# cache: .consigliere/skill-registry.cache.json (path+mtime+size)
+# cache: .advisor/skill-registry.cache.json v2 (path+mtime+size), fallback lectura legacy .consigliere/
+# bin: advisor + advisor-harness + alias consigliere-harness (1 versión transición)
 ```
 
 ### 4.4 Memory limits & sync

@@ -6,7 +6,7 @@ subtask: true
 
 Ejecuta el pipeline de orquestación completo para la siguiente tarea: $ARGUMENTS
 
-Recordatorio de tu flujo como Orchestrator (routing orgánico + SDD-lite integrado, Consigliere 2.0):
+Recordatorio de tu flujo como Orchestrator (routing orgánico + SDD-lite integrado, Advisor 2.0):
 
 0. **Memoria obligatoria**: lee `PROJECT_STATE.md` siempre; `SUMMARY.md`/`CHANGELOG/` solo on-demand.
 1. **Routing**: cuenta files necesarios (grep/glob via `explore` si hace falta):

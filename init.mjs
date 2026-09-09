@@ -1,19 +1,27 @@
 #!/usr/bin/env node
 /**
- * CONSIGLIERE 2.0 — Harness de agentes + memoria persistente para opencode.
+ * ADVISOR 2.0 — Harness de agentes + memoria persistente para opencode.
  * Instalador/generador SOLO por proyecto (Node 18+). Sin instalación global.
+ *
+ * Estado vivo en `.advisor/` con fallback de LECTURA a legacy `.consigliere/`
+ * (pre-rename; nunca se escribe ahí; prohibido symlink por compat Windows).
+ * Precedencia: `.advisor/` gana siempre; migración por copia + `.migrated`.
  *
  * Uso:
  *   node init.mjs                          # modo interactivo
- *   npx consigliere-harness@latest /ruta/proyecto  # vía npm (recomendado)
+ *   npx advisor-harness@latest /ruta/proyecto  # vía npm (recomendado)
  *   node init.mjs /ruta/proyecto [flags]   # no-interactivo
  *   node init.mjs --version | --help
+ *   node init.mjs /ruta/proyecto --status   # diagnóstico read-only (no escribe)
+ *   node init.mjs /ruta/proyecto --upgrade [--part harness|memoria|autoskills|all]
+ *   node init.mjs /ruta/proyecto --restore --from <advisor|harness>-<ts>.tgz
+ *   node init.mjs /ruta/proyecto --uninstall --part <harness|memoria|autoskills> [--force]
  */
 
-import { existsSync, mkdirSync, cpSync, readdirSync, readFileSync, writeFileSync, chmodSync, unlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, cpSync, readdirSync, readFileSync, writeFileSync, chmodSync, unlinkSync, rmSync, statSync, copyFileSync } from 'node:fs';
 import { join, dirname, basename, resolve, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { homedir, platform } from 'node:os';
+import { homedir, platform, tmpdir } from 'node:os';
 import { createInterface } from 'node:readline';
 import { spawnSync } from 'node:child_process';
 
@@ -24,8 +32,17 @@ const IS_WIN = platform() === 'win32';
 const HOME = homedir();
 const TEMPLATE_DIR = join(HERE, 'templates');
 
-const BACKUP_ITEMS = ['.opencode', 'AGENTS.md', 'PROJECT_STATE.md', 'SUMMARY.md', 'CHANGELOG', '.consigliere', 'opencode.json', '.gitignore', 'skills-lock.json', 'scripts'];
+// Estado: vivo + legacy (read-only). Const ÚNICA de backup/preservados
+// (paridad con init.sh/init.ps1: BACKUP_ITEMS/PRESERVED idénticos).
+const STATE_DIR = '.advisor';
+const LEGACY_DIR = '.consigliere';
+const BACKUP_ITEMS = ['.opencode', 'AGENTS.md', 'PROJECT_STATE.md', 'SUMMARY.md', 'CHANGELOG', STATE_DIR, LEGACY_DIR, 'opencode.json', '.gitignore', 'skills-lock.json', 'scripts'];
 const PRESERVED = ['PROJECT_STATE.md', 'SUMMARY.md', 'opencode.json', 'AGENTS.md', '.gitignore'];
+// Subsets por --part (render selectivo en install/upgrade).
+const PART_HARNESS = ['.opencode', 'scripts', 'AGENTS.md', 'opencode.json', '.gitignore', 'skills-lock.json'];
+const PART_MEMORIA = ['PROJECT_STATE.md', 'SUMMARY.md', 'CHANGELOG'];
+const PARTS = ['harness', 'memoria', 'autoskills', 'all'];
+const BACKUP_RE = /^(harness|advisor)-.*\.tgz$/;
 
 if (+process.versions.node.split('.')[0] < 18) { console.error(`❌ Node >=18 requerido. Actual: ${process.versions.node}`); process.exit(1); }
 
@@ -41,15 +58,15 @@ const step = (m) => console.log(`\n${C.bold}▶ ${m}${C.reset}`);
 
 function banner() {
   console.log(`${C.cyan}
-                                             ░██           ░██ ░██
-                                                           ░██
-  ░███████   ░███████  ░████████   ░███████  ░██ ░████████ ░██ ░██ ░███████  ░██░████  ░███████
- ░██    ░██ ░██    ░██ ░██    ░██ ░██        ░██░██    ░██ ░██ ░██░██    ░██ ░███     ░██    ░██
- ░██        ░██    ░██ ░██    ░██  ░███████  ░██░██    ░██ ░██ ░██░█████████ ░██      ░█████████
- ░██    ░██ ░██    ░██ ░██    ░██        ░██ ░██░██   ░███ ░██ ░██░██        ░██      ░██
-  ░███████   ░███████  ░██    ░██  ░███████  ░██ ░█████░██ ░██ ░██ ░███████  ░██       ░███████
-                                                       ░██
-                                                 ░███████
+                                              ░██           ░██ ░██
+                                                            ░██
+   ░███████   ░███████  ░████████   ░███████  ░██ ░████████ ░██ ░██ ░███████  ░██░████  ░███████
+  ░██    ░██ ░██    ░██ ░██    ░██ ░██        ░██░██    ░██ ░██ ░██░██    ░██ ░███     ░██    ░██
+  ░██        ░██    ░██ ░██    ░██  ░███████  ░██░██    ░██ ░██ ░██░█████████ ░██      ░█████████
+  ░██    ░██ ░██    ░██ ░██    ░██        ░██ ░██░██   ░███ ░██ ░██░██        ░██      ░██
+   ░███████   ░███████  ░██    ░██  ░███████  ░██ ░█████░██ ░██ ░██ ░███████  ░██       ░███████
+                                                        ░██
+                                                  ░███████
 ${C.reset}${C.dim}  Harness Genérico — Agent Pipeline + Memoria Persistente 3 Capas (v${VERSION} · solo por proyecto)${C.reset}`);
 }
 
@@ -57,6 +74,83 @@ ${C.reset}${C.dim}  Harness Genérico — Agent Pipeline + Memoria Persistente 3
 function ask(question) {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   return new Promise((resolve) => rl.question(question, (ans) => { rl.close(); resolve(ans); }));
+}
+
+async function confirm(question) {
+  if (!process.stdin.isTTY) return false;
+  const c = (await ask(question)).trim();
+  return /^[SsYy]$/.test(c);
+}
+
+// Estado dual-dir -----------------------------------------------------------
+function stateStatus(target) {
+  const vivo = existsSync(join(target, STATE_DIR));
+  const legacy = existsSync(join(target, LEGACY_DIR));
+  return { vivo, legacy, active: vivo ? STATE_DIR : (legacy ? LEGACY_DIR : null) };
+}
+
+function ensureStateDirs(target, dry) {
+  for (const sub of ['', 'backups', 'chunks']) {
+    const p = join(target, STATE_DIR, sub);
+    if (dry) { info(`[dry-run] mkdir -p ${p}`); continue; }
+    mkdirSync(p, { recursive: true });
+  }
+}
+
+function migrateLegacy(target, dry, preVivo = null) {
+  const { vivo, legacy } = stateStatus(target);
+  const hadVivo = preVivo === null ? vivo : preVivo;
+  if (legacy && !hadVivo) {
+    if (dry) { info(`[dry-run] migrar ${LEGACY_DIR}/ -> ${STATE_DIR}/ (copia + .migrated)`); return 'dry'; }
+    cpSync(join(target, LEGACY_DIR), join(target, STATE_DIR), { recursive: true });
+    writeFileSync(join(target, STATE_DIR, '.migrated'), `Migrado desde ${LEGACY_DIR}/ el ${new Date().toISOString()}. Precedencia: ${STATE_DIR}/ gana; ${LEGACY_DIR}/ queda read-only.\n`, 'utf8');
+    ok(`Migración legacy ${LEGACY_DIR}/ -> ${STATE_DIR}/ (+ .migrated)`);
+    return 'migrated';
+  }
+  if (legacy && vivo) info(`Precedencia estado: ${STATE_DIR}/ (vivo) gana; ${LEGACY_DIR}/ queda read-only`);
+  return vivo ? 'vivo' : 'none';
+}
+
+// Backup / restore ----------------------------------------------------------
+function doBackup(target, items, dry) {
+  const present = items.filter((item) => existsSync(join(target, item)));
+  if (present.length === 0) { info('Sin harness previo que respaldar (directorio vacío/inexistente)'); return { file: '', items: [] }; }
+  if (dry) {
+    info(`[dry-run] backup -> ${STATE_DIR}/backups/advisor-<ts>.tgz (keep 5): ${present.join(', ')}`);
+    const preview = PRESERVED.filter((p) => present.includes(p));
+    if (preview.length > 0) info(`[dry-run] restore -> ${preview.join(', ')}`);
+    return { file: '[dry-run]', items: present };
+  }
+  const backupDir = join(target, STATE_DIR, 'backups');
+  mkdirSync(backupDir, { recursive: true });
+  const ts = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupFile = join(backupDir, `advisor-${ts}.tgz`);
+  const tar = spawnSync('tar', ['-czf', backupFile, '-C', target, `--exclude=${STATE_DIR}/backups`, `--exclude=${LEGACY_DIR}/backups`, '--exclude=.memory-lock', ...present], { stdio: 'ignore' });
+  if (tar.error || tar.status !== 0) {
+    err(`Backup falló: ${backupFile}`);
+    process.exit(1); // abortar si el backup falla (obligatorio)
+  }
+  ok(`Backup: ${backupFile} (${present.length} ítems)`);
+  pruneBackups(backupDir);
+  return { file: backupFile, items: present };
+}
+
+function pruneBackups(backupDir) {
+  try {
+    const files = readdirSync(backupDir)
+      .filter((f) => /^(harness|advisor)-/.test(f) && f.endsWith('.tgz'))
+      .sort()
+      .reverse();
+    for (const f of files.slice(5)) unlinkSync(join(backupDir, f));
+  } catch {}
+}
+
+function restorePreserved(target, backupFile, backupItems) {
+  const restored = PRESERVED.filter((f) => backupItems.includes(f));
+  if (!restored.length || !backupFile) return;
+  const r = spawnSync('tar', ['-xzf', backupFile, '-C', target, ...restored], { stdio: 'ignore' });
+  if (r.error || r.status !== 0) warn(`Restauración de memoria/config falló (backup disponible en ${backupFile})`);
+  else ok(`Memoria/config preservadas: ${restored.join(', ')}`);
 }
 
 // Render
@@ -87,6 +181,24 @@ function renderTree(srcDir, dstDir, vars) {
   }
 }
 
+function renderSelected(srcDir, dstDir, vars, part) {
+  const allow = part === 'harness' ? PART_HARNESS : part === 'memoria' ? PART_MEMORIA : null;
+  const entries = readdirSync(srcDir, { withFileTypes: true });
+  for (const e of entries) {
+    if (allow && !allow.includes(e.name)) continue;
+    const src = join(srcDir, e.name);
+    const dst = join(dstDir, e.name);
+    if (e.isDirectory()) {
+      mkdirSync(dst, { recursive: true });
+      renderTree(src, dst, vars);
+    } else if (e.isFile()) {
+      const isTemplate = /\.(md|json|mjs|sh|ps1)$/.test(e.name);
+      if (isTemplate) renderFile(src, dst, vars);
+      else cpSync(src, dst);
+    }
+  }
+}
+
 // Git helpers
 function installGitHook(repo, templateDir) {
   const src = join(templateDir, '.opencode', 'hooks', 'post-commit-memory-rotate.sh');
@@ -102,7 +214,7 @@ function gitInitAndCommit(repo, templateDir) {
     spawnSync('git', ['init', '-q'], { cwd: repo, stdio: 'inherit' });
     installGitHook(repo, templateDir);
     spawnSync('git', ['add', '.'], { cwd: repo, stdio: 'inherit' });
-    spawnSync('git', ['-c', 'user.name=CONSIGLIERE', '-c', 'user.email=consigliere@local', 'commit', '-q', '-m', 'chore: scaffold harness CONSIGLIERE 2.0'], { cwd: repo, stdio: 'inherit' });
+    spawnSync('git', ['-c', 'user.name=CONSIGLIERE', '-c', 'user.email=consigliere@local', 'commit', '-q', '-m', 'chore: scaffold harness ADVISOR 2.0'], { cwd: repo, stdio: 'inherit' });
     ok('Git + hook post-commit + commit inicial');
   } else {
     installGitHook(repo, templateDir);
@@ -147,7 +259,100 @@ function finish(projectName, targetDir) {
   console.log(`  /review                Listar decisiones stale (review_after)`);
   console.log(`  /rotate-memory         Rotación semanal manual`);
   console.log(`  /compact-state         Compactar PROJECT_STATE.md\n`);
-  console.log(`${C.dim}Instalación 100% por proyecto — sin binario global. Actualiza con: npx consigliere-harness@latest ${targetDir} --upgrade${C.reset}\n`);
+  console.log(`${C.dim}Instalación 100% por proyecto — sin binario global. Actualiza con: npx advisor-harness@latest ${targetDir} --upgrade${C.reset}\n`);
+}
+
+// --status (read-only) --------------------------------------------------------
+function statusCmd(targetDir, projectName) {
+  step(`Estado harness '${projectName}' (read-only)`);
+  const isHarness = existsSync(join(targetDir, '.opencode')) || existsSync(join(targetDir, 'AGENTS.md'));
+  const st = stateStatus(targetDir);
+  const parts = {
+    harness: existsSync(join(targetDir, '.opencode')),
+    memoria: existsSync(join(targetDir, 'PROJECT_STATE.md')) || existsSync(join(targetDir, 'SUMMARY.md')) || existsSync(join(targetDir, 'CHANGELOG')),
+    autoskills: existsSync(join(targetDir, '.agents', 'skills')),
+  };
+  let backups = [];
+  for (const d of [join(targetDir, STATE_DIR, 'backups'), join(targetDir, LEGACY_DIR, 'backups')]) {
+    try {
+      for (const f of readdirSync(d)) if (BACKUP_RE.test(f)) backups.push(join(d, f));
+    } catch {}
+  }
+  backups.sort().reverse();
+  let cache = 'sin cache';
+  for (const f of [join(targetDir, STATE_DIR, 'skill-registry.cache.json'), join(targetDir, LEGACY_DIR, 'skill-registry.cache.json')]) {
+    try {
+      const j = JSON.parse(readFileSync(f, 'utf8'));
+      cache = `${f} (v${j.version}, ${j.entries?.length || 0} skills)`;
+      break;
+    } catch {}
+  }
+  console.log(`  harness : ${isHarness ? 'sí' : 'no'}`);
+  console.log(`  estado  : ${st.active || 'ninguno'} (vivo=${st.vivo} legacy=${st.legacy})`);
+  console.log(`  parts   : harness=${parts.harness} memoria=${parts.memoria} autoskills=${parts.autoskills}`);
+  console.log(`  backups : ${backups.length} (keep 5) ${backups[0] ? '→ ' + backups[0] : ''}`);
+  console.log(`  cache   : ${cache}`);
+  console.log(`  bin     : npx advisor-harness@latest (alias: consigliere-harness)`);
+}
+
+// --uninstall (seguro: confirmación sin --force; memoria con backup previo) ---
+const UNINSTALL_LISTS = {
+  harness: ['.opencode', 'scripts', 'AGENTS.md', 'opencode.json', '.gitignore', 'skills-lock.json'],
+  memoria: ['PROJECT_STATE.md', 'SUMMARY.md', 'CHANGELOG', STATE_DIR, LEGACY_DIR],
+  autoskills: ['.agents'],
+};
+
+async function uninstallCmd(targetDir, projectName, part, dry, force) {
+  const list = part === 'all' ? [...new Set(Object.values(UNINSTALL_LISTS).flat())] : UNINSTALL_LISTS[part];
+  const present = list.filter((item) => existsSync(join(targetDir, item)));
+  step(`Desinstalar '${projectName}' --part ${part}`);
+  if (!present.length) { info('Nada que desinstalar (sin archivos del harness).'); return; }
+  info(`Alcance: ${present.join(', ')}`);
+  if (dry) { info('[dry-run] no se borró nada en disco'); return; }
+  if (!force) {
+    const yes = await confirm(`  ¿Borrar ${present.length} ítems del harness en '${targetDir}'? [s/N] `);
+    if (!yes) { info('Cancelado (usa --force para no preguntar).'); return; }
+  }
+  if (part === 'memoria' || part === 'all') {
+    // Memoria: backup previo OBLIGATORIO (doBackup aborta si falla).
+    // Se copia FUERA del target: el backup interno se borraría con .advisor/.
+    const memPresent = UNINSTALL_LISTS.memoria.filter((item) => existsSync(join(targetDir, item)));
+    if (memPresent.length) {
+      step('Backup previo obligatorio de memoria');
+      const { file: memBackup } = doBackup(targetDir, memPresent, false);
+      if (memBackup) {
+        const ext = join(tmpdir(), `advisor-memoria-${Date.now()}.tgz`);
+        copyFileSync(memBackup, ext);
+        ok(`Copia seguridad externa (sobrevive al borrado): ${ext}`);
+      }
+    }
+  }
+  // Borrado explícito por lista (nunca rm -rf amplio, nunca .git).
+  let n = 0;
+  for (const item of present) {
+    try {
+      rmSync(join(targetDir, item), { recursive: true, force: true });
+      n++;
+    } catch (e) { warn(`No se pudo borrar ${item}: ${e.message}`); }
+  }
+  ok(`Desinstalado --part ${part}: ${n}/${present.length} ítems`);
+}
+
+// --restore -------------------------------------------------------------------
+function restoreCmd(targetDir, projectName, from, dry) {
+  step(`Restaurar '${projectName}' desde backup`);
+  if (!from) { err('--restore requiere --from <archivo.tgz> (advisor-|harness-).'); process.exit(1); }
+  const bf = isAbsolute(from) ? from : resolve(process.cwd(), from);
+  if (!existsSync(bf)) { err(`Backup no encontrado: ${bf}`); process.exit(1); }
+  if (!BACKUP_RE.test(basename(bf))) {
+    err(`Backup no válido: '${basename(bf)}' (se aceptan advisor-<ts>.tgz y harness-<ts>.tgz).`);
+    process.exit(1);
+  }
+  if (dry) { info(`[dry-run] tar -xzf ${bf} -C ${targetDir} (no se escribió nada)`); return; }
+  mkdirSync(targetDir, { recursive: true });
+  const r = spawnSync('tar', ['-xzf', bf, '-C', targetDir], { stdio: 'inherit' });
+  if (r.error || r.status !== 0) { err(`Restauración falló (backup intacto en ${bf})`); process.exit(1); }
+  ok(`Restaurado desde ${bf}`);
 }
 
 // Interactivo
@@ -168,7 +373,7 @@ async function promptStackItem(label, opts) {
 async function interactiveCreate() {
   banner();
   console.log();
-  step('Nuevo proyecto — CONSIGLIERE 2.0 (solo por proyecto)');
+  step('Nuevo proyecto — ADVISOR 2.0 (solo por proyecto)');
   let targetDir = (await ask('  📁 Ruta del directorio del proyecto: ')).trim().replace(/^~/, HOME);
   if (!targetDir) { err('Ruta vacía.'); process.exit(1); }
   targetDir = isAbsolute(targetDir) ? resolve(targetDir) : resolve(process.cwd(), targetDir);
@@ -225,12 +430,13 @@ async function interactiveCreate() {
   const go = (await ask('  ¿Continuar? [S/n]: ')).trim();
   if (/^[Nn]$/.test(go)) { info('Cancelado.'); process.exit(0); }
 
-  createProject({ projectName, targetDir, STACK_DB, STACK_BACKEND, STACK_FRONTEND, STACK_AUTH, STACK_VALIDATION, STACK_DEPLOY, LANG_BACKEND, MODEL_ORCHESTRATOR, MODEL_PLANNER, MODEL_BUILDER, MODEL_VERIFIER, MODEL_CRITIC, MODEL_SUMMARIZER, MODEL_EXPLORE, AUTO_CHOICE, DO_GIT });
+  createProject({ projectName, targetDir, STACK_DB, STACK_BACKEND, STACK_FRONTEND, STACK_AUTH, STACK_VALIDATION, STACK_DEPLOY, LANG_BACKEND, MODEL_ORCHESTRATOR, MODEL_PLANNER, MODEL_BUILDER, MODEL_VERIFIER, MODEL_CRITIC, MODEL_SUMMARIZER, MODEL_EXPLORE, AUTO_CHOICE, DO_GIT, PART: 'all' });
 }
 
 function createProject(opts) {
-  const { projectName, targetDir, AUTO_CHOICE, DO_GIT } = opts;
+  const { projectName, targetDir, AUTO_CHOICE, DO_GIT, PART } = opts;
   step(`Generando proyecto '${projectName}'`);
+  const preVivo = existsSync(join(targetDir, STATE_DIR));
   mkdirSync(targetDir, { recursive: true });
   ok('Estructura base creada');
 
@@ -253,16 +459,24 @@ function createProject(opts) {
     LANG_BACKEND: opts.LANG_BACKEND || 'typescript',
   };
 
-  renderTree(TEMPLATE_DIR, targetDir, vars);
+  if (PART === 'autoskills') {
+    info('--part autoskills: solo autoskills, sin render');
+  } else if (PART === 'harness' || PART === 'memoria') {
+    renderSelected(TEMPLATE_DIR, targetDir, vars, PART);
+  } else {
+    renderTree(TEMPLATE_DIR, targetDir, vars);
+  }
   mkdirSync(join(targetDir, 'CHANGELOG'), { recursive: true });
-  mkdirSync(join(targetDir, '.consigliere', 'backups'), { recursive: true });
-  mkdirSync(join(targetDir, '.consigliere', 'chunks'), { recursive: true });
+  ensureStateDirs(targetDir, false);
+  migrateLegacy(targetDir, false, preVivo);
   ok('Harness generado (agents, commands, skills, memoria, scripts)');
 
   if (DO_GIT) gitInitAndCommit(targetDir, TEMPLATE_DIR);
   else warn('Git no inicializado.');
 
-  if (AUTO_CHOICE !== '3') handleAutoskills(AUTO_CHOICE, targetDir);
+  if (PART === 'all' || PART === 'autoskills') {
+    if (AUTO_CHOICE !== '3') handleAutoskills(AUTO_CHOICE, targetDir);
+  }
   finish(projectName, targetDir);
 }
 
@@ -275,16 +489,27 @@ function needValue(flag, val) {
   return val;
 }
 
+function needPart(val) {
+  if (!PARTS.includes(val)) {
+    err(`--part inválido: '${val}' (usa ${PARTS.join('|')}).`);
+    process.exit(1);
+  }
+  return val;
+}
+
 function showHelp(scriptName) {
-  console.log(`CONSIGLIERE v${VERSION} — Harness de agentes + memoria persistente para opencode (solo por proyecto).
+  console.log(`ADVISOR v${VERSION} — Harness de agentes + memoria persistente para opencode (solo por proyecto).
 
 Uso:
   ${scriptName}                          modo interactivo
   ${scriptName} --version | --help
   ${scriptName} <ruta/proyecto>          crear proyecto (con flags)
-  ${scriptName} <ruta/proyecto> --upgrade  actualizar harness existente (backup keep 5, preserva memoria/config; no requiere --force)
+  ${scriptName} <ruta/proyecto> --upgrade [--part harness|memoria|autoskills|all]  actualizar (backup keep 5, preserva memoria/config)
+  ${scriptName} <ruta/proyecto> --status   estado read-only (no escribe)
+  ${scriptName} <ruta/proyecto> --restore --from <advisor|harness>-<ts>.tgz  restaurar backup
+  ${scriptName} <ruta/proyecto> --uninstall --part <harness|memoria|autoskills> [--force]  desinstalar (memoria exige backup previo)
   ${scriptName} <ruta/proyecto> --dry-run  simulación sin escribir
-  ${scriptName} <ruta/proyecto> --force    sobrescribir destino no vacío
+  ${scriptName} <ruta/proyecto> --force    sobrescribir destino no vacío / no preguntar
 
 Flags (no-interactivo):
   --dir <ruta>              directorio destino
@@ -292,12 +517,18 @@ Flags (no-interactivo):
   --stack-db/-backend/-frontend/-auth/-validation/-deploy <v>
   --autoskills <1|2|3>      1=proyecto, 2=global, 3=omitir
   --git <yes|no>            inicializar git
-  --upgrade                 actualizar harness existente (backup keep 5, preserva memoria/config; no requiere --force)
+  --upgrade                 actualizar harness existente (alias de --part all; backup keep 5; no requiere --force)
+  --part <p>                alcance modular: harness|memoria|autoskills|all (install/upgrade/uninstall)
+  --status                  estado read-only del harness (no escribe)
+  --restore --from <tgz>    restaurar backup advisor-|harness- (acepta ambos prefijos)
+  --uninstall               desinstalar alcance de --part (pide confirmación sin --force; memoria con backup previo obligatorio)
   --dry-run                 no escribir, solo loguear
-  --force                   sobrescribir destino no vacío (solo sin --upgrade)
+  --force                   sobrescribir destino no vacío (solo sin --upgrade) / no pedir confirmación
+
+Estado: vivo en .advisor/ con fallback read-only a legacy .consigliere/ (migración por copia + .migrated, sin symlink).
 
 Instalación: solo por proyecto, sin binario global.
-  npx consigliere-harness@latest /ruta/proyecto
+  npx advisor-harness@latest /ruta/proyecto
   node ./init.mjs /ruta/proyecto
   bash ./init.sh --dir /ruta/proyecto
 `);
@@ -320,7 +551,7 @@ async function main() {
     return;
   }
 
-  if (args[0] === '--version' || args[0] === '-v') { console.log(`CONSIGLIERE v${VERSION}`); return; }
+  if (args[0] === '--version' || args[0] === '-v') { console.log(`ADVISOR v${VERSION}`); return; }
   if (args[0] === '--help' || args[0] === '-h') { showHelp(scriptName); return; }
 
   // parse no-interactivo
@@ -332,6 +563,10 @@ async function main() {
   let MODEL_VERIFIER = ''; let MODEL_CRITIC = ''; let MODEL_SUMMARIZER = ''; let MODEL_EXPLORE = '';
   let LANG_BACKEND = 'typescript';
   let UPGRADE = false;
+  let PART = '';
+  let STATUS = false;
+  let RESTORE = false; let FROM = '';
+  let UNINSTALL = false;
   let DRY_RUN = false; let FORCE = false;
 
   for (let i = 0; i < args.length; i++) {
@@ -348,10 +583,15 @@ async function main() {
       case '--autoskills': { if (i + 1 >= args.length) needValue(a, undefined); AUTO_CHOICE = needValue(a, args[++i]); break; }
       case '--git': { if (i + 1 >= args.length) needValue(a, undefined); const gv = needValue(a, args[++i]); DO_GIT = gv !== 'no'; break; }
       case '--upgrade': UPGRADE = true; break;
+      case '--part': { if (i + 1 >= args.length) needValue(a, undefined); PART = needPart(needValue(a, args[++i])); break; }
+      case '--status': STATUS = true; break;
+      case '--restore': RESTORE = true; break;
+      case '--from': { if (i + 1 >= args.length) needValue(a, undefined); FROM = needValue(a, args[++i]); break; }
+      case '--uninstall': UNINSTALL = true; break;
       case '--dry-run': DRY_RUN = true; break;
       case '--force': FORCE = true; break;
       case '--help': case '-h': showHelp(scriptName); return;
-      case '--version': case '-v': console.log(`CONSIGLIERE v${VERSION}`); return;
+      case '--version': case '-v': console.log(`ADVISOR v${VERSION}`); return;
       default:
         if (a.startsWith('--')) { warn(`Flag desconocido: ${a}`); }
         else TARGET_DIR = a;
@@ -365,80 +605,99 @@ async function main() {
   if (STACK_BACKEND.includes('python')) LANG_BACKEND = 'python';
   else if (STACK_BACKEND.includes('go')) LANG_BACKEND = 'go';
 
+  // --status es read-only y no exige nada más
+  if (STATUS) { statusCmd(TARGET_DIR, PROJECT_NAME); return; }
+  if (RESTORE) { restoreCmd(TARGET_DIR, PROJECT_NAME, FROM, DRY_RUN); return; }
+  if (UNINSTALL) {
+    if (!PART) { err('--uninstall requiere --part <harness|memoria|autoskills|all>.'); process.exit(1); }
+    await uninstallCmd(TARGET_DIR, PROJECT_NAME, PART, DRY_RUN, FORCE);
+    return;
+  }
+
+  if (UPGRADE && !PART) PART = 'all'; // --upgrade monolítico = --part all (alias)
+  const preVivo = existsSync(join(TARGET_DIR, STATE_DIR)); // antes de que backup/ensure creen .advisor/
+
   const isHarness = existsSync(join(TARGET_DIR, '.opencode')) || existsSync(join(TARGET_DIR, 'AGENTS.md'));
   if (existsSync(TARGET_DIR) && readdirSync(TARGET_DIR).length > 0 && !FORCE && !DRY_RUN) {
     if (UPGRADE && isHarness) {
       // eximido: dir con harness previo → backup + render
     } else if (UPGRADE) {
-      err(`El directorio '${TARGET_DIR}' no es un proyecto consigliere/harness (sin .opencode/ ni AGENTS.md). --upgrade requiere un harness previo; usa --force solo si quieres sobrescribir.`);
+      err(`El directorio '${TARGET_DIR}' no es un proyecto advisor/harness (sin .opencode/ ni AGENTS.md). --upgrade requiere un harness previo; usa --force solo si quieres sobrescribir.`);
       process.exit(1);
-    } else {
+    } else if (!PART) {
       err(`El directorio '${TARGET_DIR}' existe y no está vacío. Usa --force para sobrescribir, --dry-run para simular, o --upgrade para actualizar un harness existente.`);
       process.exit(1);
     }
+    // install con --part sobre dir no vacío: se permite (alcance modular), avisa
+    if (PART && !UPGRADE) warn(`Install --part ${PART} sobre directorio no vacío (alcance modular).`);
   }
 
-  let backupFile = '';
-  let backupItems = [];
+  const scope = PART || 'all';
+
   if (UPGRADE) {
-    backupItems = BACKUP_ITEMS.filter((item) => existsSync(join(TARGET_DIR, item)));
-    if (backupItems.length === 0) {
-      info('Sin harness previo que respaldar (directorio vacío/inexistente)');
-    } else if (DRY_RUN) {
-      info(`[dry-run] backup -> .consigliere/backups/harness-<ts>.tgz (keep 5): ${backupItems.join(', ')}`);
-      const preview = PRESERVED.filter((p) => backupItems.includes(p));
-      if (preview.length > 0) info(`[dry-run] restore -> ${preview.join(', ')}`);
-    } else {
-      step(`Actualizando harness en '${PROJECT_NAME}' (backup keep 5)`);
-      const backupDir = join(TARGET_DIR, '.consigliere', 'backups');
-      mkdirSync(backupDir, { recursive: true });
-      const ts = new Date().toISOString().replace(/[:.]/g, '-');
-      backupFile = join(backupDir, `harness-${ts}.tgz`);
-      const tar = spawnSync('tar', ['-czf', backupFile, '-C', TARGET_DIR, '--exclude=.consigliere/backups', '--exclude=.memory-lock', ...backupItems], { stdio: 'ignore' });
-      if (tar.error || tar.status !== 0) {
-        err(`Backup falló: ${backupFile}`);
-        process.exit(1);
-      }
-      ok(`Backup: ${backupFile} (${backupItems.length} ítems)`);
-      // prune keep 5 (solo harness-<ISO|compacto>; ambos formatos mjs/sh)
-      try {
-        const files = readdirSync(backupDir)
-          .filter((f) => /^harness-(?:\d{4}-\d{2}-\d{2}T|\d{8}T)/.test(f))
-          .sort()
-          .reverse();
-        for (const f of files.slice(5)) unlinkSync(join(backupDir, f));
-      } catch {}
+    if (scope === 'autoskills') {
+      step(`Actualizando autoskills en '${PROJECT_NAME}'`);
+      if (DRY_RUN) { info('[dry-run] handleAutoskills (no se escribió nada)'); return; }
+      handleAutoskills(AUTO_CHOICE, TARGET_DIR);
+      finish(PROJECT_NAME, TARGET_DIR);
+      return;
     }
+    const { file: backupFile, items: backupItems } = (() => {
+      step(`Actualizando harness en '${PROJECT_NAME}' --part ${scope} (backup keep 5)`);
+      return doBackup(TARGET_DIR, BACKUP_ITEMS, DRY_RUN);
+    })();
+    if (DRY_RUN) {
+      info(`[dry-run] would render ${TEMPLATE_DIR} -> ${TARGET_DIR} --part ${scope} (project: ${PROJECT_NAME})`);
+      info('[dry-run] no se escribió nada en disco');
+      finish(PROJECT_NAME, TARGET_DIR);
+      return;
+    }
+    step(`Generando proyecto '${PROJECT_NAME}' (upgrade --part ${scope})`);
+    mkdirSync(TARGET_DIR, { recursive: true });
+    const vars = {
+      PROJECT_NAME, STACK_DB, STACK_BACKEND, STACK_FRONTEND, STACK_AUTH, STACK_VALIDATION, STACK_DEPLOY,
+      DEV_COMMANDS: '', MODEL_ORCHESTRATOR, MODEL_PLANNER, MODEL_BUILDER, MODEL_VERIFIER, MODEL_CRITIC, MODEL_SUMMARIZER, MODEL_EXPLORE, LANG_BACKEND,
+    };
+    if (scope === 'harness') renderSelected(TEMPLATE_DIR, TARGET_DIR, vars, 'harness');
+    else if (scope === 'memoria') renderSelected(TEMPLATE_DIR, TARGET_DIR, vars, 'memoria');
+    else renderTree(TEMPLATE_DIR, TARGET_DIR, vars);
+    mkdirSync(join(TARGET_DIR, 'CHANGELOG'), { recursive: true });
+    ensureStateDirs(TARGET_DIR, false);
+    if (scope !== 'harness') migrateLegacy(TARGET_DIR, false, preVivo);
+    restorePreserved(TARGET_DIR, backupFile, backupItems);
+    ok(`Harness actualizado (--part ${scope})`);
+    if (DO_GIT) gitInitAndCommit(TARGET_DIR, TEMPLATE_DIR);
+    if (scope === 'all' && AUTO_CHOICE !== '3' && AUTO_CHOICE !== 'no') handleAutoskills(AUTO_CHOICE, TARGET_DIR);
+    finish(PROJECT_NAME, TARGET_DIR);
+    return;
   }
 
   if (DRY_RUN) {
-    info(`[dry-run] would render ${TEMPLATE_DIR} -> ${TARGET_DIR} (project: ${PROJECT_NAME})`);
+    info(`[dry-run] would render ${TEMPLATE_DIR} -> ${TARGET_DIR} --part ${scope} (project: ${PROJECT_NAME})`);
     info('[dry-run] no se escribió nada en disco');
     finish(PROJECT_NAME, TARGET_DIR);
     return;
   }
 
-  step(`Generando proyecto '${PROJECT_NAME}'${UPGRADE ? ' (upgrade)' : ''}`);
+  step(`Generando proyecto '${PROJECT_NAME}'${PART ? ` (--part ${PART})` : ''}`);
   mkdirSync(TARGET_DIR, { recursive: true });
   const vars = {
     PROJECT_NAME, STACK_DB, STACK_BACKEND, STACK_FRONTEND, STACK_AUTH, STACK_VALIDATION, STACK_DEPLOY,
     DEV_COMMANDS: '', MODEL_ORCHESTRATOR, MODEL_PLANNER, MODEL_BUILDER, MODEL_VERIFIER, MODEL_CRITIC, MODEL_SUMMARIZER, MODEL_EXPLORE, LANG_BACKEND,
   };
-  renderTree(TEMPLATE_DIR, TARGET_DIR, vars);
-  mkdirSync(join(TARGET_DIR, 'CHANGELOG'), { recursive: true });
-  mkdirSync(join(TARGET_DIR, '.consigliere', 'backups'), { recursive: true });
-  mkdirSync(join(TARGET_DIR, '.consigliere', 'chunks'), { recursive: true });
-  if (backupItems.length > 0 && backupFile) {
-    const restored = PRESERVED.filter((f) => backupItems.includes(f));
-    if (restored.length > 0) {
-      const r = spawnSync('tar', ['-xzf', backupFile, '-C', TARGET_DIR, ...restored], { stdio: 'ignore' });
-      if (r.error || r.status !== 0) warn(`Restauración de memoria/config falló (backup disponible en ${backupFile})`);
-      else ok(`Memoria/config preservadas: ${restored.join(', ')}`);
-    }
+  if (scope === 'autoskills') {
+    info('--part autoskills: solo autoskills, sin render');
+  } else if (scope === 'harness' || scope === 'memoria') {
+    renderSelected(TEMPLATE_DIR, TARGET_DIR, vars, scope);
+  } else {
+    renderTree(TEMPLATE_DIR, TARGET_DIR, vars);
   }
-  ok(`Harness ${UPGRADE ? 'actualizado' : 'generado'}`);
+  mkdirSync(join(TARGET_DIR, 'CHANGELOG'), { recursive: true });
+  ensureStateDirs(TARGET_DIR, false);
+  migrateLegacy(TARGET_DIR, false, preVivo);
+  ok(`Harness generado${PART ? ` (--part ${PART})` : ''}`);
   if (DO_GIT) gitInitAndCommit(TARGET_DIR, TEMPLATE_DIR);
-  if (AUTO_CHOICE !== '3' && AUTO_CHOICE !== 'no') handleAutoskills(AUTO_CHOICE, TARGET_DIR);
+  if ((scope === 'all' || scope === 'autoskills') && AUTO_CHOICE !== '3' && AUTO_CHOICE !== 'no') handleAutoskills(AUTO_CHOICE, TARGET_DIR);
   finish(PROJECT_NAME, TARGET_DIR);
 }
 
