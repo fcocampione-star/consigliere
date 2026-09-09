@@ -37,7 +37,7 @@ Devuelve un plan claro y accionable. Si detectas ambigüedad duradera (>1 semana
 4. **Cambios de datos** — migraciones/seeds nuevas (nunca editar publicadas).
 5. **Riesgos / decisiones** — patrones, gotchas, decisiones abiertas para `critic`.
 6. **Verificación** — comandos exactos (typecheck→lint→tests).
-7. **Routing** — indica `direct` (1-3 files) vs `delegated` (4+ files / 2+ writes) vs `spec-lite` (ambigüedad) para que orchestrator valide.
+7. **Routing** — indica `direct` (1-3 files) vs `delegated` (4+ files / 2+ writes) vs `spec-lite` (ambigüedad) para que advisor valide.
 
 **Spec-lite (solo si ambigüedad alta):**
 - Criterios **MUST/SHOULD** (RFC2119) + **Given/When/Then** por criterio, ≤650 palabras, sin relleno.

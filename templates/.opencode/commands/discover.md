@@ -1,12 +1,12 @@
 ---
 description: Audita el contexto del proyecto y las skills disponibles/faltantes (stack real vs AGENTS.md vs _project-docs vs autoskills) y propone mejoras.
-agent: orchestrator
+agent: advisor
 subtask: true
 ---
 
 Audita el contexto del proyecto y el estado de skills para la carpeta actual. Contexto adicional del usuario: $ARGUMENTS
 
-Como Orchestrator, **no leas código ni ejecutes bash directamente** — delega todo via `task` con prompts autocontenidos. Sigue este pipeline:
+Como Advisor, **no leas código ni ejecutes bash directamente** — delega todo via `task` con prompts autocontenidos. Sigue este pipeline:
 
 ### 1. Memoria obligatoria
 Lee `PROJECT_STATE.md` (tú, directo) y, si existe, `SUMMARY.md` (solo si el usuario pide historial). Esto te da fase, decisiones §2, patrones §5 y pendientes §3.

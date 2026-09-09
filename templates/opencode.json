@@ -1,12 +1,12 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "default_agent": "orchestrator",
+  "default_agent": "advisor",
   "subagent_depth": 2,
   "instructions": ["AGENTS.md"],
   "agent": {
-    "orchestrator": {
+    "advisor": {
       "mode": "primary",
-      "model": "{{MODEL_ORCHESTRATOR}}"
+      "model": "{{MODEL_ADVISOR}}"
     },
     "planner": {
       "mode": "subagent",

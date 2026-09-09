@@ -8,6 +8,6 @@ Lista decisiones en `PROJECT_STATE.md §2` cuyo `review_after:` esté vencido (f
 
 Para cada decisión stale reporta: línea original, `review_after`, días vencido, recomendación (`mark_reviewed` extiende +90d, o `replanificar`/`archivar`).
 
-Uso: `/review` (listar) o `/review --mark <topic>` (el orchestrator delega en summarizer para actualizar `review_after` a +90d).
+Uso: `/review` (listar) o `/review --mark <topic>` (el advisor delega en summarizer para actualizar `review_after` a +90d).
 
 No inventes fechas; usa `date +%Y-%m-%d` real. No edites si solo es `/review` lista.
