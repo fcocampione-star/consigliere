@@ -2,8 +2,10 @@
 # ADVISOR — Rotación automática de memoria tras cada commit.
 # Instalado por init.sh en .git/hooks/post-commit.
 #
-# Rota la entrada más antigua de SUMMARY.md a CHANGELOG/<lunes-semana>.md
+# Rota entradas antiguas de SUMMARY.md a CHANGELOG/<lunes-semana>.md
 # cuando: (a) cambió la semana (lunes), o (b) SUMMARY.md supera ~150 líneas.
+# El caso (b) se drena en batch (loop con cap 20) hasta quedar <=150.
+# Tras rotar, regenera derivados manifest+index (no bloqueante).
 #
 # Usa flock (contención) para evitar conflictos con escrituras concurrentes.
 
@@ -37,50 +39,74 @@ fi
 
 CHANGELOG_FILE="$CHANGELOG_DIR/$THIS_MONDAY.md"
 
-# ¿Hay al menos una entrada de fecha en SUMMARY?
-# Las entradas se añaden al inicio (ver summarizer.md), por lo que la entrada
-# más antigua está al final del archivo. Usamos tail -1 para conseguirla.
-FIRST_ENTRY_DATE="$(grep -oE '^## [0-9]{4}-[0-9]{2}-[0-9]{2}' "$SUMMARY" | tail -1 | awk '{print $2}')"
-[[ -n "$FIRST_ENTRY_DATE" ]] || exit 0
+# Recalcula FIRST_ENTRY_DATE (entrada más antigua = última ## del archivo,
+# las entradas se añaden al inicio según summarizer.md) y LINES (contenido
+# aproximado restando ~4 líneas de cabecera).
+summary_stats() {
+  FIRST_ENTRY_DATE="$(grep -oE '^## [0-9]{4}-[0-9]{2}-[0-9]{2}' "$SUMMARY" | tail -1 | awk '{print $2}' || true)"
+  LINES="$(wc -l < "$SUMMARY")"
+  LINES=$((LINES - 4))
+  if [[ "$LINES" -lt 0 ]]; then LINES=0; fi
+}
 
-# Contar líneas de contenido de entradas (aproximado).
-# Restamos ~4 líneas de cabecera (banner, contexto, separador, índice header).
-LINES="$(wc -l < "$SUMMARY")"
-LINES=$((LINES - 4))
-if [[ "$LINES" -lt 0 ]]; then LINES=0; fi
-
-should_rotate=0
-if [[ "$FIRST_ENTRY_DATE" < "$THIS_MONDAY" ]]; then
-  should_rotate=1          # la entrada más antigua es de una semana pasada
-elif [[ "$LINES" -gt 150 ]]; then
-  should_rotate=1          # SUMMARY demasiado largo
-fi
-
-if [[ "$should_rotate" -eq 1 ]]; then
-  ENTRY="$(perl -0777 -ne '
-    if (/\n(## \s* [0-9]{4}-[0-9]{2}-[0-9]{2} .+?)(?:\n## |\z)/gs) {
+# Rota UNA entrada (la más antigua) a CHANGELOG/<lunes>.md.
+# Retorna 0 si rotó, 1 si no había nada que rotar. Suma a ROTATED.
+rotate_one() {
+  local entry
+  entry="$(perl -0777 -ne '
+    if (/\n(##\s*[0-9]{4}-[0-9]{2}-[0-9]{2} .+?)(?:\n## |\z)/gs) {
       print $1;
     }
   ' "$SUMMARY")"
 
-  if [[ -n "$ENTRY" ]]; then
-    if [[ ! -f "$CHANGELOG_FILE" ]]; then
-      printf '# Changelog %s\n\n> Historial semanal archivado desde SUMMARY.md. Detalle de diffs: `git log`.\n\n' "$THIS_MONDAY" > "$CHANGELOG_FILE"
+  [[ -n "$entry" ]] || return 1
+  if [[ ! -f "$CHANGELOG_FILE" ]]; then
+    printf '# Changelog %s\n\n> Historial semanal archivado desde SUMMARY.md. Detalle de diffs: `git log`.\n\n' "$THIS_MONDAY" > "$CHANGELOG_FILE"
+  fi
+  printf '%s\n\n' "$entry" >> "$CHANGELOG_FILE"
+  # Una sola sustitución (sin /g) + lookahead: elimina exactamente la
+  # primera entrada sin consumir el delimitador `\n## ` de la siguiente.
+  perl -0777 -pi -e '
+    s/\n##\s*[0-9]{4}-[0-9]{2}-[0-9]{2} .+?(?=\n## |\z)//s;
+  ' "$SUMMARY"
+  if [[ -f "$PROJECT_STATE" ]]; then
+    WEEK_KEY="| $THIS_MONDAY | $CHANGELOG_FILE |"
+    if ! grep -qF "$WEEK_KEY" "$PROJECT_STATE"; then
+      sed -i "/^## 4. Índice de historial archivado/a $WEEK_KEY" "$PROJECT_STATE"
     fi
-    printf '%s\n\n' "$ENTRY" >> "$CHANGELOG_FILE"
-    perl -0777 -pi -e '
-      s/\n## \s* [0-9]{4}-[0-9]{2}-[0-9]{2} .+? (?:\n## |\z)//gs;
-    ' "$SUMMARY"
-    if [[ -f "$PROJECT_STATE" ]]; then
-      WEEK_KEY="| $THIS_MONDAY | $CHANGELOG_FILE |"
-      if ! grep -qF "$WEEK_KEY" "$PROJECT_STATE"; then
-        sed -i "/^## 4. Índice de historial archivado/a $WEEK_KEY" "$PROJECT_STATE"
-      fi
-    fi
-    echo "🔄 ADVISOR 2.0: memoria rotada → $CHANGELOG_FILE"
-    # Sync local a .advisor/chunks/ si existe el script (no bloqueante)
-    if [[ -f "$REPO_ROOT/.opencode/scripts/memory-sync.mjs" ]] && command -v node >/dev/null 2>&1; then
-      node "$REPO_ROOT/.opencode/scripts/memory-sync.mjs" export >/dev/null 2>&1 || true
-    fi
+  fi
+  echo "🔄 ADVISOR 2.0: memoria rotada → $CHANGELOG_FILE"
+  ROTATED=$((ROTATED + 1))
+  return 0
+}
+
+ROTATED=0
+summary_stats
+[[ -n "${FIRST_ENTRY_DATE:-}" ]] || exit 0
+
+# 1) Rotación semanal: la entrada más antigua es de una semana pasada.
+if [[ "$FIRST_ENTRY_DATE" < "$THIS_MONDAY" ]]; then
+  rotate_one || true
+  summary_stats
+fi
+
+# 2) Batch: drenar hasta SUMMARY <=150 líneas (cap 20 por commit).
+iter=0
+while [[ "$LINES" -gt 150 ]]; do
+  if [[ "$iter" -ge 20 ]]; then
+    echo "ADVISOR 2.0: límite batch (20) alcanzado; SUMMARY sigue >150 líneas." >&2
+    break
+  fi
+  rotate_one || break
+  iter=$((iter + 1))
+  summary_stats
+  [[ -n "${FIRST_ENTRY_DATE:-}" ]] || break
+done
+
+# 3) Regenerar derivados manifest+index si hubo rotación (no bloqueante).
+if [[ "$ROTATED" -gt 0 ]]; then
+  if [[ -f "$REPO_ROOT/.opencode/scripts/memory-sync.mjs" ]] && command -v node >/dev/null 2>&1; then
+    node "$REPO_ROOT/.opencode/scripts/memory-sync.mjs" buildManifest >/dev/null 2>&1 || true
+    node "$REPO_ROOT/.opencode/scripts/memory-sync.mjs" buildIndex >/dev/null 2>&1 || true
   fi
 fi

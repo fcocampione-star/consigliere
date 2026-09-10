@@ -6,6 +6,7 @@
  */
 import { existsSync, readFileSync, statSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { fingerprint, isFresh } from './memory-index.mjs';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const checks = [];
@@ -79,6 +80,33 @@ for (const [label, vivo, legacy] of [['CHANGELOG','CHANGELOG',null],['backups','
   const okDir = existsSync(join(ROOT,p));
   add(`dir ${label}`, okDir?'✅':'⚠️', okDir?`ok (${p})`:'falta','mkdir -p '+vivo);
 }
+
+// 8 manifest derivado (warning: regenerable, nunca error)
+const manifest = existsSync(join(ROOT,'.advisor','memory-manifest.json'))
+  ? join(ROOT,'.advisor','memory-manifest.json')
+  : join(ROOT,'.consigliere','memory-manifest.json');
+if (existsSync(manifest)) {
+  try {
+    const m = JSON.parse(readFileSync(manifest,'utf8'));
+    const ml = lines(manifest);
+    if (m.version===1 && Array.isArray(m.recent) && m.recent.length<=5 && ml<15)
+      add('manifest', '✅', `${m.recent.length} recientes, ${ml} líneas (${manifest.includes('.consigliere')?'legacy':'vivo'})`);
+    else add('manifest','⚠️','estructura inesperada o ≥15 líneas','node .opencode/scripts/memory-sync.mjs buildManifest');
+  } catch { add('manifest','⚠️','manifest corrupto','node .opencode/scripts/memory-sync.mjs buildManifest'); }
+} else add('manifest','⚠️','sin manifest (se genera en escritura)','node .opencode/scripts/memory-sync.mjs buildManifest');
+
+// 9 index derivado (warning: stale o ausente no bloquea search, hay fallback md+grep)
+const indexVivo = join(ROOT,'.advisor','memory-index.json');
+const indexLegacy = join(ROOT,'.consigliere','memory-index.json');
+const index = existsSync(indexVivo) ? indexVivo : indexLegacy;
+if (existsSync(index)) {
+  try {
+    const data = JSON.parse(readFileSync(index,'utf8'));
+    if (data.version===1 && isFresh(data, fingerprint()))
+      add('index', '✅', `${data.entries?.length||0} entries fresh (${index.includes('.consigliere')?'legacy':'vivo'})`);
+    else add('index','⚠️','índice desactualizado (stale)','node .opencode/scripts/memory-sync.mjs buildIndex');
+  } catch { add('index','⚠️','índice corrupto','node .opencode/scripts/memory-sync.mjs buildIndex'); }
+} else add('index','⚠️','sin índice (search usa fallback md+grep)','node .opencode/scripts/memory-sync.mjs buildIndex');
 
 const hasError = checks.some(c=>c.status==='❌');
 const hasWarn = checks.some(c=>c.status==='⚠️');

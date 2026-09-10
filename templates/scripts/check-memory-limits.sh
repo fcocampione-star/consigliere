@@ -53,6 +53,21 @@ else
   info "SUMMARY.md no existe aún (se creará al registrar el primer progreso)."
 fi
 
+# Verificar memory-manifest.json (derivado trackeable: <15 líneas)
+MANIFEST="$PROJECT_ROOT/.advisor/memory-manifest.json"
+if [[ -f "$MANIFEST" ]]; then
+  m_lines="$(wc -l < "$MANIFEST")"
+  if [[ "$m_lines" -ge 15 ]]; then
+    warn "memory-manifest.json tiene $m_lines líneas (límite: <15)."
+    info "Regenera con 'node .opencode/scripts/memory-sync.mjs buildManifest'."
+    errors=$((errors + 1))
+  else
+    ok "memory-manifest.json tiene $m_lines líneas (dentro del límite de 15)."
+  fi
+else
+  info "memory-manifest.json no existe aún (se genera con 'node .opencode/scripts/memory-sync.mjs buildManifest')."
+fi
+
 # Reporte final
 echo
 if [[ "$errors" -gt 0 ]]; then
