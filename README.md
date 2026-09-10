@@ -15,7 +15,7 @@
 <proyecto>/
 ├── .opencode/
 │   ├── agents/
-│   │   ├── orchestrator.md        # primario, routing 1-3 vs 4+ files + SDD-lite
+│   │   ├── advisor.md             # primario, routing 1-3 vs 4+ files + SDD-lite
 │   │   ├── explore.md             # audita contexto + skills (leaf, depth 2)
 │   │   ├── planner.md             # diseña + spec Given/When/Then (≤650w)
 │   │   ├── critic.md              # revisa decisiones de diseño

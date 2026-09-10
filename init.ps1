@@ -227,7 +227,7 @@ function Invoke-InteractiveCreate {
   $STACK_DEPLOY = Prompt-StackItem "Deploy" @("docker","vercel","fly","railway","aws")
   Write-Host ""
   Write-Info "Modelos por subagente (opcional — cheap=verifier/summarizer/explore, strong=builder/planner/critic)."
-  $MODEL_ORCHESTRATOR = Read-Host "  Modelo [orchestrator] (Enter = heredar)"
+  $MODEL_ADVISOR = Read-Host "  Modelo [advisor] (Enter = heredar)"
   $MODEL_PLANNER = Read-Host "  Modelo [planner] (Enter = heredar)"
   $MODEL_BUILDER = Read-Host "  Modelo [builder] (Enter = heredar)"
   $MODEL_CRITIC = Read-Host "  Modelo [critic] (Enter = heredar)"
@@ -247,11 +247,11 @@ function Invoke-InteractiveCreate {
   Write-Host "`n  Resumen: Proyecto $projectName Destino $targetDir"
   $go = Read-Host "  ¿Continuar? [S/n]"
   if ($go -match '^[Nn]$') { Write-Info "Cancelado."; exit 0 }
-  Invoke-CreateProject -ProjectName $projectName -TargetDir $targetDir -STACK_DB $STACK_DB -STACK_BACKEND $STACK_BACKEND -STACK_FRONTEND $STACK_FRONTEND -STACK_AUTH $STACK_AUTH -STACK_VALIDATION $STACK_VALIDATION -STACK_DEPLOY $STACK_DEPLOY -LANG_BACKEND $LANG_BACKEND -MODEL_ORCHESTRATOR $MODEL_ORCHESTRATOR -MODEL_PLANNER $MODEL_PLANNER -MODEL_BUILDER $MODEL_BUILDER -MODEL_CRITIC $MODEL_CRITIC -MODEL_VERIFIER $MODEL_VERIFIER -MODEL_SUMMARIZER $MODEL_SUMMARIZER -MODEL_EXPLORE $MODEL_EXPLORE -AUTO_CHOICE $AUTO_CHOICE -DO_GIT $DO_GIT
+  Invoke-CreateProject -ProjectName $projectName -TargetDir $targetDir -STACK_DB $STACK_DB -STACK_BACKEND $STACK_BACKEND -STACK_FRONTEND $STACK_FRONTEND -STACK_AUTH $STACK_AUTH -STACK_VALIDATION $STACK_VALIDATION -STACK_DEPLOY $STACK_DEPLOY -LANG_BACKEND $LANG_BACKEND -MODEL_ADVISOR $MODEL_ADVISOR -MODEL_PLANNER $MODEL_PLANNER -MODEL_BUILDER $MODEL_BUILDER -MODEL_CRITIC $MODEL_CRITIC -MODEL_VERIFIER $MODEL_VERIFIER -MODEL_SUMMARIZER $MODEL_SUMMARIZER -MODEL_EXPLORE $MODEL_EXPLORE -AUTO_CHOICE $AUTO_CHOICE -DO_GIT $DO_GIT
 }
 
 function Invoke-CreateProject {
-  param($ProjectName, $TargetDir, $STACK_DB, $STACK_BACKEND, $STACK_FRONTEND, $STACK_AUTH, $STACK_VALIDATION, $STACK_DEPLOY, $LANG_BACKEND, $MODEL_ORCHESTRATOR, $MODEL_PLANNER, $MODEL_BUILDER, $MODEL_CRITIC, $MODEL_VERIFIER, $MODEL_SUMMARIZER, $MODEL_EXPLORE, $AUTO_CHOICE, $DO_GIT)
+  param($ProjectName, $TargetDir, $STACK_DB, $STACK_BACKEND, $STACK_FRONTEND, $STACK_AUTH, $STACK_VALIDATION, $STACK_DEPLOY, $LANG_BACKEND, $MODEL_ADVISOR, $MODEL_PLANNER, $MODEL_BUILDER, $MODEL_CRITIC, $MODEL_VERIFIER, $MODEL_SUMMARIZER, $MODEL_EXPLORE, $AUTO_CHOICE, $DO_GIT)
   Write-Step "Generando proyecto '$ProjectName'"
   $preVivo = Test-Path (Join-Path $TargetDir $STATE_DIR)
   New-Item -ItemType Directory -Force -Path $TargetDir | Out-Null
@@ -259,7 +259,7 @@ function Invoke-CreateProject {
   $vars = @{
     PROJECT_NAME = $ProjectName; STACK_DB = $STACK_DB; STACK_BACKEND = $STACK_BACKEND; STACK_FRONTEND = $STACK_FRONTEND
     STACK_AUTH = $STACK_AUTH; STACK_VALIDATION = $STACK_VALIDATION; STACK_DEPLOY = $STACK_DEPLOY; DEV_COMMANDS = ""
-    MODEL_ORCHESTRATOR = $MODEL_ORCHESTRATOR; MODEL_PLANNER = $MODEL_PLANNER; MODEL_BUILDER = $MODEL_BUILDER
+    MODEL_ADVISOR = $MODEL_ADVISOR; MODEL_PLANNER = $MODEL_PLANNER; MODEL_BUILDER = $MODEL_BUILDER
     MODEL_VERIFIER = $MODEL_VERIFIER; MODEL_CRITIC = $MODEL_CRITIC; MODEL_SUMMARIZER = $MODEL_SUMMARIZER; MODEL_EXPLORE = $MODEL_EXPLORE; LANG_BACKEND = $LANG_BACKEND
   }
   Render-Tree $TEMPLATE_DIR $TargetDir $vars
@@ -327,6 +327,60 @@ function Do-Backup($targetDir, $dry, $itemList) {
   Write-Ok "Backup: $bf ($($present.Count) ítems)"
   Prune-Backups $backupDir
   $script:BackupFile = $bf
+}
+
+function Migrate-AgentRename($targetDir, $dry, $scope) {
+  # Migración agente orchestrator -> advisor (upgrade -Part harness|all, post-restore).
+  # mv (o borra huérfano), parchea opencode.json preservando model:, reescribe AGENTS.md
+  # en triple orden protegiendo la línea GLOBAL. BACKUP_ITEMS/PRESERVED sin cambio.
+  if ($scope -ne "harness" -and $scope -ne "all") { return }
+  $old = Join-Path $targetDir ".opencode\agents\orchestrator.md"
+  $new = Join-Path $targetDir ".opencode\agents\advisor.md"
+  $hasOld = Test-Path $old
+  $hasNew = Test-Path $new
+  if ($dry) {
+    if ($hasOld -and -not $hasNew) { Write-Info "[dry-run] migrar agents/orchestrator.md -> agents/advisor.md + parchear opencode.json/AGENTS.md" }
+    elseif ($hasOld -and $hasNew) { Write-Info "[dry-run] borrar huérfano agents/orchestrator.md + parchear opencode.json/AGENTS.md" }
+    else { Write-Info "[dry-run] migración agente advisor: sin huérfano (ok)" }
+    return
+  }
+  if ($hasOld -and -not $hasNew) {
+    try { Move-Item -Path $old -Destination $new -Force -ErrorAction Stop; Write-Ok "Migración agente: agents/orchestrator.md -> agents/advisor.md" }
+    catch { Write-Warn "Migración agente (mv) falló: $($_.Exception.Message)" }
+  } elseif ($hasOld -and $hasNew) {
+    try { Remove-Item -Path $old -Force -ErrorAction Stop; Write-Ok "Migración agente: huérfano agents/orchestrator.md borrado" }
+    catch { Write-Warn "Migración agente (borrado huérfano) falló: $($_.Exception.Message)" }
+  }
+  $pj = Join-Path $targetDir "opencode.json"
+  if ((Test-Path $pj) -and (Select-String -Path $pj -Pattern '"orchestrator"' -Quiet)) {
+    try {
+      $j = Get-Content -Raw -Path $pj -Encoding utf8 | ConvertFrom-Json
+      $touched = $false
+      if ($j.default_agent -eq "orchestrator") { $j.default_agent = "advisor"; $touched = $true }
+      if (($j.agent.PSObject.Properties.Name -contains "orchestrator") -and -not ($j.agent.PSObject.Properties.Name -contains "advisor")) {
+        $j.agent | Add-Member -NotePropertyName "advisor" -NotePropertyValue $j.agent.orchestrator
+        $j.agent.PSObject.Properties.Remove("orchestrator")
+        $touched = $true
+      }
+      if ($touched) {
+        $utf8NoBOM = New-Object System.Text.UTF8Encoding $false
+        [System.IO.File]::WriteAllText($pj, (($j | ConvertTo-Json -Depth 10) + "`n"), $utf8NoBOM)
+        Write-Ok "Migración agente: opencode.json -> advisor (model: preservado)"
+      }
+    } catch { Write-Warn "Migración agente (opencode.json) falló: $($_.Exception.Message)" }
+  }
+  $pa = Join-Path $targetDir "AGENTS.md"
+  if ((Test-Path $pa) -and (Select-String -Path $pa -Pattern 'MODEL_ORCHESTRATOR|Orchestrator|orchestrator' -Quiet)) {
+    try {
+      $out = foreach ($l in (Get-Content -Path $pa -Encoding utf8)) {
+        if ($l -match 'harness GLOBAL') { $l }
+        else { $l -creplace 'MODEL_ORCHESTRATOR','MODEL_ADVISOR' -creplace 'Orchestrator','Advisor' -creplace 'orchestrator','advisor' }
+      }
+      $utf8NoBOM = New-Object System.Text.UTF8Encoding $false
+      [System.IO.File]::WriteAllText($pa, ($out -join "`n"), $utf8NoBOM)
+      Write-Ok "Migración agente: AGENTS.md -> advisor"
+    } catch { Write-Warn "Migración agente (AGENTS.md) falló: $($_.Exception.Message)" }
+  }
 }
 
 function Render-Selected($part, $targetDir, $vars) {
@@ -543,6 +597,7 @@ if ($Dir -or $Name -or $StackDb -or $StackBackend -or $Status -or $Restore -or $
       $preview = @($PRESERVED | Where-Object { $items -contains $_ })
       if ($preview.Count -gt 0) { Write-Host "ℹ️  [dry-run] restore -> $($preview -join ', ')" -ForegroundColor Cyan }
       Write-Host "ℹ️  [dry-run] would render $TEMPLATE_DIR -> $targetDir --part $scope (project: $projectName)" -ForegroundColor Cyan
+      Migrate-AgentRename $targetDir $true $scope
       Write-Host "ℹ️  [dry-run] no se escribió nada en disco" -ForegroundColor Cyan
       Show-Finish $projectName $targetDir
       exit 0
@@ -565,7 +620,7 @@ if ($Dir -or $Name -or $StackDb -or $StackBackend -or $Status -or $Restore -or $
   $vars = @{
     PROJECT_NAME = $projectName; STACK_DB = $StackDb; STACK_BACKEND = $StackBackend; STACK_FRONTEND = $StackFrontend
     STACK_AUTH = $StackAuth; STACK_VALIDATION = $StackValidation; STACK_DEPLOY = $StackDeploy; DEV_COMMANDS = ""
-    MODEL_ORCHESTRATOR = ""; MODEL_PLANNER = ""; MODEL_BUILDER = ""; MODEL_VERIFIER = ""; MODEL_CRITIC = ""; MODEL_SUMMARIZER = ""; MODEL_EXPLORE = ""; LANG_BACKEND = $lang
+    MODEL_ADVISOR = ""; MODEL_PLANNER = ""; MODEL_BUILDER = ""; MODEL_VERIFIER = ""; MODEL_CRITIC = ""; MODEL_SUMMARIZER = ""; MODEL_EXPLORE = ""; LANG_BACKEND = $lang
   }
   if ($Upgrade -or $scope -eq "all") { Render-Tree $TEMPLATE_DIR $targetDir $vars }
   elseif ($scope -eq "autoskills") { Write-Info "--part autoskills: solo autoskills, sin render" }
@@ -587,6 +642,7 @@ if ($Dir -or $Name -or $StackDb -or $StackBackend -or $Status -or $Restore -or $
       else { Write-Warn "Restauración de memoria/config falló (backup en $bf)" }
     }
   }
+  if ($Upgrade) { Migrate-AgentRename $targetDir $false $scope }
   if ($Upgrade) { Write-Ok "Harness actualizado (--part $scope)" } else { Write-Ok "Harness $projectName generado$(if ($Part) { " (--part $Part)" })" }
   if ($doGit) { Git-InitAndCommit $targetDir }
   if (($scope -eq "all" -or $scope -eq "autoskills") -and $Autoskills -ne "3" -and $Autoskills -ne "no") { Handle-Autoskills $Autoskills $targetDir }

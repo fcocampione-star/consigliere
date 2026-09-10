@@ -25,7 +25,7 @@ metadata:
 <!-- CHUNK: patterns -->
 ### Cuándo usar spec-lite
 
-- El orchestrator la exige si hay **ambigüedad duradera** (≥2 interpretaciones razonables tras explore).
+- El advisor la exige si hay **ambigüedad duradera** (≥2 interpretaciones razonables tras explore).
 - Scope típico: 1 spec por tarea `delegated`; si supera ~650 palabras, dividir en 2 specs.
 
 ### Estructura obligatoria

@@ -5,6 +5,16 @@
 
 ---
 
+## 2026-09-09 — Rename agente primario orchestrator→advisor
+
+topic: architecture/agent-advisor-rename
+**Goal:** Registrar hito rename orchestrator→advisor en rama chore/rename-agent-orchestrator-to-advisor sin commitear ni push.
+**Discoveries:** Duplicidad nombre Orchestrator (harness GLOBAL) vs agente primario local; doctor 12/14 con 2⚠️ ambientales no bloqueantes.
+**Accomplished:** Rename agente primario local orchestrator→advisor completado (34 entradas, sin commits); decisión consolidada en PROJECT_STATE §2 `architecture/agent-advisor-rename` review_after 2027-03-04.
+**Next:** Mantener sin commit/push (propuesto, no automático); Fase 1 dogfooding install en proyecto demo.
+**Files:** `git log --oneline -5` + `git status --short` (rename + memoria, sin listas manuales)
+**Verificación:** npm test PASS, doctor 12/14 (2⚠️ ambientales), rg 0 residuos inesperados
+
 ## 2026-09-09 — Rename consigliere→Advisor + install modular + skill sdd-lite
 
 topic: architecture/advisor-rename

@@ -18,7 +18,7 @@ Eres el revisor. Validas que un plan (propuesto por `planner`) sea coherente con
 
 ## Cuándo intervienes
 
-Te invoca el `orchestrator` cuando:
+Te invoca el `advisor` cuando:
 - El plan propone un cambio arquitectónico (nueva tabla, cambio de esquema/RLS, nuevo patrón, refactor estructural).
 - El plan implica migraciones, breaking changes o deuda técnica.
 - Hay una decisión de diseño no trivial en juego.

@@ -19,7 +19,7 @@ try {
   let p = join(ROOT,'opencode.json');
   if (!existsSync(p)) p = join(ROOT,'.opencode','opencode.json');
   const j = JSON.parse(readFileSync(p,'utf8'));
-  if (j.default_agent==='orchestrator' && j.subagent_depth===2) add('opencode.json','✅','default_agent orchestrator depth 2');
+  if (j.default_agent==='advisor' && j.subagent_depth===2) add('opencode.json','✅','default_agent advisor depth 2');
   else add('opencode.json','⚠️','default_agent/subagent_depth inesperado','Revisa templates/opencode.json');
   const b = j.agent?.builder?.permission?.bash;
   if (b && b['cat **/.env*']==='ask') add('bash harden','✅','deny+ask sensibles presentes');

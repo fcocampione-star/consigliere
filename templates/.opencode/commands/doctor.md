@@ -6,7 +6,7 @@ subtask: true
 
 Ejecuta diagnóstico del harness Advisor 2.0. Revisa (read-only, sin editar):
 
-1. `opencode.json` — schema, default_agent `orchestrator`, subagent_depth 2, agents placeholders, bash harden deny/ask.
+1. `opencode.json` — schema, default_agent `advisor`, subagent_depth 2, agents placeholders, bash harden deny/ask.
 2. Memoria: `PROJECT_STATE.md` <100 líneas, §2 <80, `SUMMARY.md` <150, entradas con `topic:`, `review_after`, índice §4 coherente con `CHANGELOG/`.
 3. Hooks: `.git/hooks/post-commit` existe y es ejecutable, apunta a `post-commit-memory-rotate.sh`.
 4. Skills: `node .opencode/skills/_skill-loader/loader.mjs list` (usa cache) + `.agents/skills` vs `AGENTS.md` stack declarado, reporta faltantes.

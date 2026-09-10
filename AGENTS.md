@@ -20,8 +20,9 @@
 ## Agent pipeline (Advisor 2.0 — routing orgánico + SDD-lite)
 
 - Custom agents live in `.opencode/agents/`; commands in `.opencode/commands/`.
-- `orchestrator` is the additional **primary** agent (Tab) que coordina: siempre lee `PROJECT_STATE.md` primero, luego aplica **routing orgánico**: `direct` (1-3 files) vs `delegated` (4+ files / 2+ writes) vs `spec-lite` (ambigüedad duradera → spec ≤650w Given/When/Then).
-- **One level of depth** (orchestrator delega); leaf agents `task: deny` (except `planner→explore` depth 2).
+- `advisor` is the additional **primary** agent (Tab) que coordina: siempre lee `PROJECT_STATE.md` primero, luego aplica **routing orgánico**: `direct` (1-3 files) vs `delegated` (4+ files / 2+ writes) vs `spec-lite` (ambigüedad duradera → spec ≤650w Given/When/Then).
+- **Desambiguación**: `bin advisor` (CLI) ≠ `agent advisor` (Tab local primario); `Orchestrator` = harness GLOBAL distinto.
+- **One level of depth** (advisor delega); leaf agents `task: deny` (except `planner→explore` depth 2).
 - **Models**: per-agent `model:` en `opencode.json` (placeholders `{{MODEL_*}}` → cheap=verifier/summarizer/explore, strong=builder/planner/critic).
 - **Builder safety**: bash harden `*: allow`, `deny` irreparable + `ask` sensibles (`**/.env*`, `**/*.pem`, `**/*.key`, `**/secrets/*`, `~/.ssh/*`, `git push`).
 - **Commits proposed, never automatic** (`git commit/push/amend → ask`).

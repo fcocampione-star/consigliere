@@ -81,7 +81,7 @@ render_file() {
   p_valid="$(sed_escape "${STACK_VALIDATION:-}")"
   p_deploy="$(sed_escape "${STACK_DEPLOY:-}")"
   p_dev="$(sed_escape "${DEV_COMMANDS:-}")"
-  p_mo="$(sed_escape "${MODEL_ORCHESTRATOR:-}")"
+  p_mo="$(sed_escape "${MODEL_ADVISOR:-}")"
   p_mp="$(sed_escape "${MODEL_PLANNER:-}")"
   p_mb="$(sed_escape "${MODEL_BUILDER:-}")"
   p_mv="$(sed_escape "${MODEL_VERIFIER:-}")"
@@ -99,7 +99,7 @@ render_file() {
     -e "s|{{STACK_VALIDATION}}|$p_valid|g" \
     -e "s|{{STACK_DEPLOY}}|$p_deploy|g" \
     -e "s|{{DEV_COMMANDS}}|$p_dev|g" \
-    -e "s|{{MODEL_ORCHESTRATOR}}|$p_mo|g" \
+    -e "s|{{MODEL_ADVISOR}}|$p_mo|g" \
     -e "s|{{MODEL_PLANNER}}|$p_mp|g" \
     -e "s|{{MODEL_BUILDER}}|$p_mb|g" \
     -e "s|{{MODEL_VERIFIER}}|$p_mv|g" \
@@ -164,7 +164,7 @@ interactive_create() {
 
   echo
   info "Modelos por subagente (opcional — cheap=verifier/summarizer/explore, strong=builder/planner/critic)."
-  prompt_model "orchestrator" MODEL_ORCHESTRATOR
+  prompt_model "advisor" MODEL_ADVISOR
   prompt_model "planner" MODEL_PLANNER
   prompt_model "builder" MODEL_BUILDER
   prompt_model "critic" MODEL_CRITIC
@@ -374,6 +374,50 @@ do_backup() {
   ok "Backup: $bf (${#present[@]} ítems)"
   prune_backups "$target/$STATE_DIR/backups"
   DO_BACKUP_FILE="$bf"
+}
+
+migrate_agent_rename() {
+  # Migración agente orchestrator -> advisor (upgrade --part harness|all, post-restore).
+  # $1=scope. mv (o borra huérfano), parchea opencode.json preservando model:, reescribe AGENTS.md
+  # en triple orden protegiendo la línea GLOBAL. BACKUP_ITEMS/PRESERVED sin cambio.
+  local scope="$1"
+  [[ "$scope" == "harness" || "$scope" == "all" ]] || return 0
+  local old="$TARGET_DIR/.opencode/agents/orchestrator.md"
+  local new="$TARGET_DIR/.opencode/agents/advisor.md"
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    if [[ -f "$old" && ! -f "$new" ]]; then info "[dry-run] migrar agents/orchestrator.md -> agents/advisor.md + parchear opencode.json/AGENTS.md"
+    elif [[ -f "$old" && -f "$new" ]]; then info "[dry-run] borrar huérfano agents/orchestrator.md + parchear opencode.json/AGENTS.md"
+    else info "[dry-run] migración agente advisor: sin huérfano (ok)"; fi
+    return 0
+  fi
+  if [[ -f "$old" && ! -f "$new" ]]; then
+    mv -- "$old" "$new" 2>/dev/null && ok "Migración agente: agents/orchestrator.md -> agents/advisor.md" || warn "Migración agente (mv) falló"
+  elif [[ -f "$old" && -f "$new" ]]; then
+    rm -f -- "$old" 2>/dev/null && ok "Migración agente: huérfano agents/orchestrator.md borrado" || warn "Migración agente (borrado huérfano) falló"
+  fi
+  if [[ -f "$TARGET_DIR/opencode.json" ]] && grep -q '"orchestrator"' "$TARGET_DIR/opencode.json" 2>/dev/null; then
+    if command -v node >/dev/null 2>&1; then
+      if node -e 'const fs=require("fs");const p=process.argv[1];const j=JSON.parse(fs.readFileSync(p,"utf8"));let t=false;if(j.default_agent==="orchestrator"){j.default_agent="advisor";t=true;}if(j.agent&&j.agent.orchestrator&&!j.agent.advisor){j.agent.advisor=j.agent.orchestrator;delete j.agent.orchestrator;t=true;}if(t){fs.writeFileSync(p,JSON.stringify(j,null,2)+"\n");}process.exit(t?0:1);' "$TARGET_DIR/opencode.json" 2>/dev/null; then
+        ok "Migración agente: opencode.json -> advisor (model: preservado)"
+      else
+        warn "Migración agente (opencode.json) falló"
+      fi
+    else
+      sed -i.bak -e 's/"default_agent": *"orchestrator"/"default_agent": "advisor"/' -e 's/"orchestrator": *{/"advisor": {/' "$TARGET_DIR/opencode.json" 2>/dev/null \
+        && { rm -f "$TARGET_DIR/opencode.json.bak"; ok "Migración agente: opencode.json -> advisor (model: preservado)"; } \
+        || warn "Migración agente (opencode.json) falló"
+    fi
+  fi
+  if [[ -f "$TARGET_DIR/AGENTS.md" ]] && grep -qE 'MODEL_ORCHESTRATOR|(o|O)rchestrator' "$TARGET_DIR/AGENTS.md" 2>/dev/null; then
+    if command -v perl >/dev/null 2>&1; then
+      perl -i -pe 's/MODEL_ORCHESTRATOR/MODEL_ADVISOR/g; if (!/harness GLOBAL/) { s/Orchestrator/Advisor/g; s/orchestrator/advisor/g; }' "$TARGET_DIR/AGENTS.md" 2>/dev/null \
+        && ok "Migración agente: AGENTS.md -> advisor" || warn "Migración agente (AGENTS.md) falló"
+    else
+      sed -i.bak -e 's/MODEL_ORCHESTRATOR/MODEL_ADVISOR/g; s/Orchestrator/Advisor/g; s/orchestrator/advisor/g' "$TARGET_DIR/AGENTS.md" 2>/dev/null \
+        && { rm -f "$TARGET_DIR/AGENTS.md.bak"; ok "Migración agente: AGENTS.md -> advisor"; } \
+        || warn "Migración agente (AGENTS.md) falló"
+    fi
+  fi
 }
 
 render_selected() {
@@ -679,6 +723,7 @@ main() {
         info "[dry-run] restore -> ${preview[*]}"
       fi
       info "[dry-run] would render $TEMPLATE_DIR -> $TARGET_DIR --part $scope (project: $PROJECT_NAME)"
+      migrate_agent_rename "$scope"
       info "[dry-run] no se escribió nada en disco"
       finish
       exit 0
@@ -721,6 +766,7 @@ main() {
       fi
     fi
   fi
+  if [[ "$UPGRADE" -eq 1 ]]; then migrate_agent_rename "$scope"; fi
   if [[ "$UPGRADE" -eq 1 ]]; then ok "Harness actualizado (--part $scope)"; else ok "Harness generado${PART:+ (--part $PART)}"; fi
   if [[ "$DO_GIT" -eq 1 ]]; then
     git_init_and_commit "$TARGET_DIR"
