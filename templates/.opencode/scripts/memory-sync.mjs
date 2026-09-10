@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * CONSIGLIERE 2.0 — memory-sync.mjs (sync local, sin cloud)
- * Inspirado en Engram sync local → .consigliere/chunks/
+ * ADVISOR 2.0 — memory-sync.mjs (sync local, sin cloud)
+ * Estado vivo en .advisor/chunks/; legacy .consigliere/chunks/ solo
+ * fallback de LECTURA en import/status (nunca se escribe ahí).
  * Uso:
  *   node memory-sync.mjs export [--all]  # exporta SUMMARY/STATE a chunks JSON
  *   node memory-sync.mjs import          # importa chunks a CHANGELOG si faltan
@@ -11,7 +12,8 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSy
 import { join } from 'node:path';
 
 const ROOT = join(import.meta.dirname, '..', '..');
-const CHUNKS_DIR = join(ROOT, '.consigliere', 'chunks');
+const CHUNKS_DIR = join(ROOT, '.advisor', 'chunks'); // escritura siempre aquí
+const LEGACY_CHUNKS_DIR = join(ROOT, '.consigliere', 'chunks'); // lectura fallback
 const SUMMARY = join(ROOT, 'SUMMARY.md');
 const STATE = join(ROOT, 'PROJECT_STATE.md');
 
@@ -48,11 +50,14 @@ function exportChunks(all=false) {
 }
 
 function importChunks() {
-  if (!existsSync(CHUNKS_DIR)) { console.log('Sin chunks en .consigliere/chunks/'); return; }
+  // Lee vivo + legacy (sin duplicar); escribe solo CHANGELOG/.
+  const dirs = [CHUNKS_DIR, LEGACY_CHUNKS_DIR].filter((d, i, a) => existsSync(d) && a.indexOf(d) === i);
+  if (!dirs.length) { console.log('Sin chunks en .advisor/chunks/'); return; }
   let imported=0;
-  for (const f of readdirSync(CHUNKS_DIR)) {
+  for (const dir of dirs) {
+  for (const f of readdirSync(dir)) {
     if (!f.endsWith('.json') || f==='state.json') continue;
-    const p = join(CHUNKS_DIR,f);
+    const p = join(dir,f);
     const arr = JSON.parse(readFileSync(p,'utf8'));
     const changelog = join(ROOT,'CHANGELOG', f.replace('.json','.md'));
     let existing=''; if (existsSync(changelog)) existing=readFileSync(changelog,'utf8');
@@ -70,17 +75,20 @@ function importChunks() {
       }
     }
   }
+  } // for dir
   console.log(`Import: ${imported} bloques a CHANGELOG/`);
 }
 
 function status() {
-  const files = existsSync(CHUNKS_DIR)?readdirSync(CHUNKS_DIR).filter(f=>f.endsWith('.json')):[];
-  console.log(`Chunks: ${files.length} en ${CHUNKS_DIR}`);
-  for (const f of files) {
-    const st = statSync(join(CHUNKS_DIR,f));
-    const arr = (()=>{try{return JSON.parse(readFileSync(join(CHUNKS_DIR,f),'utf8'))}catch{return null}})();
-    const count = Array.isArray(arr)?arr.length:(arr?'1 (state)':'?');
-    console.log(`  - ${f}  ${count} entries  ${new Date(st.mtimeMs).toISOString()}`);
+  for (const [label, dir] of [['vivo', CHUNKS_DIR], ['legacy', LEGACY_CHUNKS_DIR]]) {
+    const files = existsSync(dir)?readdirSync(dir).filter(f=>f.endsWith('.json')):[];
+    console.log(`Chunks (${label}): ${files.length} en ${dir}`);
+    for (const f of files) {
+      const st = statSync(join(dir,f));
+      const arr = (()=>{try{return JSON.parse(readFileSync(join(dir,f),'utf8'))}catch{return null}})();
+      const count = Array.isArray(arr)?arr.length:(arr?'1 (state)':'?');
+      console.log(`  - ${f}  ${count} entries  ${new Date(st.mtimeMs).toISOString()}`);
+    }
   }
   console.log(`SUMMARY: ${existsSync(SUMMARY)?'ok':'falta'}  STATE: ${existsSync(STATE)?'ok':'falta'}`);
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * CONSIGLIERE 2.0 — doctor.mjs (health check programático, md+grep)
+ * ADVISOR 2.0 — doctor.mjs (health check programático, md+grep)
  * Uso: node .opencode/scripts/doctor.mjs [--json]
  * Códigos: 0 ok, 1 warnings, 2 errors
  */
@@ -23,7 +23,7 @@ try {
   const b = j.agent?.builder?.permission?.bash;
   if (b && b['cat **/.env*']==='ask') add('bash harden','✅','deny+ask sensibles presentes');
   else add('bash harden','⚠️','falta harden v2.0 (cat **/.env* -> ask)','Re-render init.mjs --upgrade');
-} catch(e){ add('opencode.json','❌',e.message,'npx consigliere-harness@latest . --upgrade'); }
+} catch(e){ add('opencode.json','❌',e.message,'npx advisor-harness@latest . --upgrade'); }
 
 // 2 memoria sizes
 const ps = join(ROOT,'PROJECT_STATE.md');
@@ -59,21 +59,25 @@ if (existsSync(lock)) {
   } catch { add('.memory-lock','⚠️','existe','rmdir .memory-lock'); }
 } else add('.memory-lock','✅','sin lock (ok)');
 
-// 5 skills loader cache
-const cache = join(ROOT,'.consigliere','skill-registry.cache.json');
+// 5 skills loader cache (dual-path: .advisor/ primero, legacy .consigliere/ read-only)
+const cache = existsSync(join(ROOT,'.advisor','skill-registry.cache.json'))
+  ? join(ROOT,'.advisor','skill-registry.cache.json')
+  : join(ROOT,'.consigliere','skill-registry.cache.json');
 if (existsSync(cache)) {
-  try { const j=JSON.parse(readFileSync(cache,'utf8')); add('skill cache', j.version===1?'✅':'⚠️', `${j.entries?.length||0} skills cacheadas`); } catch { add('skill cache','⚠️','cache corrupta','node .opencode/skills/_skill-loader/loader.mjs refresh --force'); }
+  try { const j=JSON.parse(readFileSync(cache,'utf8')); add('skill cache', j.version===2?'✅':'⚠️', `${j.entries?.length||0} skills cacheadas (${cache.includes('.consigliere')?'legacy':'vivo'})`, j.version!==2?'node .opencode/skills/_skill-loader/loader.mjs refresh --force':''); } catch { add('skill cache','⚠️','cache corrupta','node .opencode/skills/_skill-loader/loader.mjs refresh --force'); }
 } else add('skill cache','⚠️','sin cache (se genera en /discover)','node .opencode/skills/_skill-loader/loader.mjs refresh');
 
 // 6 scripts
 for (const s of ['memory-index.mjs','memory-sync.mjs','doctor.mjs']) {
   const p = join(ROOT,'.opencode','scripts',s);
-  add(`script ${s}`, existsSync(p)?'✅':'❌', existsSync(p)?'presente':'falta','npx consigliere-harness@latest . --upgrade');
+  add(`script ${s}`, existsSync(p)?'✅':'❌', existsSync(p)?'presente':'falta','npx advisor-harness@latest . --upgrade');
 }
 
-// 7 dirs
-for (const d of ['CHANGELOG','.consigliere/backups','.consigliere/chunks']) {
-  add(`dir ${d}`, existsSync(join(ROOT,d))?'✅':'⚠️', existsSync(join(ROOT,d))?'ok':'falta','mkdir -p '+d);
+// 7 dirs (dual-path estado: .advisor/ vivo, legacy .consigliere/ read-only)
+for (const [label, vivo, legacy] of [['CHANGELOG','CHANGELOG',null],['backups','.advisor/backups','.consigliere/backups'],['chunks','.advisor/chunks','.consigliere/chunks']]) {
+  const p = existsSync(join(ROOT,vivo)) ? vivo : (legacy && existsSync(join(ROOT,legacy)) ? legacy : vivo);
+  const okDir = existsSync(join(ROOT,p));
+  add(`dir ${label}`, okDir?'✅':'⚠️', okDir?`ok (${p})`:'falta','mkdir -p '+vivo);
 }
 
 const hasError = checks.some(c=>c.status==='❌');
@@ -81,7 +85,7 @@ const hasWarn = checks.some(c=>c.status==='⚠️');
 const json = process.argv.includes('--json');
 if (json) console.log(JSON.stringify({ checks }, null, 2));
 else {
-  console.log('CONSIGLIERE doctor — ' + (hasError?'❌ errores':hasWarn?'⚠️ warnings':'✅ ok'));
+  console.log('ADVISOR doctor — ' + (hasError?'❌ errores':hasWarn?'⚠️ warnings':'✅ ok'));
   console.log('| Check | Estado | Detalle | Fix |');
   console.log('|-------|--------|---------|-----|');
   for (const c of checks) console.log(`| ${c.name} | ${c.status} | ${c.detail} | ${c.fix} |`);

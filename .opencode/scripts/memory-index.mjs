@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * CONSIGLIERE 2.0 — memory-index.mjs (md+grep, sin SQLite)
+ * ADVISOR 2.0 — memory-index.mjs (md+grep, sin SQLite)
  * Búsqueda progresiva inspirada en Engram: search → timeline → get
  * Uso:
  *   node memory-index.mjs search "query" [--json]

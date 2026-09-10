@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CONSIGLIERE — Rotación automática de memoria tras cada commit.
+# ADVISOR — Rotación automática de memoria tras cada commit.
 # Instalado por init.sh en .git/hooks/post-commit.
 #
 # Rota la entrada más antigua de SUMMARY.md a CHANGELOG/<lunes-semana>.md
@@ -77,8 +77,8 @@ if [[ "$should_rotate" -eq 1 ]]; then
         sed -i "/^## 4. Índice de historial archivado/a $WEEK_KEY" "$PROJECT_STATE"
       fi
     fi
-    echo "🔄 CONSIGLIERE 2.0: memoria rotada → $CHANGELOG_FILE"
-    # Sync local a .consigliere/chunks/ si existe el script (no bloqueante)
+    echo "🔄 ADVISOR 2.0: memoria rotada → $CHANGELOG_FILE"
+    # Sync local a .advisor/chunks/ si existe el script (no bloqueante)
     if [[ -f "$REPO_ROOT/.opencode/scripts/memory-sync.mjs" ]] && command -v node >/dev/null 2>&1; then
       node "$REPO_ROOT/.opencode/scripts/memory-sync.mjs" export >/dev/null 2>&1 || true
     fi

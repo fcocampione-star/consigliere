@@ -1,10 +1,12 @@
 #!/usr/bin/env node
 /**
- * CONSIGLIERE 2.0 — Skill Loader runtime con cache fingerprint
+ * ADVISOR 2.0 — Skill Loader runtime con cache fingerprint
  *
  * Carga skills bajo demanda (proyecto + autoskills) + chunks.
- * Cache: .consigliere/skill-registry.cache.json con fingerprint path+mtime+size
+ * Cache: .advisor/skill-registry.cache.json con fingerprint path+mtime+size
  *        inspirado en Gentle AI skill-registry fingerprint.
+ *        Legacy pre-rename .consigliere/ solo como fallback de LECTURA
+ *        (nunca se escribe ahí; sin symlink por compat Windows).
  *
  * Uso:
  *   node loader.mjs list [--refresh|--force|--json]
@@ -24,9 +26,11 @@ const LOCATIONS = [
   join(PROJECT_ROOT, '.opencode', 'skills'),
   join(PROJECT_ROOT, '.agents', 'skills'),
 ];
-const CACHE_DIR = join(PROJECT_ROOT, '.consigliere');
+const CACHE_DIR = join(PROJECT_ROOT, '.advisor');
+const LEGACY_CACHE_DIR = join(PROJECT_ROOT, '.consigliere'); // fallback solo lectura
 const CACHE_FILE = join(CACHE_DIR, 'skill-registry.cache.json');
-const CACHE_VERSION = 1;
+const LEGACY_CACHE_FILE = join(LEGACY_CACHE_DIR, 'skill-registry.cache.json');
+const CACHE_VERSION = 2;
 
 function listSkillsRaw() {
   const found = new Map();
@@ -59,12 +63,16 @@ function fingerprint(skills) {
 }
 
 function loadCache() {
-  if (!existsSync(CACHE_FILE)) return null;
-  try {
-    const data = JSON.parse(readFileSync(CACHE_FILE, 'utf8'));
-    if (data.version !== CACHE_VERSION) return null;
-    return data;
-  } catch { return null; }
+  // Precedencia: .advisor/ primero; legacy .consigliere/ solo lectura.
+  for (const f of [CACHE_FILE, LEGACY_CACHE_FILE]) {
+    if (!existsSync(f)) continue;
+    try {
+      const data = JSON.parse(readFileSync(f, 'utf8'));
+      if (data.version !== CACHE_VERSION) continue;
+      return data;
+    } catch { continue; }
+  }
+  return null;
 }
 
 function saveCache(fp) {

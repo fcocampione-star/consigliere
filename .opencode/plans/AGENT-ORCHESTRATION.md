@@ -1,10 +1,10 @@
 # AGENT-ORCHESTRATION — Sistema de agentes del proyecto
 
-> Plan de diseño del pipeline de agentes. Referenciado desde `PROJECT_STATE.md`. Generado por el harness CONSIGLIERE.
+> Plan de diseño del pipeline de agentes. Referenciado desde `PROJECT_STATE.md`. Generado por el harness ADVISOR.
 
 ## Estado
 
-✅ Implementado por `consigliere init` (harness).
+✅ Implementado por `advisor init` (harness).
 
 ## Objetivo
 
@@ -47,7 +47,7 @@ Reducir el desorden de contexto en sesiones largas delegando el trabajo en agent
 - `.opencode/agents/planner.md` — con spec Given/When/Then; `builder.md` harden; `summarizer.md` topic upsert; `verifier.md`/`critic.md`.
 - `.opencode/opencode.json` — `default_agent: orchestrator`, `depth 2`, `model` cheap vs strong, `bash` harden v2.0.
 - `.opencode/commands/routine.md` — `/routine` routing+spec-lite; `/discover`; `/doctor`; `/review`; `/record`; `/rotate-memory`; `/compact-state`.
-- `.opencode/skills/_skill-loader/loader.mjs` — con cache fingerprint `.consigliere/skill-registry.cache.json` + `refresh`.
+- `.opencode/skills/_skill-loader/loader.mjs` — con cache fingerprint `.advisor/skill-registry.cache.json` + `refresh`.
 - `.opencode/scripts/memory-index.mjs` — search/timeline/get (md+grep); `memory-sync.mjs` export/import; `doctor.mjs`.
 - `.opencode/hooks/post-commit-memory-rotate.sh` — rotación + sync export.
 
@@ -59,10 +59,10 @@ Reducir el desorden de contexto en sesiones largas delegando el trabajo en agent
 
 ## Estado 2.0
 
-Consigliere 2.0 implementado: solo por proyecto (cero global), routing `direct/delegated/spec-lite`, harden sensibles, skill-cache, doctor, memoria topic+stale+sync. Solo `opencode`.
+Advisor 2.0 implementado: solo por proyecto (cero global), routing `direct/delegated/spec-lite`, harden sensibles, skill-cache, doctor, memoria topic+stale+sync. Solo `opencode`.
 
 ## Pendientes / posibles mejoras futuras
 
 - Asignar `model` concreto por subagente (cheap vs strong) según costo.
 - Permisos finos por proyecto.
-- Ventana sync cloud opcional (hoy solo local `.consigliere/chunks/`).
+- Ventana sync cloud opcional (hoy solo local `.advisor/chunks/`).

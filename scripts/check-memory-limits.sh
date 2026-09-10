@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CONSIGLIERE — Verificación de límites de memoria persistente.
+# ADVISOR — Verificación de límites de memoria persistente.
 # Comprueba que PROJECT_STATE.md y SUMMARY.md respeten los límites de líneas
 # y sugiere la compactación o rotación correspondiente.
 #

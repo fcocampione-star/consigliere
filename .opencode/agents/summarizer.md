@@ -78,7 +78,7 @@ Compat: si el usuario usa formato viejo `**Qué:**/**Verificación:**`, acéptal
 2. Crea header si no existe: `# Changelog YYYY-MM-DD` + nota git log.
 3. Mueve entrada completa al inicio del changelog.
 4. Bórrala de SUMMARY.md, actualiza índice SUMMARY + PROJECT_STATE §4.
-5. Si `.consigliere/chunks/` existe, ejecuta `node .opencode/scripts/memory-sync.mjs export` (sync local).
+5. Si `.advisor/chunks/` existe, ejecuta `node .opencode/scripts/memory-sync.mjs export` (sync local).
 
 Hook `hooks/post-commit-memory-rotate.sh` automatiza esto; coordina con él.
 

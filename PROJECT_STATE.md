@@ -1,4 +1,4 @@
-# PROJECT_STATE — consigliere (estado vivo del proyecto)
+# PROJECT_STATE — advisor (estado vivo del proyecto)
 
 > **CAPA 0 del sistema de contexto.** Este archivo es la ÚNICA fuente que los agentes deben leer obligatoriamente al iniciar una sesión. `SUMMARY.md` (última semana) y `CHANGELOG/` (historial archivado) se leen **solo on-demand** cuando la tarea requiere contexto histórico. Estructura/detalle técnico completo: `AGENTS.md` y `.opencode/plans/`.
 
@@ -18,8 +18,9 @@
 
 - Harness-only sin runtime de app: Node >=18 ESM + Bash/PowerShell + git/tar; sin DB/app server, scaffolding por proyecto vía init.mjs/init.sh/init.ps1 [topic: architecture/harness-scope] review_after: 2026-12-03
 - Memoria 3 capas md+grep (PROJECT_STATE/SUMMARY/CHANGELOG) con búsqueda grep+perl y cache fingerprint; SQLite solo fallback [topic: architecture/stack-md-grep] review_after: 2026-12-03
-- Skill loader con cache fingerprint `.consigliere/skill-registry.cache.json` (path+mtime+size) y chunks urls/patterns/shortcuts/examples/commands bajo demanda [topic: dx/skill-loader-cache] review_after: 2026-12-03
-- Política upgrade: `--upgrade` preserva memoria/config viva del proyecto (PROJECT_STATE.md, SUMMARY.md, opencode.json, AGENTS.md, .gitignore se restauran desde backup tras re-render); solo refresca código harness. Backup completo keep 5 (`.opencode/ AGENTS.md PROJECT_STATE.md SUMMARY.md CHANGELOG/ .consigliere/ opencode.json .gitignore skills-lock.json scripts/`, excluye `.consigliere/backups` y `.memory-lock`); si el backup falla el upgrade aborta (exit≠0); `--upgrade` exime el gate dir-no-vacío solo con marcador de harness (`.opencode/` o `AGENTS.md`); `--dry-run` planifica backup+restore sin escribir [topic: architecture/upgrade-preserve] review_after: 2027-03-04
+- Skill loader con cache fingerprint `.advisor/skill-registry.cache.json` (path+mtime+size) y chunks urls/patterns/shortcuts/examples/commands bajo demanda [topic: dx/skill-loader-cache] review_after: 2026-12-03
+- Política upgrade: `--upgrade` preserva memoria/config viva del proyecto (PROJECT_STATE.md, SUMMARY.md, opencode.json, AGENTS.md, .gitignore se restauran desde backup tras re-render); solo refresca código harness. Backup completo keep 5 (`.opencode/ AGENTS.md PROJECT_STATE.md SUMMARY.md CHANGELOG/ .advisor/ opencode.json .gitignore skills-lock.json scripts/`, excluye `.advisor/backups` y `.memory-lock`); si el backup falla el upgrade aborta (exit≠0); `--upgrade` exime el gate dir-no-vacío solo con marcador de harness (`.opencode/` o `AGENTS.md`); `--dry-run` planifica backup+restore sin escribir [topic: architecture/upgrade-preserve] review_after: 2027-03-04
+- Rename consigliere→Advisor (display `Advisor`, npm `advisor-harness`, bin `advisor`+`advisor-harness`+alias `consigliere-harness`): estado vivo en `.advisor/` con fallback read-only a legacy `.consigliere/` (leer `.advisor/` primero, escribir solo `.advisor/`, migración por copia + `.migrated`, prohibido symlink); `--upgrade` monolítico = `--part all`; backups `^(harness|advisor)-` prune keep 5 combinado; skill-cache v2; uninstall exige confirmación y memoria solo con `--part memoria` + `--force` + backup previo [topic: architecture/advisor-rename] review_after: 2027-03-04
 
 ---
 

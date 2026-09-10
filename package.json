@@ -1,12 +1,12 @@
 {
-  "name": "consigliere-harness",
+  "name": "advisor-harness",
   "version": "2.0.0",
-  "description": "Harness de agentes + memoria persistente para opencode — reusable scaffold con agentes orquestados y memoria de 3 capas (Consigliere 2.0, solo por proyecto)",
+  "description": "Harness de agentes + memoria persistente para opencode — reusable scaffold con agentes orquestados y memoria de 3 capas (Advisor 2.0, solo por proyecto)",
   "type": "module",
   "bin": {
-    "consigliere-harness": "./init.mjs",
-    "consigliere-init": "./init.mjs",
-    "consigliere": "./init.mjs"
+    "advisor": "./init.mjs",
+    "advisor-harness": "./init.mjs",
+    "consigliere-harness": "./init.mjs"
   },
   "files": [
     "init.sh",
@@ -30,7 +30,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/fcocampione-star/consigliere.git"
+    "url": "https://github.com/fcocampione-star/advisor.git"
   },
   "scripts": {
     "test": "node --check init.mjs && node --check templates/.opencode/skills/_skill-loader/loader.mjs && node --check templates/.opencode/scripts/doctor.mjs && node --check templates/.opencode/scripts/memory-index.mjs && node --check templates/.opencode/scripts/memory-sync.mjs && echo \"syntax ok v2.0.0\""

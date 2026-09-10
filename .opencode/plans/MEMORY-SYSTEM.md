@@ -1,6 +1,6 @@
 # MEMORY-SYSTEM 2.0 — Sistema de memoria persistente de 3 capas (md+grep, topic upsert)
 
-> Documentación del sistema de contexto persistente generado por CONSIGLIERE 2.0. Inspirado en Engram (SQLite+FTS5) pero **solo md+grep, sin SQLite**.
+> Documentación del sistema de contexto persistente generado por ADVISOR 2.0. Inspirado en Engram (SQLite+FTS5) pero **solo md+grep, sin SQLite**.
 
 ## Capas
 
@@ -38,7 +38,7 @@ Compat: viejo `**Qué:**/**Verificación:**` se migra a 5 campos.
 
 - **Trigger**: lunes O SUMMARY > ~150 líneas.
 - **Acción**: mover entrada más antigua a `CHANGELOG/<lunes>.md`.
-- **Automático**: hook `post-commit-memory-rotate.sh` tras cada commit + `memory-sync.mjs export` a `.consigliere/chunks/` (no bloqueante).
+- **Automático**: hook `post-commit-memory-rotate.sh` tras cada commit + `memory-sync.mjs export` a `.advisor/chunks/` (no bloqueante).
 - **Manual**: `/rotate-memory`.
 
 ## Búsqueda progresiva (md+grep, sin SQLite)
@@ -50,10 +50,10 @@ Compat: viejo `**Qué:**/**Verificación:**` se migra a 5 campos.
 
 ## Sync local (sin cloud)
 
-- `node .opencode/scripts/memory-sync.mjs export [--all]` → `.consigliere/chunks/<monday>.json`
+- `node .opencode/scripts/memory-sync.mjs export [--all]` → `.advisor/chunks/<monday>.json`
 - `node .opencode/scripts/memory-sync.mjs import` → restaura `CHANGELOG/` en clone
 - `node .opencode/scripts/memory-sync.mjs status`
-- `.consigliere/chunks/` puede versionarse (recomendado) o gitignorar.
+- `.advisor/chunks/` puede versionarse (recomendado) o gitignorar.
 
 ## Locking anti-concurrencia
 
@@ -66,7 +66,14 @@ Compat: viejo `**Qué:**/**Verificación:**` se migra a 5 campos.
 
 ## Skill cache
 
-- `.consigliere/skill-registry.cache.json` fingerprint `path+mtime+size` (versión 1), generado por `loader.mjs` en `list`/`search`, `refresh --force` invalida.
+- `.advisor/skill-registry.cache.json` fingerprint `path+mtime+size` (versión 2), generado por `loader.mjs` en `list`/`search`, `refresh --force` invalida (v1 queda inválida y se regenera).
+
+## Estado dual-dir (rename Advisor, sin symlink)
+
+- **Vivo**: `.advisor/` (backups/chunks/cache). **Legacy**: `.consigliere/` pre-rename, fallback **solo lectura**.
+- **Precedencia**: se lee `.advisor/` primero; si falta y existe legacy, se lee legacy. Se **escribe siempre** en `.advisor/`.
+- **Migración**: `--upgrade` (scope `all`/`memoria`) copia legacy → vivo + `.advisor/.migrated`. Prohibido symlink (compat Windows).
+- `memory-sync.mjs`: `export` escribe `.advisor/chunks/`; `import`/`status` leen vivo + legacy.
 
 ## Patrones §5
 
@@ -81,5 +88,5 @@ Compat: viejo `**Qué:**/**Verificación:**` se migra a 5 campos.
 - `PROJECT_STATE.md` — CAPA 0, con `review_after` + `topic:`
 - `SUMMARY.md` — CAPA 1, con `topic:` + 5 campos
 - `CHANGELOG/` — CAPA 2 + `DECISIONS-ARCHIVE.md`
-- `.memory-lock`, `.consigliere/skill-registry.cache.json`, `.consigliere/chunks/`, `.consigliere/backups/`
+- `.memory-lock`, `.advisor/skill-registry.cache.json`, `.advisor/chunks/`, `.advisor/backups/`
 - `hooks/post-commit-memory-rotate.sh` + `scripts/memory-index.mjs|memory-sync.mjs|doctor.mjs`
