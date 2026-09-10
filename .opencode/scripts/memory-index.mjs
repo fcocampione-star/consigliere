@@ -2,22 +2,30 @@
 /**
  * ADVISOR 2.0 — memory-index.mjs (md+grep, sin SQLite)
  * Búsqueda progresiva inspirada en Engram: search → timeline → get
+ * v2: índice derivado `.advisor/memory-index.json` con fingerprint
+ * path+mtime+size (contrato loader.mjs: entradas ordenadas, comparación
+ * por mapa, version:1). Lectura fallback legacy `.consigliere/` (read-only);
+ * escritura solo `.advisor/`. Score solo en salida search --json, nunca
+ * persistido. Sin índice o stale → fallback md+grep sin error.
  * Uso:
- *   node memory-index.mjs search "query" [--json]
+ *   node memory-index.mjs search "query" [--json] [--refresh]
  *   node memory-index.mjs timeline <id-or-date>  (date YYYY-MM-DD o índice)
  *   node memory-index.mjs get <id-or-date>
- *   node memory-index.mjs list
+ *   node memory-index.mjs list [--json]
  */
-import { readFileSync, existsSync, readdirSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync, statSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const SUMMARY = join(ROOT, 'SUMMARY.md');
 const STATE = join(ROOT, 'PROJECT_STATE.md');
 const CHANGELOG_DIR = join(ROOT, 'CHANGELOG');
+const INDEX_VERSION = 1;
+const INDEX_FILE = join(ROOT, '.advisor', 'memory-index.json');
+const LEGACY_INDEX_FILE = join(ROOT, '.consigliere', 'memory-index.json'); // solo lectura
 
 function parseEntries(text, source) {
-  const re = /^##\s+(\d{4}-\d{2}-\d{2})\s*[—\-]\s*(.+)$/gm;
   const entries = [];
   let m; const lines = text.split('\n');
   // collect blocks by ## headings
@@ -62,58 +70,147 @@ function allEntries() {
   return out;
 }
 
-const [cmd, arg] = process.argv.slice(2);
-const json = process.argv.includes('--json');
+function sourceFiles() {
+  const files = [];
+  if (existsSync(STATE)) files.push('PROJECT_STATE.md');
+  if (existsSync(SUMMARY)) files.push('SUMMARY.md');
+  if (existsSync(CHANGELOG_DIR)) {
+    for (const f of readdirSync(CHANGELOG_DIR)) {
+      if (f.endsWith('.md')) files.push(`CHANGELOG/${f}`);
+    }
+  }
+  return files.sort();
+}
 
-switch(cmd){
-  case 'search': {
-    if (!arg) { console.error('Uso: memory-index.mjs search "query"'); process.exit(1); }
-    const q = arg.toLowerCase();
-    const hits = allEntries().filter(e => (e.title+' '+e.preview+' '+(e.topic||'')).toLowerCase().includes(q));
-    if (json) console.log(JSON.stringify(hits,null,2));
-    else {
-      if (!hits.length) console.log(`Sin resultados para "${arg}".`);
-      else for (const h of hits) console.log(`- ${h.id} [${h.source}] topic:${h.topic||'-'} — ${h.title} :: ${h.preview.slice(0,80)}`);
+function fingerprint() {
+  const fp = [];
+  for (const rel of sourceFiles()) {
+    try {
+      const st = statSync(join(ROOT, rel));
+      fp.push({ path: rel, mtime: st.mtimeMs, size: st.size });
+    } catch {
+      fp.push({ path: rel, mtime: 0, size: 0 });
     }
-    break;
   }
-  case 'timeline':
-  case 'get': {
-    if (!arg) { console.error(`Uso: memory-index.mjs ${cmd} <id-or-date>`); process.exit(1); }
-    const entries = allEntries();
-    const hit = entries.find(e=>e.id===arg || e.date===arg || e.title.toLowerCase().includes(arg.toLowerCase()));
-    if (!hit) { console.error(`No encontrado: ${arg}. Prueba: search "query"`); process.exit(1); }
-    // for get, dump full file section
-    let text='';
-    const src = hit.source.includes('SUMMARY')?SUMMARY: hit.source.includes('CHANGELOG')?join(ROOT,hit.source):STATE;
-    try { text=readFileSync(src,'utf8'); } catch {}
-    if (cmd==='get') {
-      // extract block of this entry
-      const re = new RegExp(`##\\s+${hit.date.replace(/-/g,'\\-')}[\\s\\S]*?(?=\\n##\\s+\\d{4}-\\d{2}-\\d{2}|$)`, 'm');
-      const m = text.match(re);
-      console.log(m?m[0].trim(): text.slice(0,2000));
-    } else {
-      console.log(`# ${hit.id} [${hit.source}] topic:${hit.topic||'-'}`);
-      console.log(hit.preview);
-      // show neighbors
-      const idx = entries.indexOf(hit);
-      console.log('\n-- vecinos --');
-      for (const nb of entries.slice(Math.max(0,idx-2), idx+3)) if (nb!==hit) console.log(`  - ${nb.id} [${nb.source}] ${nb.title}`);
+  return fp.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+}
+
+function isFresh(cached, currentFp = fingerprint()) {
+  if (!cached || cached.version !== INDEX_VERSION || !Array.isArray(cached.fingerprint)) return false;
+  if (cached.fingerprint.length !== currentFp.length) return false;
+  const map = new Map(cached.fingerprint.map(e => [e.path, e]));
+  for (const c of currentFp) {
+    const e = map.get(c.path);
+    if (!e || e.mtime !== c.mtime || e.size !== c.size) return false;
+  }
+  return true;
+}
+
+function score(entry, query, now = Date.now()) {
+  const q = (query || '').toLowerCase();
+  const t = Date.parse(entry.date || '1970-01-01');
+  const recency = Number.isFinite(t) ? 1 - Math.min(1, (now - t) / (30 * 864e5)) : 0;
+  const topic = (entry.topic || '').toLowerCase().includes(q) ? 1 : 0;
+  const title = (entry.title || '').toLowerCase().includes(q) ? 1 : ((entry.preview || '').toLowerCase().includes(q) ? 0.5 : 0);
+  return 0.6 * recency + 0.3 * topic + 0.1 * title;
+}
+
+function loadIndex() {
+  // Precedencia: .advisor/ primero; legacy .consigliere/ solo lectura.
+  for (const f of [INDEX_FILE, LEGACY_INDEX_FILE]) {
+    if (!existsSync(f)) continue;
+    try {
+      const data = JSON.parse(readFileSync(f, 'utf8'));
+      if (data.version !== INDEX_VERSION || !Array.isArray(data.entries)) continue;
+      return { data, fresh: isFresh(data), file: f };
+    } catch { continue; }
+  }
+  return null;
+}
+
+function writeIndex() {
+  mkdirSync(join(ROOT, '.advisor'), { recursive: true });
+  const data = { version: INDEX_VERSION, generatedAt: new Date().toISOString(), fingerprint: fingerprint(), entries: allEntries() };
+  writeFileSync(INDEX_FILE, JSON.stringify(data, null, 2), 'utf8');
+  return data;
+}
+
+function matches(e, q) {
+  return (e.title + ' ' + e.preview + ' ' + (e.topic || '')).toLowerCase().includes(q);
+}
+
+function main() {
+  const [cmd, arg] = process.argv.slice(2);
+  const json = process.argv.includes('--json');
+
+  switch(cmd){
+    case 'search': {
+      if (!arg) { console.error('Uso: memory-index.mjs search "query" [--json] [--refresh]'); process.exit(1); }
+      if (process.argv.includes('--refresh')) writeIndex();
+      const q = arg.toLowerCase();
+      const loaded = loadIndex();
+      let hits;
+      if (loaded && loaded.fresh) {
+        hits = loaded.data.entries
+          .filter(e => matches(e, q))
+          .map(e => ({ ...e, score: score(e, arg) }))
+          .sort((a, b) => b.score - a.score);
+      } else {
+        if (loaded) console.error('⚠️ memory-index.json desactualizado (stale) — fallback md+grep.');
+        hits = allEntries().filter(e => matches(e, q));
+        if (json) hits = hits.map(e => ({ ...e, score: score(e, arg) }));
+      }
+      if (json) console.log(JSON.stringify(hits,null,2));
+      else {
+        if (!hits.length) console.log(`Sin resultados para "${arg}".`);
+        else for (const h of hits) console.log(`- ${h.id} [${h.source}] topic:${h.topic||'-'} — ${h.title} :: ${h.preview.slice(0,80)}`);
+      }
+      break;
     }
-    break;
-  }
-  case 'list': {
-    const e = allEntries();
-    if (json) console.log(JSON.stringify(e,null,2));
-    else for (const x of e) console.log(`- ${x.id} [${x.source}] topic:${x.topic||'-'} — ${x.title}`);
-    break;
-  }
-  default: {
-    console.log(`Uso:
-  node .opencode/scripts/memory-index.mjs search "query" [--json]
+    case 'timeline':
+    case 'get': {
+      if (!arg) { console.error(`Uso: memory-index.mjs ${cmd} <id-or-date>`); process.exit(1); }
+      const entries = allEntries();
+      const hit = entries.find(e=>e.id===arg || e.date===arg || e.title.toLowerCase().includes(arg.toLowerCase()));
+      if (!hit) { console.error(`No encontrado: ${arg}. Prueba: search "query"`); process.exit(1); }
+      // for get, dump full file section
+      let text='';
+      const src = hit.source.includes('SUMMARY')?SUMMARY: hit.source.includes('CHANGELOG')?join(ROOT,hit.source):STATE;
+      try { text=readFileSync(src,'utf8'); } catch {}
+      if (cmd==='get') {
+        // extract block of this entry
+        const re = new RegExp(`##\\s+${hit.date.replace(/-/g,'\\-')}[\\s\\S]*?(?=\\n##\\s+\\d{4}-\\d{2}-\\d{2}|$)`, 'm');
+        const m = text.match(re);
+        console.log(m?m[0].trim(): text.slice(0,2000));
+      } else {
+        console.log(`# ${hit.id} [${hit.source}] topic:${hit.topic||'-'}`);
+        console.log(hit.preview);
+        // show neighbors
+        const idx = entries.indexOf(hit);
+        console.log('\n-- vecinos --');
+        for (const nb of entries.slice(Math.max(0,idx-2), idx+3)) if (nb!==hit) console.log(`  - ${nb.id} [${nb.source}] ${nb.title}`);
+      }
+      break;
+    }
+    case 'list': {
+      const e = allEntries();
+      if (json) console.log(JSON.stringify(e,null,2));
+      else for (const x of e) console.log(`- ${x.id} [${x.source}] topic:${x.topic||'-'} — ${x.title}`);
+      break;
+    }
+    default: {
+      console.log(`Uso:
+  node .opencode/scripts/memory-index.mjs search "query" [--json] [--refresh]
   node .opencode/scripts/memory-index.mjs timeline <id-or-date>
   node .opencode/scripts/memory-index.mjs get <id-or-date>
   node .opencode/scripts/memory-index.mjs list [--json]`);
-    process.exit(1);
+      process.exit(1);
+    }
   }
 }
+
+let isMain = false;
+try { isMain = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href; } catch { isMain = false; }
+if (isMain) main();
+
+export { allEntries, fingerprint, isFresh, score, loadIndex, writeIndex, INDEX_VERSION };

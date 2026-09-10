@@ -1,21 +1,34 @@
 #!/usr/bin/env node
 /**
  * ADVISOR 2.0 — memory-sync.mjs (sync local, sin cloud)
- * Estado vivo en .advisor/chunks/; legacy .consigliere/chunks/ solo
- * fallback de LECTURA en import/status (nunca se escribe ahí).
+ * Estado vivo en .advisor/; legacy .consigliere/ solo fallback de
+ * LECTURA en import/status/loadIndex (nunca se escribe ahí).
+ * Derivados: memory-manifest.json (<15 líneas, trackeable, SIN mtime
+ * para evitar stale-on-clone) + memory-index.json (fingerprint completo,
+ * git-ignored, regenerable). Fingerprint y parsers se reutilizan desde
+ * memory-index.mjs (única fuente de verdad).
  * Uso:
- *   node memory-sync.mjs export [--all]  # exporta SUMMARY/STATE a chunks JSON
+ *   node memory-sync.mjs export [--all]  # chunks + manifest + index
  *   node memory-sync.mjs import          # importa chunks a CHANGELOG si faltan
  *   node memory-sync.mjs status
+ *   node memory-sync.mjs buildManifest   # solo manifest
+ *   node memory-sync.mjs buildIndex      # solo índice
  */
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { allEntries, fingerprint, isFresh, writeIndex, INDEX_VERSION } from './memory-index.mjs';
 
 const ROOT = join(import.meta.dirname, '..', '..');
-const CHUNKS_DIR = join(ROOT, '.advisor', 'chunks'); // escritura siempre aquí
+const ADVISOR_DIR = join(ROOT, '.advisor'); // escritura siempre aquí
+const CHUNKS_DIR = join(ADVISOR_DIR, 'chunks');
 const LEGACY_CHUNKS_DIR = join(ROOT, '.consigliere', 'chunks'); // lectura fallback
+const LEGACY_INDEX_FILE = join(ROOT, '.consigliere', 'memory-index.json'); // lectura fallback
 const SUMMARY = join(ROOT, 'SUMMARY.md');
 const STATE = join(ROOT, 'PROJECT_STATE.md');
+const CHANGELOG_DIR = join(ROOT, 'CHANGELOG');
+const MANIFEST_FILE = join(ADVISOR_DIR, 'memory-manifest.json');
+const INDEX_FILE = join(ADVISOR_DIR, 'memory-index.json');
+const MANIFEST_VERSION = 1;
 
 function mondayOf(dateStr) {
   const d = new Date(dateStr);
@@ -79,6 +92,72 @@ function importChunks() {
   console.log(`Import: ${imported} bloques a CHANGELOG/`);
 }
 
+function stateDecisions() {
+  if (!existsSync(STATE)) return [];
+  const c = readFileSync(STATE, 'utf8');
+  const sec2 = (c.split('## 2.')[1] || '').split('## 3.')[0] || '';
+  return sec2.split('\n').filter(l => l.trim().startsWith('-'));
+}
+
+function buildManifest() {
+  mkdirSync(ADVISOR_DIR, { recursive: true });
+  const entries = allEntries();
+  const summaryEntries = entries
+    .filter(e => e.source === 'SUMMARY.md')
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
+    .slice(0, 5);
+  const decisions = stateDecisions();
+  const today = new Date().toISOString().slice(0, 10);
+  const stale = [];
+  for (const l of decisions) {
+    const ra = (l.match(/review_after:\s*(\d{4}-\d{2}-\d{2})/i) || [])[1];
+    const topic = (l.match(/topic:\s*([a-z0-9\/\-]+)/i) || [])[1];
+    if (ra && ra < today && topic && !stale.includes(topic)) stale.push(topic);
+  }
+  const archivedWeeks = existsSync(CHANGELOG_DIR) ? readdirSync(CHANGELOG_DIR).filter(f => f.endsWith('.md')).length : 0;
+  // Serialización compacta: 8 líneas fijas + 1 por entrada reciente (≤5) → ≤13 líneas.
+  const lines = [];
+  lines.push('{');
+  lines.push(`  "version": ${MANIFEST_VERSION},`);
+  lines.push(`  "generatedAt": "${new Date().toISOString()}",`);
+  lines.push(`  "counts": {"stateDecisions": ${decisions.length}, "recentEntries": ${entries.filter(e => e.source === 'SUMMARY.md').length}, "archivedWeeks": ${archivedWeeks}},`);
+  lines.push('  "recent": [');
+  summaryEntries.forEach((e, i) => lines.push(`    {"id": ${JSON.stringify(e.id)}, "topic": ${JSON.stringify(e.topic)}, "date": ${JSON.stringify(e.date)}}${i < summaryEntries.length - 1 ? ',' : ''}`));
+  lines.push('  ],');
+  lines.push(`  "stale": [${stale.map(t => JSON.stringify(t)).join(', ')}]`);
+  lines.push('}');
+  writeFileSync(MANIFEST_FILE, lines.join('\n') + '\n', 'utf8');
+  console.log(`Manifest: ${lines.length} líneas → ${MANIFEST_FILE}`);
+}
+
+function buildIndex() {
+  const data = writeIndex();
+  console.log(`Index: v${data.version} ${data.entries.length} entries → ${INDEX_FILE}`);
+}
+
+function manifestStatus() {
+  if (!existsSync(MANIFEST_FILE)) { console.log('Manifest: falta (buildManifest lo genera)'); return; }
+  try {
+    const m = JSON.parse(readFileSync(MANIFEST_FILE, 'utf8'));
+    const n = readFileSync(MANIFEST_FILE, 'utf8').split('\n').length;
+    const ok = m.version === MANIFEST_VERSION && Array.isArray(m.recent) && m.recent.length <= 5 && n < 15;
+    console.log(`Manifest: ${ok ? 'ok' : 'revisar'} (${m.recent?.length ?? '?'} recientes, ${n} líneas, ${m.generatedAt ?? '?'})`);
+  } catch { console.log('Manifest: corrupto (buildManifest lo regenera)'); }
+}
+
+function indexStatus() {
+  const files = [INDEX_FILE, LEGACY_INDEX_FILE].filter(f => existsSync(f));
+  if (!files.length) { console.log('Index: falta (buildIndex lo genera)'); return; }
+  const cur = fingerprint();
+  for (const f of files) {
+    try {
+      const data = JSON.parse(readFileSync(f, 'utf8'));
+      const label = f === INDEX_FILE ? 'vivo' : 'legacy';
+      console.log(`Index (${label}): ${data.version === INDEX_VERSION && isFresh(data, cur) ? 'fresh' : 'stale'} (${data.entries?.length ?? '?'} entries)`);
+    } catch { console.log(`Index: corrupto en ${f}`); }
+  }
+}
+
 function status() {
   for (const [label, dir] of [['vivo', CHUNKS_DIR], ['legacy', LEGACY_CHUNKS_DIR]]) {
     const files = existsSync(dir)?readdirSync(dir).filter(f=>f.endsWith('.json')):[];
@@ -91,10 +170,14 @@ function status() {
     }
   }
   console.log(`SUMMARY: ${existsSync(SUMMARY)?'ok':'falta'}  STATE: ${existsSync(STATE)?'ok':'falta'}`);
+  manifestStatus();
+  indexStatus();
 }
 
 const cmd = process.argv[2];
-if (cmd==='export') exportChunks(process.argv.includes('--all'));
+if (cmd==='export') { exportChunks(process.argv.includes('--all')); buildManifest(); buildIndex(); }
 else if (cmd==='import') importChunks();
+else if (cmd==='buildManifest') buildManifest();
+else if (cmd==='buildIndex') buildIndex();
 else if (cmd==='status' || !cmd) status();
-else { console.log('Uso: node memory-sync.mjs export [--all] | import | status'); process.exit(1); }
+else { console.log('Uso: node memory-sync.mjs export [--all] | import | status | buildManifest | buildIndex'); process.exit(1); }
