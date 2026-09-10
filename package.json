@@ -30,7 +30,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/fcocampione-star/advisor.git"
+    "url": "https://github.com/fcocampione-star/consigliere.git"
   },
   "scripts": {
     "test": "node --check init.mjs && node --check templates/.opencode/skills/_skill-loader/loader.mjs && node --check templates/.opencode/scripts/doctor.mjs && node --check templates/.opencode/scripts/memory-index.mjs && node --check templates/.opencode/scripts/memory-sync.mjs && echo \"syntax ok v2.0.0\""

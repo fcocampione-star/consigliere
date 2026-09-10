@@ -5,7 +5,7 @@
 > **⚠️ Disponibilidad de `npx`:** la instalación vía `npx advisor-harness@latest` requiere que el paquete esté publicado en npm (hito futuro, aún no publicado). **Hoy solo funcionan las instrucciones locales** (`git clone` + `node init.mjs` / `bash init.sh` / `powershell -File init.ps1`). Tras el publish, la vía `npx` quedará disponible sin cambios de uso.
 
 > **Primeros pasos (30 segundos):**
-> 1. `git clone https://github.com/fcocampione-star/advisor.git && cd advisor && node init.mjs` → responde el asistente (`📁 Ruta → Nombre → Stack → Modelos → Autoskills → Git`)
+> 1. `git clone https://github.com/fcocampione-star/consigliere.git && cd consigliere && node init.mjs` → responde el asistente (`📁 Ruta → Nombre → Stack → Modelos → Autoskills → Git`)
 > 2. `cd /ruta/mi-app` → abre `opencode`
 > 3. `/discover` (audita contexto + skills) → `/routine "configurar base del proyecto"` → `/doctor`
 
@@ -61,21 +61,21 @@ Usa uno de estos (todos 100% por proyecto):
 
 ```bash
 # Recomendado — desde clon del repo (la vía npx vendrá con el publish a npm)
-git clone https://github.com/fcocampione-star/advisor.git
-node advisor/init.mjs /ruta/proyecto --name mi-app --stack-backend node/express --autoskills 1 --git yes
+git clone https://github.com/fcocampione-star/consigliere.git
+node consigliere/init.mjs /ruta/proyecto --name mi-app --stack-backend node/express --autoskills 1 --git yes
 
 # Mismo clon, otros instaladores
-bash advisor/init.sh --dir /ruta/proyecto --name mi-app --stack-backend node/express --autoskills 1 --git yes
-powershell -File advisor/init.ps1 C:\ruta\proyecto -Name mi-app -StackBackend node/express -Autoskills 1 -Git yes
+bash consigliere/init.sh --dir /ruta/proyecto --name mi-app --stack-backend node/express --autoskills 1 --git yes
+powershell -File consigliere/init.ps1 C:\ruta\proyecto -Name mi-app -StackBackend node/express -Autoskills 1 -Git yes
 init.cmd C:\ruta\proyecto
 
 # Actualizar harness existente: --upgrade hace backup completo keep 5
 # (incluye .opencode/, AGENTS.md, PROJECT_STATE.md, SUMMARY.md, CHANGELOG/, .advisor/,
 #  .consigliere/ legacy, opencode.json, .gitignore, skills-lock.json, scripts/) y preserva memoria/config
 # (PROJECT_STATE.md, SUMMARY.md, opencode.json, AGENTS.md, .gitignore). Si el backup falla, aborta.
-node advisor/init.mjs /ruta/proyecto --upgrade
-bash advisor/init.sh --dir /ruta/proyecto --upgrade
-powershell -File advisor/init.ps1 C:\ruta\proyecto -Upgrade
+node consigliere/init.mjs /ruta/proyecto --upgrade
+bash consigliere/init.sh --dir /ruta/proyecto --upgrade
+powershell -File consigliere/init.ps1 C:\ruta\proyecto -Upgrade
 ```
 
 ## Uso interactivo (guiado)
@@ -84,54 +84,54 @@ Todos estos son **guiados** — no necesitas pasar ruta por adelantado, te pregu
 
 ```bash
 # guiado — con git clone (recomendado; la vía npx llegará con el publish a npm)
-git clone https://github.com/fcocampione-star/advisor.git
-cd advisor
+git clone https://github.com/fcocampione-star/consigliere.git
+cd consigliere
 node init.mjs                # universal
 ./init.sh                    # macOS/Linux/Git Bash
 powershell -File init.ps1    # Windows
 init.cmd                     # CMD
 
 # download ZIP (sin git clone)
-# Descarga ZIP desde GitHub → descomprime → cd advisor-main
+# Descarga ZIP desde GitHub → descomprime → cd consigliere-main
 node init.mjs          # o ./init.sh / powershell -File init.ps1
 ```
 
-> Descarga ZIP / git clone: 1) `cd advisor` (o carpeta descomprimida) → 2) ejecuta un comando guiado de la sección anterior → 3) responde `📁 Ruta` (ej `C:\ruta\mi-app` o `/tmp/mi-app`) → 4) sigue Stack/Modelos/Git → 5) continúa en el paso 2 de **Primeros pasos** (cd /ruta/mi-app → opencode → /discover → /routine → /doctor).
+> Descarga ZIP / git clone: 1) `cd consigliere` (o carpeta descomprimida) → 2) ejecuta un comando guiado de la sección anterior → 3) responde `📁 Ruta` (ej `C:\ruta\mi-app` o `/tmp/mi-app`) → 4) sigue Stack/Modelos/Git → 5) continúa en el paso 2 de **Primeros pasos** (cd /ruta/mi-app → opencode → /discover → /routine → /doctor).
 
 ## Uso no-interactivo (CI / scripts)
 
 ```bash
 # Mismo CLI que ofrecerá el paquete npm cuando se publique (hoy: desde el clon del repo)
-node advisor/init.mjs --dir /ruta/proyecto --name mi-app \
+node consigliere/init.mjs --dir /ruta/proyecto --name mi-app \
   --stack-db postgresql --stack-backend node/express --stack-frontend react/vite \
   --stack-auth jwt --stack-validation zod --stack-deploy docker \
   --autoskills 1 --git yes
 
 # actualizar (backup completo keep 5 + preserva memoria/config; sin --force)
-node advisor/init.mjs --dir /ruta/proyecto --upgrade
+node consigliere/init.mjs --dir /ruta/proyecto --upgrade
 
 # alcance modular: --upgrade monolítico = --part all
-node advisor/init.mjs --dir /ruta/proyecto --upgrade --part harness
-node advisor/init.mjs --dir /ruta/proyecto --upgrade --part memoria
-node advisor/init.mjs --dir /ruta/proyecto --upgrade --part autoskills
+node consigliere/init.mjs --dir /ruta/proyecto --upgrade --part harness
+node consigliere/init.mjs --dir /ruta/proyecto --upgrade --part memoria
+node consigliere/init.mjs --dir /ruta/proyecto --upgrade --part autoskills
 
 # estado read-only (no escribe) / restaurar backup (acepta advisor- y harness-)
-node advisor/init.mjs --dir /ruta/proyecto --status
-node advisor/init.mjs --dir /ruta/proyecto --restore --from .advisor/backups/advisor-<ts>.tgz
+node consigliere/init.mjs --dir /ruta/proyecto --status
+node consigliere/init.mjs --dir /ruta/proyecto --restore --from .advisor/backups/advisor-<ts>.tgz
 
 # desinstalar alcance de --part (pide confirmación sin --force; memoria exige backup previo + --force)
-node advisor/init.mjs --dir /ruta/proyecto --uninstall --part harness --force
+node consigliere/init.mjs --dir /ruta/proyecto --uninstall --part harness --force
 
 # simular sin escribir nada / sobrescribir un destino no vacío sin harness (a tu riesgo)
-node advisor/init.mjs --dir /ruta/proyecto --dry-run
-node advisor/init.mjs --dir /ruta/proyecto --force
+node consigliere/init.mjs --dir /ruta/proyecto --dry-run
+node consigliere/init.mjs --dir /ruta/proyecto --force
 ```
 
 ## Compatibilidad rename (consigliere → Advisor)
 
 - **Display**: `Advisor`; **npm**: `advisor-harness` (`npx advisor-harness@latest`); **bin**: `advisor`, `advisor-harness` + alias `consigliere-harness` (1 versión de transición).
 - **Publicación**: `advisor-harness` nuevo + `consigliere-harness@final` como shim (warning + exec `advisor-harness`) con `npm deprecate` apuntando al nuevo nombre.
-- **Repo**: `https://github.com/fcocampione-star/advisor.git` (la URL vieja `.../consigliere.git` redirige).
+- **Repo**: `https://github.com/fcocampione-star/consigliere.git`.
 - **Estado dual-dir (sin symlink, Windows-safe)**: leer `.advisor/` primero, fallback read-only a legacy `.consigliere/`; escribir **solo** `.advisor/`; migración por copia + `.advisor/.migrated`. Precedencia documentada: `.advisor/` gana siempre.
 - **Backups**: nuevos `advisor-<ts>.tgz`; restore/prune aceptan `^(harness|advisor)-` (keep 5 combinado). Skill-cache v2 (`refresh --force` invalida v1).
 - **Se preserva a propósito**: historial `SUMMARY.md`/`CHANGELOG/`, autor git `CONSIGLIERE` + email `consigliere@local`, `installed_by: consigliere` en `skills-lock.json`.
