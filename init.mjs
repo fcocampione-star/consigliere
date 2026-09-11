@@ -153,58 +153,6 @@ function restorePreserved(target, backupFile, backupItems) {
   else ok(`Memoria/config preservadas: ${restored.join(', ')}`);
 }
 
-// Migración agente orchestrator -> advisor (upgrade --part harness|all, post-restore).
-// - agents/orchestrator.md -> agents/advisor.md (mv; si ambos existen, borra huérfano)
-// - opencode.json del target: default_agent -> advisor + renombra key preservando model:
-// - AGENTS.md preservado: triple orden (MODEL_ -> Orchestrator -> orchestrator), protege línea GLOBAL
-// BACKUP_ITEMS/PRESERVED sin cambio.
-function migrateAgentRename(target, dry, scope) {
-  if (scope !== 'harness' && scope !== 'all') return;
-  const oldF = join(target, '.opencode', 'agents', 'orchestrator.md');
-  const newF = join(target, '.opencode', 'agents', 'advisor.md');
-  const hasOld = existsSync(oldF);
-  const hasNew = existsSync(newF);
-  if (dry) {
-    if (hasOld && !hasNew) info('[dry-run] migrar agents/orchestrator.md -> agents/advisor.md + parchear opencode.json/AGENTS.md');
-    else if (hasOld && hasNew) info('[dry-run] borrar huérfano agents/orchestrator.md + parchear opencode.json/AGENTS.md');
-    else info('[dry-run] migración agente advisor: sin huérfano (ok)');
-    return;
-  }
-  if (hasOld && !hasNew) {
-    try { cpSync(oldF, newF); unlinkSync(oldF); ok('Migración agente: agents/orchestrator.md -> agents/advisor.md'); }
-    catch (e) { warn(`Migración agente (mv) falló: ${e.message}`); }
-  } else if (hasOld && hasNew) {
-    try { unlinkSync(oldF); ok('Migración agente: huérfano agents/orchestrator.md borrado'); }
-    catch (e) { warn(`Migración agente (borrado huérfano) falló: ${e.message}`); }
-  }
-  try {
-    const pj = join(target, 'opencode.json');
-    if (existsSync(pj)) {
-      const j = JSON.parse(readFileSync(pj, 'utf8'));
-      let touched = false;
-      if (j.default_agent === 'orchestrator') { j.default_agent = 'advisor'; touched = true; }
-      if (j.agent?.orchestrator && !j.agent?.advisor) {
-        j.agent.advisor = j.agent.orchestrator;
-        delete j.agent.orchestrator;
-        touched = true;
-      }
-      if (touched) { writeFileSync(pj, JSON.stringify(j, null, 2) + '\n', 'utf8'); ok('Migración agente: opencode.json -> advisor (model: preservado)'); }
-    }
-  } catch (e) { warn(`Migración agente (opencode.json) falló: ${e.message}`); }
-  try {
-    const pa = join(target, 'AGENTS.md');
-    if (existsSync(pa)) {
-      const orig = readFileSync(pa, 'utf8');
-      const lines = orig.split('\n').map((l) => {
-        if (/harness GLOBAL/.test(l)) return l; // protege desambiguación bin/agente/global
-        return l.split('MODEL_ORCHESTRATOR').join('MODEL_ADVISOR').split('Orchestrator').join('Advisor').split('orchestrator').join('advisor');
-      });
-      const next = lines.join('\n');
-      if (next !== orig) { writeFileSync(pa, next, 'utf8'); ok('Migración agente: AGENTS.md -> advisor'); }
-    }
-  } catch (e) { warn(`Migración agente (AGENTS.md) falló: ${e.message}`); }
-}
-
 // Render
 function renderFile(src, dst, vars) {
   let content = readFileSync(src, 'utf8');
@@ -700,7 +648,6 @@ async function main() {
     })();
     if (DRY_RUN) {
       info(`[dry-run] would render ${TEMPLATE_DIR} -> ${TARGET_DIR} --part ${scope} (project: ${PROJECT_NAME})`);
-      migrateAgentRename(TARGET_DIR, true, scope);
       info('[dry-run] no se escribió nada en disco');
       finish(PROJECT_NAME, TARGET_DIR);
       return;
@@ -718,7 +665,6 @@ async function main() {
     ensureStateDirs(TARGET_DIR, false);
     if (scope !== 'harness') migrateLegacy(TARGET_DIR, false, preVivo);
     restorePreserved(TARGET_DIR, backupFile, backupItems);
-    migrateAgentRename(TARGET_DIR, false, scope);
     ok(`Harness actualizado (--part ${scope})`);
     if (DO_GIT) gitInitAndCommit(TARGET_DIR, TEMPLATE_DIR);
     if (scope === 'all' && AUTO_CHOICE !== '3' && AUTO_CHOICE !== 'no') handleAutoskills(AUTO_CHOICE, TARGET_DIR);

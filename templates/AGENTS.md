@@ -78,7 +78,7 @@ node init.mjs /tmp/demo --name demo                   # probar instalador univer
 ├── CHANGELOG/               # capa 2 — semanal + DECISIONS-ARCHIVE.md
 ├── AGENTS.md                # este archivo
 ├── .gitignore
-└── ... (source code)
+└── harness-only sin src/ (init.mjs + scripts .opencode/scripts/*.mjs)
 ```
 
 ## Key architecture decisions

@@ -40,12 +40,13 @@ tmp/
 .memory-lock/
 .advisor/skill-registry.cache.json
 .advisor/backups/
-.advisor/cache/
 .advisor/memory-index.json
 # legacy pre-rename (read-only fallback, no escribir)
-.consigliere/backups/
 .consigliere/skill-registry.cache.json
-.consigliere/cache/
+.consigliere/backups/
 .consigliere/memory-index.json
-.agents/skills/
-.opencode/node_modules/
+# .advisor/chunks/  ← descomenta si no quieres versionar sync local
+# .agents/skills/   ← descomenta para no versionar autoskills
+
+# Legacy nested copy (no commiteable, solo lectura)
+/consigliere/

@@ -1,14 +1,14 @@
 ---
 name: _project-docs
 description: |
-  Documentación específica del proyecto advisor. Carga bajo demanda via _skill-loader.
-  Use when you need: official URLs, fetch patterns, shortcuts, and best practices for the advisor stack.
+  Documentación específica del proyecto consigliere. Carga bajo demanda via _skill-loader.
+  Use when you need: official URLs, fetch patterns, shortcuts, and best practices for the consigliere stack.
 chunks: [urls, patterns, shortcuts, examples, commands]
 metadata:
   version: 1.0.0
 ---
 
-# advisor — Project Documentation
+# consigliere — Project Documentation
 
 > Harness CLI por proyecto — Node >=18 ESM + Bash/PowerShell + git/tar, memoria 3 capas md+grep, routing orgánico y SDD-lite.
 
@@ -55,9 +55,9 @@ webfetch "https://www.gnu.org/software/bash/manual/" --format markdown
 
 ---
 
+<!-- /CHUNK -->
 ## 3. Shortcuts / Aliases
 
-<!-- /CHUNK -->
 <!-- CHUNK: shortcuts -->
 | Shortcut | Expands To | Use Case |
 |----------|------------|----------|

@@ -1,4 +1,4 @@
-# advisor — Project Context
+# consigliere — Project Context
 
 ## Session workflow
 
@@ -69,7 +69,7 @@ node init.mjs /tmp/demo --name demo                   # probar instalador univer
 ## Directory structure (2.0 solo por proyecto)
 
 ```
-advisor/
+consigliere/
 ├── .opencode/               # agents/, commands/, plans/, skills/, scripts/, hooks/
 ├── .agents/skills/          # autoskills (npx autoskills)
 ├── .advisor/            # backups/ (keep 5) + chunks/ (sync) + skill-registry.cache.json
@@ -78,7 +78,7 @@ advisor/
 ├── CHANGELOG/               # capa 2 — semanal + DECISIONS-ARCHIVE.md
 ├── AGENTS.md                # este archivo
 ├── .gitignore
-└── ... (source code)
+└── harness-only sin src/ (init.mjs + scripts .opencode/scripts/*.mjs)
 ```
 
 ## Key architecture decisions
