@@ -20,6 +20,8 @@
 - Memoria 3 capas md+grep (PROJECT_STATE/SUMMARY/CHANGELOG) con búsqueda grep+perl y cache fingerprint; SQLite solo fallback [topic: architecture/stack-md-grep] review_after: 2026-12-03
 - Skill loader con cache fingerprint `.advisor/skill-registry.cache.json` (path+mtime+size) y chunks urls/patterns/shortcuts/examples/commands bajo demanda [topic: dx/skill-loader-cache] review_after: 2026-12-03
 - Copia legacy `consigliere/` anidada ignorada vía `/consigliere/` anclado, no commiteable ni parcheable (append-only) [topic: repo/legacy-ignore] review_after: 2026-12-03
+- Sunset legacy: solo `.advisor/` vivo, fallback read-only `.consigliere/` eliminado de instaladores/scripts y `.gitignore` (F6) [topic: repo/legacy-sunset] review_after: 2026-12-03
+- Advisor-only routing orgánico + SDD-lite ≤650w; review_after: 2026-09-18.
 
 ---
 
@@ -28,7 +30,7 @@
 - [x] Definir objetivo y alcance inicial del proyecto. (Fase 0 harness-only definido)
 - [x] Completar `AGENTS.md` (stack, comandos dev) y `.opencode/skills/_project-docs/SKILL.md`. (Stack harness documentado)
 - [x] Configurar la estructura base del proyecto. (Templates sincronizados)
-- [ ] Copia legacy `consigliere/` no commiteable (ignorada vía `/consigliere/` anclado en `.gitignore`).
+- [x] Copia legacy `consigliere/` no commiteable (ignorada vía `/consigliere/` anclado en `.gitignore`). (Sunset F6: legacy eliminado, solo `.advisor/`)
 
 ---
 

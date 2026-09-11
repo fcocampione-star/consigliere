@@ -12,7 +12,7 @@ Ejecuta diagnóstico del harness Advisor 2.0. Revisa (read-only, sin editar):
 4. Skills: `node .opencode/skills/_skill-loader/loader.mjs list` (usa cache) + `.agents/skills` vs `AGENTS.md` stack declarado, reporta faltantes (comparativa vs stack = manual, no en `doctor.mjs`).
 5. Memoria lock: `.memory-lock` huérfano (si existe sin escritura anidada >5min).
 6. Scripts: `.opencode/scripts/memory-index.mjs`, `memory-sync.mjs`, `doctor.mjs` existen (`node --check` de cada uno = manual, no en `doctor.mjs`).
-7. Directorio: `CHANGELOG/`, `.advisor/backups/` (o legacy `.consigliere/backups/`), `.advisor/chunks/` (o legacy) existen, `.advisor/skill-registry.cache.json` v2 válido si existe (fallback lectura legacy).
+7. Directorio: `CHANGELOG/`, `.advisor/backups/`, `.advisor/chunks/` existen, `.advisor/skill-registry.cache.json` v2 válido si existe.
 8. Git: `git status` limpio, `git log --oneline -5` (manual, no en `doctor.mjs`).
 
 También ejecuta `node .opencode/scripts/doctor.mjs` si existe para chequeo programático (16-17 checks, variable por condicionales §2/topic/manifest/index).

@@ -3,9 +3,7 @@
  * ADVISOR 2.0 — Harness de agentes + memoria persistente para opencode.
  * Instalador/generador SOLO por proyecto (Node 18+). Sin instalación global.
  *
- * Estado vivo en `.advisor/` con fallback de LECTURA a legacy `.consigliere/`
- * (pre-rename; nunca se escribe ahí; prohibido symlink por compat Windows).
- * Precedencia: `.advisor/` gana siempre; migración por copia + `.migrated`.
+ * Estado vivo en `.advisor/` (sin ramas legacy).
  *
  * Uso:
  *   node init.mjs                          # modo interactivo
@@ -32,11 +30,10 @@ const IS_WIN = platform() === 'win32';
 const HOME = homedir();
 const TEMPLATE_DIR = join(HERE, 'templates');
 
-// Estado: vivo + legacy (read-only). Const ÚNICA de backup/preservados
+// Estado: solo vivo. Const ÚNICA de backup/preservados
 // (paridad con init.sh/init.ps1: BACKUP_ITEMS/PRESERVED idénticos).
 const STATE_DIR = '.advisor';
-const LEGACY_DIR = '.consigliere';
-const BACKUP_ITEMS = ['.opencode', 'AGENTS.md', 'PROJECT_STATE.md', 'SUMMARY.md', 'CHANGELOG', STATE_DIR, LEGACY_DIR, 'opencode.json', '.gitignore', 'skills-lock.json', 'scripts'];
+const BACKUP_ITEMS = ['.opencode', 'AGENTS.md', 'PROJECT_STATE.md', 'SUMMARY.md', 'CHANGELOG', STATE_DIR, 'opencode.json', '.gitignore', 'skills-lock.json', 'scripts'];
 const PRESERVED = ['PROJECT_STATE.md', 'SUMMARY.md', 'opencode.json', 'AGENTS.md', '.gitignore'];
 // Subsets por --part (render selectivo en install/upgrade).
 const PART_HARNESS = ['.opencode', 'scripts', 'AGENTS.md', 'opencode.json', '.gitignore', 'skills-lock.json'];
@@ -82,11 +79,10 @@ async function confirm(question) {
   return /^[SsYy]$/.test(c);
 }
 
-// Estado dual-dir -----------------------------------------------------------
+// Estado vivo ---------------------------------------------------------------
 function stateStatus(target) {
   const vivo = existsSync(join(target, STATE_DIR));
-  const legacy = existsSync(join(target, LEGACY_DIR));
-  return { vivo, legacy, active: vivo ? STATE_DIR : (legacy ? LEGACY_DIR : null) };
+  return { vivo, active: vivo ? STATE_DIR : null };
 }
 
 function ensureStateDirs(target, dry) {
@@ -95,20 +91,6 @@ function ensureStateDirs(target, dry) {
     if (dry) { info(`[dry-run] mkdir -p ${p}`); continue; }
     mkdirSync(p, { recursive: true });
   }
-}
-
-function migrateLegacy(target, dry, preVivo = null) {
-  const { vivo, legacy } = stateStatus(target);
-  const hadVivo = preVivo === null ? vivo : preVivo;
-  if (legacy && !hadVivo) {
-    if (dry) { info(`[dry-run] migrar ${LEGACY_DIR}/ -> ${STATE_DIR}/ (copia + .migrated)`); return 'dry'; }
-    cpSync(join(target, LEGACY_DIR), join(target, STATE_DIR), { recursive: true });
-    writeFileSync(join(target, STATE_DIR, '.migrated'), `Migrado desde ${LEGACY_DIR}/ el ${new Date().toISOString()}. Precedencia: ${STATE_DIR}/ gana; ${LEGACY_DIR}/ queda read-only.\n`, 'utf8');
-    ok(`Migración legacy ${LEGACY_DIR}/ -> ${STATE_DIR}/ (+ .migrated)`);
-    return 'migrated';
-  }
-  if (legacy && vivo) info(`Precedencia estado: ${STATE_DIR}/ (vivo) gana; ${LEGACY_DIR}/ queda read-only`);
-  return vivo ? 'vivo' : 'none';
 }
 
 // Backup / restore ----------------------------------------------------------
@@ -125,7 +107,7 @@ function doBackup(target, items, dry) {
   mkdirSync(backupDir, { recursive: true });
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
   const backupFile = join(backupDir, `advisor-${ts}.tgz`);
-  const tar = spawnSync('tar', ['-czf', backupFile, '-C', target, `--exclude=${STATE_DIR}/backups`, `--exclude=${LEGACY_DIR}/backups`, '--exclude=.memory-lock', ...present], { stdio: 'ignore' });
+  const tar = spawnSync('tar', ['-czf', backupFile, '-C', target, `--exclude=${STATE_DIR}/backups`, '--exclude=.memory-lock', ...present], { stdio: 'ignore' });
   if (tar.error || tar.status !== 0) {
     err(`Backup falló: ${backupFile}`);
     process.exit(1); // abortar si el backup falla (obligatorio)
@@ -273,14 +255,14 @@ function statusCmd(targetDir, projectName) {
     autoskills: existsSync(join(targetDir, '.agents', 'skills')),
   };
   let backups = [];
-  for (const d of [join(targetDir, STATE_DIR, 'backups'), join(targetDir, LEGACY_DIR, 'backups')]) {
+  for (const d of [join(targetDir, STATE_DIR, 'backups')]) {
     try {
       for (const f of readdirSync(d)) if (BACKUP_RE.test(f)) backups.push(join(d, f));
     } catch {}
   }
   backups.sort().reverse();
   let cache = 'sin cache';
-  for (const f of [join(targetDir, STATE_DIR, 'skill-registry.cache.json'), join(targetDir, LEGACY_DIR, 'skill-registry.cache.json')]) {
+  for (const f of [join(targetDir, STATE_DIR, 'skill-registry.cache.json')]) {
     try {
       const j = JSON.parse(readFileSync(f, 'utf8'));
       cache = `${f} (v${j.version}, ${j.entries?.length || 0} skills)`;
@@ -288,7 +270,7 @@ function statusCmd(targetDir, projectName) {
     } catch {}
   }
   console.log(`  harness : ${isHarness ? 'sí' : 'no'}`);
-  console.log(`  estado  : ${st.active || 'ninguno'} (vivo=${st.vivo} legacy=${st.legacy})`);
+  console.log(`  estado  : ${st.active || 'ninguno'} (vivo=${st.vivo})`);
   console.log(`  parts   : harness=${parts.harness} memoria=${parts.memoria} autoskills=${parts.autoskills}`);
   console.log(`  backups : ${backups.length} (keep 5) ${backups[0] ? '→ ' + backups[0] : ''}`);
   console.log(`  cache   : ${cache}`);
@@ -298,7 +280,7 @@ function statusCmd(targetDir, projectName) {
 // --uninstall (seguro: confirmación sin --force; memoria con backup previo) ---
 const UNINSTALL_LISTS = {
   harness: ['.opencode', 'scripts', 'AGENTS.md', 'opencode.json', '.gitignore', 'skills-lock.json'],
-  memoria: ['PROJECT_STATE.md', 'SUMMARY.md', 'CHANGELOG', STATE_DIR, LEGACY_DIR],
+  memoria: ['PROJECT_STATE.md', 'SUMMARY.md', 'CHANGELOG', STATE_DIR],
   autoskills: ['.agents'],
 };
 
@@ -436,7 +418,6 @@ async function interactiveCreate() {
 function createProject(opts) {
   const { projectName, targetDir, AUTO_CHOICE, DO_GIT, PART } = opts;
   step(`Generando proyecto '${projectName}'`);
-  const preVivo = existsSync(join(targetDir, STATE_DIR));
   mkdirSync(targetDir, { recursive: true });
   ok('Estructura base creada');
 
@@ -468,7 +449,6 @@ function createProject(opts) {
   }
   mkdirSync(join(targetDir, 'CHANGELOG'), { recursive: true });
   ensureStateDirs(targetDir, false);
-  migrateLegacy(targetDir, false, preVivo);
   ok('Harness generado (agents, commands, skills, memoria, scripts)');
 
   if (DO_GIT) gitInitAndCommit(targetDir, TEMPLATE_DIR);
@@ -525,7 +505,7 @@ Flags (no-interactivo):
   --dry-run                 no escribir, solo loguear
   --force                   sobrescribir destino no vacío (solo sin --upgrade) / no pedir confirmación
 
-Estado: vivo en .advisor/ con fallback read-only a legacy .consigliere/ (migración por copia + .migrated, sin symlink).
+Estado: vivo en .advisor/.
 
 Instalación: solo por proyecto, sin binario global.
   npx advisor-harness@latest /ruta/proyecto
@@ -615,7 +595,6 @@ async function main() {
   }
 
   if (UPGRADE && !PART) PART = 'all'; // --upgrade monolítico = --part all (alias)
-  const preVivo = existsSync(join(TARGET_DIR, STATE_DIR)); // antes de que backup/ensure creen .advisor/
 
   const isHarness = existsSync(join(TARGET_DIR, '.opencode')) || existsSync(join(TARGET_DIR, 'AGENTS.md'));
   if (existsSync(TARGET_DIR) && readdirSync(TARGET_DIR).length > 0 && !FORCE && !DRY_RUN) {
@@ -663,7 +642,6 @@ async function main() {
     else renderTree(TEMPLATE_DIR, TARGET_DIR, vars);
     mkdirSync(join(TARGET_DIR, 'CHANGELOG'), { recursive: true });
     ensureStateDirs(TARGET_DIR, false);
-    if (scope !== 'harness') migrateLegacy(TARGET_DIR, false, preVivo);
     restorePreserved(TARGET_DIR, backupFile, backupItems);
     ok(`Harness actualizado (--part ${scope})`);
     if (DO_GIT) gitInitAndCommit(TARGET_DIR, TEMPLATE_DIR);
@@ -694,7 +672,6 @@ async function main() {
   }
   mkdirSync(join(TARGET_DIR, 'CHANGELOG'), { recursive: true });
   ensureStateDirs(TARGET_DIR, false);
-  migrateLegacy(TARGET_DIR, false, preVivo);
   ok(`Harness generado${PART ? ` (--part ${PART})` : ''}`);
   if (DO_GIT) gitInitAndCommit(TARGET_DIR, TEMPLATE_DIR);
   if ((scope === 'all' || scope === 'autoskills') && AUTO_CHOICE !== '3' && AUTO_CHOICE !== 'no') handleAutoskills(AUTO_CHOICE, TARGET_DIR);

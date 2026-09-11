@@ -4,9 +4,9 @@
  * Búsqueda progresiva inspirada en Engram: search → timeline → get
  * v2: índice derivado `.advisor/memory-index.json` con fingerprint
  * path+mtime+size (contrato loader.mjs: entradas ordenadas, comparación
- * por mapa, version:1). Lectura fallback legacy `.consigliere/` (read-only);
- * escritura solo `.advisor/`. Score solo en salida search --json, nunca
- * persistido. Sin índice o stale → fallback md+grep sin error.
+ * por mapa, version:1). Escritura y lectura solo `.advisor/`. Score solo
+ * en salida search --json, nunca persistido. Sin índice o stale → fallback
+ * md+grep sin error.
  * Uso:
  *   node memory-index.mjs search "query" [--json] [--refresh]
  *   node memory-index.mjs timeline <id-or-date>  (date YYYY-MM-DD o índice)
@@ -23,7 +23,6 @@ const STATE = join(ROOT, 'PROJECT_STATE.md');
 const CHANGELOG_DIR = join(ROOT, 'CHANGELOG');
 const INDEX_VERSION = 1;
 const INDEX_FILE = join(ROOT, '.advisor', 'memory-index.json');
-const LEGACY_INDEX_FILE = join(ROOT, '.consigliere', 'memory-index.json'); // solo lectura
 
 function slugId(date, title) {
   return `${date}--${String(title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30)}`;
@@ -120,16 +119,13 @@ function score(entry, query, now = Date.now()) {
 }
 
 function loadIndex() {
-  // Precedencia: .advisor/ primero; legacy .consigliere/ solo lectura.
-  for (const f of [INDEX_FILE, LEGACY_INDEX_FILE]) {
-    if (!existsSync(f)) continue;
-    try {
-      const data = JSON.parse(readFileSync(f, 'utf8'));
-      if (data.version !== INDEX_VERSION || !Array.isArray(data.entries)) continue;
-      return { data, fresh: isFresh(data), file: f };
-    } catch { continue; }
-  }
-  return null;
+  const f = INDEX_FILE;
+  if (!existsSync(f)) return null;
+  try {
+    const data = JSON.parse(readFileSync(f, 'utf8'));
+    if (data.version !== INDEX_VERSION || !Array.isArray(data.entries)) return null;
+    return { data, fresh: isFresh(data), file: f };
+  } catch { return null; }
 }
 
 function writeIndex() {

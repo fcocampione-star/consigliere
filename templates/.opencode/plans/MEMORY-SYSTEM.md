@@ -68,12 +68,12 @@ Compat: viejo `**Qué:**/**Verificación:**` se migra a 5 campos.
 
 - `.advisor/skill-registry.cache.json` fingerprint `path+mtime+size` (versión 2), generado por `loader.mjs` en `list`/`search`, `refresh --force` invalida (v1 queda inválida y se regenera).
 
-## Estado dual-dir (rename Advisor, sin symlink)
+## Estado vivo .advisor (sin fallback legacy)
 
-- **Vivo**: `.advisor/` (backups/chunks/cache). **Legacy**: `.consigliere/` pre-rename, fallback **solo lectura**.
-- **Precedencia**: se lee `.advisor/` primero; si falta y existe legacy, se lee legacy. Se **escribe siempre** en `.advisor/`.
-- **Migración**: `--upgrade` (scope `all`/`memoria`) copia legacy → vivo + `.advisor/.migrated`. Prohibido symlink (compat Windows).
-- `memory-sync.mjs`: `export` escribe `.advisor/chunks/`; `import`/`status` leen vivo + legacy.
+- **Vivo**: `.advisor/` (backups/chunks/cache). Plantilla limpia, sin `.consigliere/`.
+- **Precedencia**: se lee y escribe **siempre** en `.advisor/`.
+- **Migración histórica**: `--upgrade` (scope `all`/`memoria`) migró legacy → vivo + `.advisor/.migrated` (prohibido symlink, compat Windows).
+- `memory-sync.mjs`: `export` escribe `.advisor/chunks/`; `import`/`status` leen `.advisor/`.
 
 ## Patrones §5
 

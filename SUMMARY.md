@@ -5,15 +5,15 @@
 
 ---
 
-## 2026-09-11 — Purga F1–F5 docs PASS (F5: hook/index/sync/doctor)
+## 2026-09-10 — Purga F1–F6b sunset legacy completo (solo .advisor vivo)
 
 topic: sdd/advisor-purge-improvements
-**Goal:** Purgar legacy + docs F1–F5 con F5 sin commit.
-**Discoveries:** F5: hook ISO + último bloque + 3 cols; index slug30 + fresh + state §2; sync dedup id + --force; doctor vivo-first 16/16; side-effect verifier solo timestamp/recientes manifest.
-**Accomplished:** F1 01600b0, F2 6dee3b6, F3 fd1df61, F4 dbbd3d9 commiteadas. F5 sin commit: manifest/index generados, search purga 1 hit, timeline/get ok.
-**Next:** Commit F5 a demanda; validar demo Fase 1; rotar a CHANGELOG el lunes.
-**Files:** `git log --oneline -5` → dbbd3d9, fd1df61, 6dee3b6, 01600b0, 35c35fc.
-**Verificación:** hook ISO + 3 cols OK, index slug30/fresh/state §2 OK, sync dedup + --force OK, doctor 16/16, search 1 hit timeline/get OK, limits 63/100 49/150.
+**Goal:** Cerrar F6+F6b sunset: eliminar `.consigliere` y purgar LEGACY_* en init/scripts + docs.
+**Discoveries:** `.consigliere` eliminado raíz+templates; LEGACY_* purgado en init/scripts raíz+templates; 6 refs docs actualizadas; demo sin `.consigliere`; doctor 15/16 (index stale no bloqueante); npm test ok. Sin commit.
+**Accomplished:** Sunset F6 completo — F1–F5 (bb59a2d+dbbd3d9, fd1df61, 6dee3b6, 01600b0) + F6/F6b trabajo en árbol; solo `.advisor/` vivo (2.0). Alineación AGENT-PIPELINE local sin commitear. Decisión §2 pendiente: Advisor-only routing orgánico + SDD-lite ≤650w.
+**Next:** MANUAL usuario: buildIndex para doctor 16/16; validar demo Fase 1; rotar a CHANGELOG el lunes; commitear/pushear cuando indique.
+**Files:** `git log --oneline -5` → bb59a2d, dbbd3d9, fd1df61, 6dee3b6, 01600b0 (F6 en worktree, sin commit).
+**Verificación:** PASS — doctor 15/16 (stale → buildIndex), npm test syntax ok v2.0.0, grep legacy 0, limits 65/100 49/150.
 
 ## 2026-09-10 — Fixes P0/P1/P2 verificados PASS
 

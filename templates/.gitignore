@@ -41,9 +41,5 @@ tmp/
 .advisor/skill-registry.cache.json
 .advisor/backups/
 .advisor/memory-index.json
-# legacy pre-rename (read-only fallback, no escribir)
-.consigliere/skill-registry.cache.json
-.consigliere/backups/
-.consigliere/memory-index.json
 # .advisor/chunks/  ← descomenta si no quieres versionar sync local
 # .agents/skills/   ← descomenta para no versionar autoskills

@@ -14,11 +14,10 @@ set -euo pipefail
 
 VERSION="2.0.0"
 
-# Estado: vivo .advisor/ + legacy .consigliere/ read-only (paridad init.mjs/init.ps1).
+# Estado: solo vivo .advisor/ (paridad init.mjs/init.ps1).
 # Const ÚNICA BACKUP_ITEMS/PRESERVED — mantener idéntica en los 3 instaladores.
 STATE_DIR=".advisor"
-LEGACY_DIR=".consigliere"
-BACKUP_ITEMS=(.opencode AGENTS.md PROJECT_STATE.md SUMMARY.md CHANGELOG .advisor .consigliere opencode.json .gitignore skills-lock.json scripts)
+BACKUP_ITEMS=(.opencode AGENTS.md PROJECT_STATE.md SUMMARY.md CHANGELOG .advisor opencode.json .gitignore skills-lock.json scripts)
 PRESERVED=(PROJECT_STATE.md SUMMARY.md opencode.json AGENTS.md .gitignore)
 PART_HARNESS=(.opencode scripts AGENTS.md opencode.json .gitignore skills-lock.json)
 PART_MEMORIA=(PROJECT_STATE.md SUMMARY.md CHANGELOG)
@@ -231,14 +230,11 @@ prompt_model() {
 
 create_project() {
   step "Generando proyecto '$PROJECT_NAME'"
-  local pre_vivo=0
-  [[ -d "$TARGET_DIR/$STATE_DIR" ]] && pre_vivo=1
   mkdir -p "$TARGET_DIR"
   ok "Estructura base creada"
   render_tree "$TEMPLATE_DIR" "$TARGET_DIR"
   mkdir -p "$TARGET_DIR/CHANGELOG"
   ensure_state_dirs "$TARGET_DIR" 0
-  migrate_legacy "$TARGET_DIR" 0 "$pre_vivo"
   ok "Harness generado (agents, commands, skills, memoria, scripts)"
   if [[ "$DO_GIT" -eq 1 ]]; then
     git_init_and_commit "$TARGET_DIR"
@@ -320,7 +316,7 @@ finish() {
   printf "${C_DIM}Instalación 100%% por proyecto — sin binario global. Actualiza con: npx advisor-harness@latest %s --upgrade${C_RESET}\n" "$TARGET_DIR"
 }
 
-# Estado dual-dir / backup / modular -----------------------------------------
+# Estado vivo / backup / modular ------------------------------------------------
 ensure_state_dirs() {
   local target="$1" dry="${2:-0}"
   for sub in "" "backups" "chunks"; do
@@ -329,24 +325,7 @@ ensure_state_dirs() {
   done
 }
 
-migrate_legacy() {
-  # Copia legacy -> vivo + .migrated. Precedencia: .advisor/ gana. Sin symlink.
-  # $3 = pre_vivo (1 si .advisor/ ya existía ANTES del backup/ensure; evita falso vivo recién creado).
-  local target="$1" dry="${2:-0}" pre_vivo="${3:-}"
-  local vivo=0 legacy=0
-  [[ -d "$target/$STATE_DIR" ]] && vivo=1
-  [[ -d "$target/$LEGACY_DIR" ]] && legacy=1
-  [[ -n "$pre_vivo" ]] && vivo="$pre_vivo"
-  if [[ "$legacy" -eq 1 && "$vivo" -eq 0 ]]; then
-    if [[ "$dry" -eq 1 ]]; then info "[dry-run] migrar $LEGACY_DIR/ -> $STATE_DIR/ (copia + .migrated)"; return 0; fi
-    cp -r "$target/$LEGACY_DIR" "$target/$STATE_DIR"
-    printf 'Migrado desde %s/ el %s. Precedencia: %s/ gana; %s/ queda read-only.\n' "$LEGACY_DIR" "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date)" "$STATE_DIR" "$LEGACY_DIR" > "$target/$STATE_DIR/.migrated"
-    ok "Migración legacy $LEGACY_DIR/ -> $STATE_DIR/ (+ .migrated)"
-  elif [[ -d "$target/$LEGACY_DIR" && -d "$target/$STATE_DIR" ]]; then
-    info "Precedencia estado: $STATE_DIR/ (vivo) gana; $LEGACY_DIR/ queda read-only"
-  fi
-}
-
+# Backup / modular --------------------------------------------------------
 prune_backups() {
   # keep 5 combinado ^(harness|advisor)-*.tgz (paridad mjs/ps1)
   ls -1 "$1"/harness-*.tgz "$1"/advisor-*.tgz 2>/dev/null | sort -r | tail -n +6 | xargs -r rm -f 2>/dev/null || true
@@ -367,7 +346,7 @@ do_backup() {
   mkdir -p "$target/$STATE_DIR/backups"
   local ts; ts="$(date -u +%Y%m%dT%H%M%SZ 2>/dev/null || date +%Y%m%d%H%M%S)"
   local bf="$target/$STATE_DIR/backups/advisor-${ts}.tgz"
-  if ! tar -czf "$bf" -C "$target" --exclude="$STATE_DIR/backups" --exclude="$LEGACY_DIR/backups" --exclude=.memory-lock "${present[@]}" 2>/dev/null; then
+  if ! tar -czf "$bf" -C "$target" --exclude="$STATE_DIR/backups" --exclude=.memory-lock "${present[@]}" 2>/dev/null; then
     err "Backup falló: $bf"
     exit 1
   fi
@@ -430,17 +409,16 @@ status_cmd() {
   step "Estado harness '$PROJECT_NAME' (read-only)"
   local is_harness=0
   [[ -d "$TARGET_DIR/.opencode" || -f "$TARGET_DIR/AGENTS.md" ]] && is_harness=1
-  local vivo=0 legacy=0
+  local vivo=0
   [[ -d "$TARGET_DIR/$STATE_DIR" ]] && vivo=1
-  [[ -d "$TARGET_DIR/$LEGACY_DIR" ]] && legacy=1
-  local active="ninguno"; [[ "$vivo" -eq 1 ]] && active="$STATE_DIR" || { [[ "$legacy" -eq 1 ]] && active="$LEGACY_DIR"; }
+  local active="ninguno"; [[ "$vivo" -eq 1 ]] && active="$STATE_DIR"
   local p_harness=0 p_memoria=0 p_autoskills=0
   [[ -d "$TARGET_DIR/.opencode" ]] && p_harness=1
   [[ -f "$TARGET_DIR/PROJECT_STATE.md" || -f "$TARGET_DIR/SUMMARY.md" || -d "$TARGET_DIR/CHANGELOG" ]] && p_memoria=1
   [[ -d "$TARGET_DIR/.agents/skills" ]] && p_autoskills=1
   local n_backups=0 newest=""
   local bd
-  for bd in "$TARGET_DIR/$STATE_DIR/backups" "$TARGET_DIR/$LEGACY_DIR/backups"; do
+  for bd in "$TARGET_DIR/$STATE_DIR/backups"; do
     if [[ -d "$bd" ]]; then
       local c; c="$(ls -1 "$bd" 2>/dev/null | grep -cE '^(harness|advisor)-.*\.tgz$' || true)"
       n_backups=$((n_backups + c))
@@ -449,11 +427,11 @@ status_cmd() {
     fi
   done
   local cache="sin cache" cf
-  for cf in "$TARGET_DIR/$STATE_DIR/skill-registry.cache.json" "$TARGET_DIR/$LEGACY_DIR/skill-registry.cache.json"; do
+  for cf in "$TARGET_DIR/$STATE_DIR/skill-registry.cache.json"; do
     if [[ -f "$cf" ]]; then cache="$cf"; break; fi
   done
   echo "  harness : $([[ "$is_harness" -eq 1 ]] && echo sí || echo no)"
-  echo "  estado  : $active (vivo=$vivo legacy=$legacy)"
+  echo "  estado  : $active (vivo=$vivo)"
   echo "  parts   : harness=$p_harness memoria=$p_memoria autoskills=$p_autoskills"
   echo "  backups : $n_backups (keep 5)${newest:+ → $newest}"
   echo "  cache   : $cache"
@@ -478,9 +456,9 @@ uninstall_cmd() {
   local -a list=()
   case "$part" in
     harness) list=(.opencode scripts AGENTS.md opencode.json .gitignore skills-lock.json) ;;
-    memoria) list=(PROJECT_STATE.md SUMMARY.md CHANGELOG "$STATE_DIR" "$LEGACY_DIR") ;;
+    memoria) list=(PROJECT_STATE.md SUMMARY.md CHANGELOG "$STATE_DIR") ;;
     autoskills) list=(.agents) ;;
-    all) list=(.opencode scripts AGENTS.md opencode.json .gitignore skills-lock.json PROJECT_STATE.md SUMMARY.md CHANGELOG "$STATE_DIR" "$LEGACY_DIR" .agents) ;;
+    all) list=(.opencode scripts AGENTS.md opencode.json .gitignore skills-lock.json PROJECT_STATE.md SUMMARY.md CHANGELOG "$STATE_DIR" .agents) ;;
   esac
   local -a present=()
   local c; for c in "${list[@]}"; do [[ -e "$TARGET_DIR/$c" ]] && present+=("$c"); done
@@ -499,7 +477,7 @@ uninstall_cmd() {
   fi
   if [[ "$part" == "memoria" || "$part" == "all" ]]; then
     step "Backup previo obligatorio de memoria"
-    local -a mem=(PROJECT_STATE.md SUMMARY.md CHANGELOG "$STATE_DIR" "$LEGACY_DIR")
+    local -a mem=(PROJECT_STATE.md SUMMARY.md CHANGELOG "$STATE_DIR")
     do_backup "$TARGET_DIR" 0 "${mem[@]}" || exit 1
     # Copia FUERA del target: el backup interno se borraría con $STATE_DIR/
     if [[ -n "$DO_BACKUP_FILE" ]]; then
@@ -573,7 +551,7 @@ Flags (no-interactivo):
   --dry-run                 no escribir, solo loguear
   --force                   sobrescribir destino no vacío (solo sin --upgrade) / no pedir confirmación
 
-Estado: vivo en .advisor/ con fallback read-only a legacy .consigliere/ (migración por copia + .migrated, sin symlink).
+Estado: vivo en .advisor/.
 
 Genera: .opencode/ (agents, commands, plans, skills, scripts), AGENTS.md,
 PROJECT_STATE.md, SUMMARY.md, CHANGELOG/, .advisor/, .gitignore, skills-lock.json.
@@ -635,9 +613,6 @@ main() {
   # --upgrade monolítico = --part all (alias)
   if [[ "$UPGRADE" -eq 1 && -z "$PART" ]]; then PART="all"; fi
   scope="${PART:-all}"
-  # snapshot ANTES de que backup/ensure creen .advisor/ (evita falso vivo en migrate)
-  pre_vivo=0
-  [[ -d "$TARGET_DIR/$STATE_DIR" ]] && pre_vivo=1
 
   local has_harness=0
   [[ -d "$TARGET_DIR/.opencode" || -f "$TARGET_DIR/AGENTS.md" ]] && has_harness=1
@@ -707,7 +682,6 @@ main() {
   esac
   mkdir -p "$TARGET_DIR/CHANGELOG"
   ensure_state_dirs "$TARGET_DIR" 0
-  if [[ "$scope" != "harness" ]]; then migrate_legacy "$TARGET_DIR" 0 "$pre_vivo"; fi
   if [[ "${#items[@]}" -gt 0 ]] && [[ -n "$bf" ]]; then
     local -a restored=()
     for p in "${PRESERVED[@]}"; do

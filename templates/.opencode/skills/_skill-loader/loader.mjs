@@ -5,8 +5,6 @@
  * Carga skills bajo demanda (proyecto + autoskills) + chunks.
  * Cache: .advisor/skill-registry.cache.json con fingerprint path+mtime+size
  *        inspirado en Gentle AI skill-registry fingerprint.
- *        Legacy pre-rename .consigliere/ solo como fallback de LECTURA
- *        (nunca se escribe ahí; sin symlink por compat Windows).
  *
  * Uso:
  *   node loader.mjs list [--refresh|--force|--json]
@@ -27,9 +25,7 @@ const LOCATIONS = [
   join(PROJECT_ROOT, '.agents', 'skills'),
 ];
 const CACHE_DIR = join(PROJECT_ROOT, '.advisor');
-const LEGACY_CACHE_DIR = join(PROJECT_ROOT, '.consigliere'); // fallback solo lectura
 const CACHE_FILE = join(CACHE_DIR, 'skill-registry.cache.json');
-const LEGACY_CACHE_FILE = join(LEGACY_CACHE_DIR, 'skill-registry.cache.json');
 const CACHE_VERSION = 2;
 
 function listSkillsRaw() {
@@ -63,16 +59,13 @@ function fingerprint(skills) {
 }
 
 function loadCache() {
-  // Precedencia: .advisor/ primero; legacy .consigliere/ solo lectura.
-  for (const f of [CACHE_FILE, LEGACY_CACHE_FILE]) {
-    if (!existsSync(f)) continue;
-    try {
-      const data = JSON.parse(readFileSync(f, 'utf8'));
-      if (data.version !== CACHE_VERSION) continue;
-      return data;
-    } catch { continue; }
-  }
-  return null;
+  const f = CACHE_FILE;
+  if (!existsSync(f)) return null;
+  try {
+    const data = JSON.parse(readFileSync(f, 'utf8'));
+    if (data.version !== CACHE_VERSION) return null;
+    return data;
+  } catch { return null; }
 }
 
 function saveCache(fp) {

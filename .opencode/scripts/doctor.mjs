@@ -60,14 +60,11 @@ if (existsSync(lock)) {
   } catch { add('.memory-lock','⚠️','existe','rmdir .memory-lock'); }
 } else add('.memory-lock','✅','sin lock (ok)');
 
-// 5 skills loader cache (vivo primero; legacy solo nota residual read-only)
+// 5 skills loader cache (vivo)
 const cacheVivo = join(ROOT,'.advisor','skill-registry.cache.json');
-const cacheLegacy = join(ROOT,'.consigliere','skill-registry.cache.json');
 const cache = existsSync(cacheVivo) ? cacheVivo : null;
 if (cache) {
   try { const j=JSON.parse(readFileSync(cache,'utf8')); add('skill cache', j.version===2?'✅':'⚠️', `${j.entries?.length||0} skills cacheadas (vivo)`, j.version!==2?'node .opencode/skills/_skill-loader/loader.mjs refresh --force':''); } catch { add('skill cache','⚠️','cache corrupta','node .opencode/skills/_skill-loader/loader.mjs refresh --force'); }
-} else if (existsSync(cacheLegacy)) {
-  add('skill cache','⚠️','solo legacy residual (read-only)','node .opencode/skills/_skill-loader/loader.mjs refresh');
 } else add('skill cache','⚠️','sin cache (se genera en /discover)','node .opencode/skills/_skill-loader/loader.mjs refresh');
 
 // 6 scripts
@@ -76,17 +73,14 @@ for (const s of ['memory-index.mjs','memory-sync.mjs','doctor.mjs']) {
   add(`script ${s}`, existsSync(p)?'✅':'❌', existsSync(p)?'presente':'falta','npx advisor-harness@latest . --upgrade');
 }
 
-// 7 dirs (estado vivo .advisor/; legacy .consigliere/ solo nota residual)
-for (const [label, vivo, legacy] of [['CHANGELOG','CHANGELOG',null],['backups','.advisor/backups','.consigliere/backups'],['chunks','.advisor/chunks','.consigliere/chunks']]) {
+// 7 dirs (estado vivo .advisor/)
+for (const [label, vivo] of [['CHANGELOG','CHANGELOG'],['backups','.advisor/backups'],['chunks','.advisor/chunks']]) {
   if (existsSync(join(ROOT,vivo))) add(`dir ${label}`, '✅', `ok (${vivo})`);
-  else if (legacy && existsSync(join(ROOT,legacy))) add(`dir ${label}`, '⚠️', `solo legacy residual (${legacy})`, 'mkdir -p '+vivo);
   else add(`dir ${label}`, '⚠️', 'falta', 'mkdir -p '+vivo);
 }
 
-// 8 manifest derivado (vivo primero; legacy solo nota residual; warning regenerable, nunca error)
-// NOTA: sin check de drift raíz-vs-templates (diferido a F6 con LEGACY_* sunset).
+// 8 manifest derivado (warning regenerable, nunca error)
 const manifestVivo = join(ROOT,'.advisor','memory-manifest.json');
-const manifestLegacy = join(ROOT,'.consigliere','memory-manifest.json');
 const manifest = existsSync(manifestVivo) ? manifestVivo : null;
 if (manifest) {
   try {
@@ -96,12 +90,10 @@ if (manifest) {
       add('manifest', '✅', `${m.recent.length} recientes, ${ml} líneas (vivo)`);
     else add('manifest','⚠️','estructura inesperada o ≥15 líneas','node .opencode/scripts/memory-sync.mjs buildManifest');
   } catch { add('manifest','⚠️','manifest corrupto','node .opencode/scripts/memory-sync.mjs buildManifest'); }
-} else if (existsSync(manifestLegacy)) add('manifest','⚠️','solo legacy residual (read-only)','node .opencode/scripts/memory-sync.mjs buildManifest');
-else add('manifest','⚠️','sin manifest (se genera en escritura)','node .opencode/scripts/memory-sync.mjs buildManifest');
+} else add('manifest','⚠️','sin manifest (se genera en escritura)','node .opencode/scripts/memory-sync.mjs buildManifest');
 
-// 9 index derivado (vivo primero; legacy solo nota residual; stale o ausente no bloquea: fallback md+grep)
+// 9 index derivado (stale o ausente no bloquea: fallback md+grep)
 const indexVivo = join(ROOT,'.advisor','memory-index.json');
-const indexLegacy = join(ROOT,'.consigliere','memory-index.json');
 const index = existsSync(indexVivo) ? indexVivo : null;
 if (index) {
   try {
@@ -110,8 +102,7 @@ if (index) {
       add('index', '✅', `${data.entries?.length||0} entries fresh (vivo)`);
     else add('index','⚠️','índice desactualizado (stale)','node .opencode/scripts/memory-sync.mjs buildIndex');
   } catch { add('index','⚠️','índice corrupto','node .opencode/scripts/memory-sync.mjs buildIndex'); }
-} else if (existsSync(indexLegacy)) add('index','⚠️','solo legacy residual (read-only)','node .opencode/scripts/memory-sync.mjs buildIndex');
-else add('index','⚠️','sin índice (search usa fallback md+grep)','node .opencode/scripts/memory-sync.mjs buildIndex');
+} else add('index','⚠️','sin índice (search usa fallback md+grep)','node .opencode/scripts/memory-sync.mjs buildIndex');
 
 const hasError = checks.some(c=>c.status==='❌');
 const hasWarn = checks.some(c=>c.status==='⚠️');

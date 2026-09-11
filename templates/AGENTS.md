@@ -49,9 +49,9 @@
   - `node .opencode/skills/_skill-loader/loader.mjs search "query"`
   - `node .opencode/skills/_skill-loader/loader.mjs chunk "<skill>" urls,shortcuts,examples`
 - **Memoria buscable** (md+grep, sin SQLite): `node .opencode/scripts/memory-index.mjs search "query"` → `timeline <id>` → `get <id>`
-- **Sync local**: `node .opencode/scripts/memory-sync.mjs export|import|status` → `.advisor/chunks/` (fallback lectura legacy `.consigliere/chunks/`)
+- **Sync local**: `node .opencode/scripts/memory-sync.mjs export|import|status` → `.advisor/chunks/`
 - **Doctor**: `node .opencode/scripts/doctor.mjs [--json]` o `/doctor`
-- **Estado dual-dir**: vivo `.advisor/` + fallback read-only legacy (migración copia + `.migrated`, sin symlink); instala/actualiza modular con `node init.mjs <dir> --upgrade [--part harness|memoria|autoskills|all]`, `--status`, `--restore --from`, `--uninstall --part` (memoria exige backup previo + `--force`)
+- **Estado vivo .advisor + plantilla limpia**: solo `.advisor/` vivo, sin fallback legacy; instala/actualiza modular con `node init.mjs <dir> --upgrade [--part harness|memoria|autoskills|all]`, `--status`, `--restore --from`, `--uninstall --part` (memoria exige backup previo + `--force`)
 
 ## Development commands
 

@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 /**
  * ADVISOR 2.0 — memory-sync.mjs (sync local, sin cloud)
- * Estado vivo en .advisor/; legacy .consigliere/ solo fallback de
- * LECTURA en import/status/loadIndex (nunca se escribe ahí).
+ * Estado vivo en .advisor/ (escritura y lectura).
  * Derivados: memory-manifest.json (<15 líneas, trackeable, SIN mtime
  * para evitar stale-on-clone) + memory-index.json (fingerprint completo,
  * git-ignored, regenerable). Fingerprint y parsers se reutilizan desde
@@ -21,8 +20,6 @@ import { allEntries, fingerprint, isFresh, writeIndex, slugId, INDEX_VERSION } f
 const ROOT = join(import.meta.dirname, '..', '..');
 const ADVISOR_DIR = join(ROOT, '.advisor'); // escritura siempre aquí
 const CHUNKS_DIR = join(ADVISOR_DIR, 'chunks');
-const LEGACY_CHUNKS_DIR = join(ROOT, '.consigliere', 'chunks'); // lectura fallback
-const LEGACY_INDEX_FILE = join(ROOT, '.consigliere', 'memory-index.json'); // lectura fallback
 const SUMMARY = join(ROOT, 'SUMMARY.md');
 const STATE = join(ROOT, 'PROJECT_STATE.md');
 const CHANGELOG_DIR = join(ROOT, 'CHANGELOG');
@@ -68,11 +65,11 @@ function exportChunks(force=false) {
 }
 
 function importChunks() {
-  // Lee vivo + legacy (sin duplicar); escribe solo CHANGELOG/.
-  const dirs = [CHUNKS_DIR, LEGACY_CHUNKS_DIR].filter((d, i, a) => existsSync(d) && a.indexOf(d) === i);
+  // Lee vivo; escribe solo CHANGELOG/.
+  const dirs = [CHUNKS_DIR].filter((d, i, a) => existsSync(d) && a.indexOf(d) === i);
   if (!dirs.length) { console.log('Sin chunks en .advisor/chunks/'); return; }
   let imported=0;
-  const seen=new Set(); // dedup por id entre vivo+legacy y dentro de cada archivo
+  const seen=new Set(); // dedup por id
   for (const dir of dirs) {
   for (const f of readdirSync(dir)) {
     if (!f.endsWith('.json') || f==='state.json') continue;
@@ -154,28 +151,24 @@ function manifestStatus() {
 }
 
 function indexStatus() {
-  const files = [INDEX_FILE, LEGACY_INDEX_FILE].filter(f => existsSync(f));
-  if (!files.length) { console.log('Index: falta (buildIndex lo genera)'); return; }
+  const f = INDEX_FILE;
+  if (!existsSync(f)) { console.log('Index: falta (buildIndex lo genera)'); return; }
   const cur = fingerprint();
-  for (const f of files) {
-    try {
-      const data = JSON.parse(readFileSync(f, 'utf8'));
-      const label = f === INDEX_FILE ? 'vivo' : 'legacy';
-      console.log(`Index (${label}): ${data.version === INDEX_VERSION && isFresh(data, cur) ? 'fresh' : 'stale'} (${data.entries?.length ?? '?'} entries)`);
-    } catch { console.log(`Index: corrupto en ${f}`); }
-  }
+  try {
+    const data = JSON.parse(readFileSync(f, 'utf8'));
+    console.log(`Index (vivo): ${data.version === INDEX_VERSION && isFresh(data, cur) ? 'fresh' : 'stale'} (${data.entries?.length ?? '?'} entries)`);
+  } catch { console.log(`Index: corrupto en ${f}`); }
 }
 
 function status() {
-  for (const [label, dir] of [['vivo', CHUNKS_DIR], ['legacy', LEGACY_CHUNKS_DIR]]) {
-    const files = existsSync(dir)?readdirSync(dir).filter(f=>f.endsWith('.json')):[];
-    console.log(`Chunks (${label}): ${files.length} en ${dir}`);
-    for (const f of files) {
-      const st = statSync(join(dir,f));
-      const arr = (()=>{try{return JSON.parse(readFileSync(join(dir,f),'utf8'))}catch{return null}})();
-      const count = Array.isArray(arr)?arr.length:(arr?'1 (state)':'?');
-      console.log(`  - ${f}  ${count} entries  ${new Date(st.mtimeMs).toISOString()}`);
-    }
+  const dir = CHUNKS_DIR;
+  const files = existsSync(dir)?readdirSync(dir).filter(f=>f.endsWith('.json')):[];
+  console.log(`Chunks (vivo): ${files.length} en ${dir}`);
+  for (const f of files) {
+    const st = statSync(join(dir,f));
+    const arr = (()=>{try{return JSON.parse(readFileSync(join(dir,f),'utf8'))}catch{return null}})();
+    const count = Array.isArray(arr)?arr.length:(arr?'1 (state)':'?');
+    console.log(`  - ${f}  ${count} entries  ${new Date(st.mtimeMs).toISOString()}`);
   }
   console.log(`SUMMARY: ${existsSync(SUMMARY)?'ok':'falta'}  STATE: ${existsSync(STATE)?'ok':'falta'}`);
   manifestStatus();

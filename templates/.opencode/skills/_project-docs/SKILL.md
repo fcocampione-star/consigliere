@@ -98,7 +98,7 @@ node .opencode/scripts/memory-index.mjs get <id>
 node .opencode/skills/_skill-loader/loader.mjs list --json
 node .opencode/skills/_skill-loader/loader.mjs chunk "_project-docs" urls,shortcuts,examples
 node .opencode/skills/_skill-loader/loader.mjs refresh --force
-# cache: .advisor/skill-registry.cache.json v2 (path+mtime+size), fallback lectura legacy .consigliere/
+# cache: .advisor/skill-registry.cache.json v2 (path+mtime+size)
 # bin: advisor + advisor-harness + alias consigliere-harness (1 versión transición)
 ```
 

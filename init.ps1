@@ -41,11 +41,10 @@ if (-not $HOME_DIR) { $HOME_DIR = $env:USERPROFILE }
 $TEMPLATE_DIR = Join-Path (Split-Path $SCRIPT_PATH -Parent) "templates"
 $SCRIPT_NAME = Split-Path $SCRIPT_PATH -Leaf
 
-# Estado: vivo .advisor/ + legacy .consigliere/ read-only (paridad init.mjs/init.sh).
+# Estado: solo vivo .advisor/ (paridad init.mjs/init.sh).
 # Const ÚNICA BACKUP_ITEMS/PRESERVED — mantener idéntica en los 3 instaladores.
 $STATE_DIR = ".advisor"
-$LEGACY_DIR = ".consigliere"
-$BACKUP_ITEMS = @('.opencode','AGENTS.md','PROJECT_STATE.md','SUMMARY.md','CHANGELOG','.advisor','.consigliere','opencode.json','.gitignore','skills-lock.json','scripts')
+$BACKUP_ITEMS = @('.opencode','AGENTS.md','PROJECT_STATE.md','SUMMARY.md','CHANGELOG','.advisor','opencode.json','.gitignore','skills-lock.json','scripts')
 $PRESERVED = @('PROJECT_STATE.md','SUMMARY.md','opencode.json','AGENTS.md','.gitignore')
 $PART_HARNESS = @('.opencode','scripts','AGENTS.md','opencode.json','.gitignore','skills-lock.json')
 $PART_MEMORIA = @('PROJECT_STATE.md','SUMMARY.md','CHANGELOG')
@@ -107,7 +106,7 @@ Flags:
   -DryRun                  no escribir, solo loguear
   -Force                   sobrescribir destino no vacío (solo sin -Upgrade) / no pedir confirmación
 
-Estado: vivo en .advisor/ con fallback read-only a legacy .consigliere/ (migración por copia + .migrated, sin symlink).
+Estado: solo vivo en .advisor/ (paridad init.mjs/init.sh).
 
 Instalación: solo por proyecto, sin binario global.
   npx advisor-harness@latest C:\ruta\proyecto
@@ -253,7 +252,6 @@ function Invoke-InteractiveCreate {
 function Invoke-CreateProject {
   param($ProjectName, $TargetDir, $STACK_DB, $STACK_BACKEND, $STACK_FRONTEND, $STACK_AUTH, $STACK_VALIDATION, $STACK_DEPLOY, $LANG_BACKEND, $MODEL_ADVISOR, $MODEL_PLANNER, $MODEL_BUILDER, $MODEL_CRITIC, $MODEL_VERIFIER, $MODEL_SUMMARIZER, $MODEL_EXPLORE, $AUTO_CHOICE, $DO_GIT)
   Write-Step "Generando proyecto '$ProjectName'"
-  $preVivo = Test-Path (Join-Path $TargetDir $STATE_DIR)
   New-Item -ItemType Directory -Force -Path $TargetDir | Out-Null
   Write-Ok "Estructura base creada"
   $vars = @{
@@ -265,7 +263,6 @@ function Invoke-CreateProject {
   Render-Tree $TEMPLATE_DIR $TargetDir $vars
   New-Item -ItemType Directory -Force -Path (Join-Path $TargetDir "CHANGELOG") | Out-Null
   Ensure-StateDirs $TargetDir $false
-  Migrate-Legacy $TargetDir $false $preVivo
   Write-Ok "Harness generado (agents, commands, skills, memoria, scripts)"
   if ($DO_GIT) { Git-InitAndCommit $TargetDir } else { Write-Warn "Git no inicializado." }
   Handle-Autoskills $AUTO_CHOICE $TargetDir
@@ -277,23 +274,6 @@ function Ensure-StateDirs($targetDir, $dry) {
     $p = Join-Path (Join-Path $targetDir $STATE_DIR) $sub
     if ($dry) { Write-Info "[dry-run] mkdir -p $p" }
     else { New-Item -ItemType Directory -Force -Path $p | Out-Null }
-  }
-}
-
-function Migrate-Legacy($targetDir, $dry, $preVivo = $null) {
-  # Copia legacy -> vivo + .migrated. Precedencia: .advisor/ gana. Sin symlink.
-  # $preVivo: snapshot de existencia previa (evita falso vivo recién creado por backup/ensure).
-  $vivo = Test-Path (Join-Path $targetDir $STATE_DIR)
-  $legacy = Test-Path (Join-Path $targetDir $LEGACY_DIR)
-  if ($null -ne $preVivo) { $vivo = [bool]$preVivo }
-  if ($legacy -and -not $vivo) {
-    if ($dry) { Write-Info "[dry-run] migrar $LEGACY_DIR/ -> $STATE_DIR/ (copia + .migrated)"; return }
-    Copy-Item -Path (Join-Path $targetDir $LEGACY_DIR) -Destination (Join-Path $targetDir $STATE_DIR) -Recurse -Force
-    $ts = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
-    Set-Content -Path (Join-Path $targetDir "$STATE_DIR/.migrated") -Value "Migrado desde $LEGACY_DIR/ el $ts. Precedencia: $STATE_DIR/ gana; $LEGACY_DIR/ queda read-only." -Encoding utf8NoBOM
-    Write-Ok "Migración legacy $LEGACY_DIR/ -> $STATE_DIR/ (+ .migrated)"
-  } elseif ($legacy -and $vivo) {
-    Write-Info "Precedencia estado: $STATE_DIR/ (vivo) gana; $LEGACY_DIR/ queda read-only"
   }
 }
 
@@ -316,7 +296,7 @@ function Do-Backup($targetDir, $dry, $itemList) {
   $ts = Get-Date -Format "yyyyMMddTHHmmssZ"
   $bf = Join-Path $backupDir "advisor-$ts.tgz"
   try {
-    & tar -czf $bf -C $targetDir --exclude="$STATE_DIR/backups" --exclude="$LEGACY_DIR/backups" --exclude=.memory-lock @present 2>$null
+    & tar -czf $bf -C $targetDir --exclude="$STATE_DIR/backups" --exclude=.memory-lock @present 2>$null
   } catch {
     $global:LASTEXITCODE = 1
   }
@@ -351,24 +331,23 @@ function Show-Status($targetDir, $projectName) {
   Write-Step "Estado harness '$projectName' (read-only)"
   $isHarness = (Test-Path (Join-Path $targetDir ".opencode")) -or (Test-Path (Join-Path $targetDir "AGENTS.md"))
   $vivo = Test-Path (Join-Path $targetDir $STATE_DIR)
-  $legacy = Test-Path (Join-Path $targetDir $LEGACY_DIR)
-  $active = if ($vivo) { $STATE_DIR } elseif ($legacy) { $LEGACY_DIR } else { "ninguno" }
+  $active = if ($vivo) { $STATE_DIR } else { "ninguno" }
   $pHarness = Test-Path (Join-Path $targetDir ".opencode")
   $pMemoria = (Test-Path (Join-Path $targetDir "PROJECT_STATE.md")) -or (Test-Path (Join-Path $targetDir "SUMMARY.md")) -or (Test-Path (Join-Path $targetDir "CHANGELOG"))
   $pAutoskills = Test-Path (Join-Path $targetDir ".agents\skills")
   $backups = @()
-  foreach ($bd in @((Join-Path $targetDir "$STATE_DIR\backups"), (Join-Path $targetDir "$LEGACY_DIR\backups"))) {
+  foreach ($bd in @((Join-Path $targetDir "$STATE_DIR\backups"))) {
     if (Test-Path $bd) {
       $backups += @(Get-ChildItem -Path $bd -Filter "*.tgz" -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^(harness|advisor)-.*\.tgz$' } | ForEach-Object { $_.FullName })
     }
   }
   $backups = @($backups | Sort-Object -Descending)
   $cache = "sin cache"
-  foreach ($cf in @((Join-Path $targetDir "$STATE_DIR\skill-registry.cache.json"), (Join-Path $targetDir "$LEGACY_DIR\skill-registry.cache.json"))) {
+  foreach ($cf in @((Join-Path $targetDir "$STATE_DIR\skill-registry.cache.json"))) {
     if (Test-Path $cf) { $cache = $cf; break }
   }
   Write-Host "  harness : $(if ($isHarness) { 'sí' } else { 'no' })"
-  Write-Host "  estado  : $active (vivo=$vivo legacy=$legacy)"
+  Write-Host "  estado  : $active (vivo=$vivo)"
   Write-Host "  parts   : harness=$pHarness memoria=$pMemoria autoskills=$pAutoskills"
   Write-Host "  backups : $($backups.Count) (keep 5)$(if ($backups.Count -gt 0) { ' → ' + $backups[0] })"
   Write-Host "  cache   : $cache"
@@ -394,7 +373,7 @@ function Restore-Backup($targetDir, $projectName, $from, $dry) {
 function Uninstall-Harness($targetDir, $projectName, $part, $dry, $force) {
   $lists = @{
     harness = @('.opencode','scripts','AGENTS.md','opencode.json','.gitignore','skills-lock.json')
-    memoria = @('PROJECT_STATE.md','SUMMARY.md','CHANGELOG',$STATE_DIR,$LEGACY_DIR)
+    memoria = @('PROJECT_STATE.md','SUMMARY.md','CHANGELOG',$STATE_DIR)
     autoskills = @('.agents')
   }
   if ($part -eq 'all') { $list = @($lists.harness + $lists.memoria + $lists.autoskills | Select-Object -Unique) }
@@ -506,9 +485,6 @@ if ($Dir -or $Name -or $StackDb -or $StackBackend -or $Status -or $Restore -or $
   # -Upgrade monolítico = -Part all (alias)
   if ($Upgrade -and -not $Part) { $Part = "all" }
   $scope = if ($Part) { $Part } else { "all" }
-  # snapshot ANTES de que backup/ensure creen .advisor/ (evita falso vivo en migrate)
-  $preVivo = Test-Path (Join-Path $targetDir $STATE_DIR)
-
   if ($Upgrade -and $scope -eq "autoskills") {
     Write-Step "Actualizando autoskills en '$projectName'"
     if ($DryRun) { Write-Info "[dry-run] Handle-Autoskills (no se escribió nada)"; Show-Finish $projectName $targetDir; exit 0 }
@@ -572,7 +548,6 @@ if ($Dir -or $Name -or $StackDb -or $StackBackend -or $Status -or $Restore -or $
   else { Render-Selected $scope $targetDir $vars }
   New-Item -ItemType Directory -Force -Path (Join-Path $targetDir "CHANGELOG") | Out-Null
   Ensure-StateDirs $targetDir $false
-  if ($scope -ne "harness") { Migrate-Legacy $targetDir $false $preVivo }
   if ($items.Count -gt 0 -and $bf) {
     $restored = @($PRESERVED | Where-Object { $items -contains $_ })
     if ($restored.Count -gt 0) {
