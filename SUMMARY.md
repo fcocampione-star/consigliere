@@ -5,15 +5,15 @@
 
 ---
 
-## 2026-09-11 — Purga F1 migrateAgentRename PASS
+## 2026-09-11 — Purga F1+F2 advisor PASS
 
 topic: sdd/advisor-purge-improvements
-**Goal:** Purgar función legacy migrateAgentRename de instaladores sin commitear.
-**Discoveries:** Función obsoleta post-rename orchestrator→advisor; solo 3 líneas GLOBAL restantes (fuera de instaladores).
-**Accomplished:** Eliminadas migrateAgentRename (init.mjs ~52L +2 calls), migrate_agent_rename (init.sh ~43L +2 calls), Migrate-AgentRename (init.ps1 ~53L +2 calls).
-**Next:** Commit a demanda; validar demo Fase 1; rotar a CHANGELOG el lunes.
-**Files:** `git log --oneline -5` → 35c35fc, 42de753, 5fbebed, aa1f864, c3fff40.
-**Verificación:** rg 0 en instaladores, node --check OK, bash -n OK, doctor 14/14, npm test syntax OK v2.0.0, demo /tmp/demo-advisor exit 0.
+**Goal:** Purgar legacy instaladores (F1+F2) sin commitear F2.
+**Discoveries:** F2: loop entrecomillado en init.cmd; templates con AGENT-ORCHESTRATION residual; verifier cuenta 16 checks (2 warnings manifest/index esperados) vs doctor 14/14.
+**Accomplished:** F1 commiteada 01600b0. F2: fix loop init.cmd, rename templates AGENT-ORCHESTRATION→AGENT-PIPELINE vía git mv + README:33.
+**Next:** Commit F2 a demanda; validar demo Fase 1; rotar a CHANGELOG el lunes.
+**Files:** `git log --oneline -5` → 01600b0, 35c35fc, 42de753, 5fbebed, aa1f864.
+**Verificación:** grep 0 en templates, node --check OK, bash -n OK, doctor 14/14, npm test OK, demo /tmp/demo-f2 exit 0 + doctor demo 13/16.
 
 ## 2026-09-10 — Fixes P0/P1/P2 verificados PASS
 

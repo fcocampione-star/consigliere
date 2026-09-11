@@ -30,7 +30,7 @@
 │   │   ├── review.md              # /review → decisiones stale (review_after)
 │   │   ├── rotate-memory.md       # rotación semanal manual
 │   │   └── compact-state.md       # compactar PROJECT_STATE.md
-│   ├── plans/                     # AGENT-ORCHESTRATION.md, MEMORY-SYSTEM.md
+│   ├── plans/                     # AGENT-PIPELINE.md, MEMORY-SYSTEM.md
 │   ├── skills/
 │   │   ├── _project-docs/         # plantilla de docs del stack
 │   │   ├── _sdd-lite/             # spec-lite ≤650w Given/When/Then

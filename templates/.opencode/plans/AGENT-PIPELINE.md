@@ -1,4 +1,4 @@
-# AGENT-ORCHESTRATION — Sistema de agentes del proyecto
+# AGENT-PIPELINE — Sistema de agentes del proyecto
 
 > Plan de diseño del pipeline de agentes. Referenciado desde `PROJECT_STATE.md`. Generado por el harness ADVISOR.
 
