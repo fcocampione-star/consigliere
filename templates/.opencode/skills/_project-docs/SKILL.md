@@ -3,7 +3,7 @@ name: _project-docs
 description: |
   Documentación específica del proyecto {{PROJECT_NAME}}. Carga bajo demanda via _skill-loader.
   Use when you need: official URLs, fetch patterns, shortcuts, and best practices for the {{PROJECT_NAME}} stack.
-chunks: [urls, patterns, shortcuts, examples, commands]
+chunks: [urls, patterns, shortcuts, examples, commands, communication]
 metadata:
   version: 1.0.0
 ---
@@ -140,6 +140,20 @@ node init.mjs /tmp/demo --name demo                   # probar instalador univer
 | check límites | `bash scripts/check-memory-limits.sh` |
 
 ---
+
+## 7. Comunicación adaptativa
+
+<!-- CHUNK: communication -->
+Referencia rápida para builder/planner/critic: el advisor fija el modo de comunicación (session-scoped, `/modo`) y lo propaga en cada prompt delegado.
+
+| Modo | Cuándo (señal) | Tono en respuestas |
+|------|----------------|--------------------|
+| **educador** | prompt vago/simple/error conceptual | analogías, pasos guiados, contexto amplio |
+| **practicante** | técnico sin criterios | criterios + alternativas breves, decisión razonada al usuario |
+| **copiloto** | experto/urgente/detalle + "solo hazlo" | ejecución directa, solo decisiones de diseño no obvias |
+
+**Regla de brevedad**: ≤2-3 frases salvo que el modo/tarea lo justifique. Nunca repetir educación ya dada; un `/modo` explícito gana sobre señales; no escribir memoria ni `opencode.json` para persistir el modo (solo sesión).
+<!-- /CHUNK: communication -->
 
 ## Sources & Maintenance
 

@@ -25,6 +25,7 @@
 │   ├── commands/
 │   │   ├── discover.md            # /discover → audita contexto + skills
 │   │   ├── routine.md             # /routine → explore→plan/spec→critic→build→verify→record
+│   │   ├── modo.md                # /modo → fijar modo de comunicación (educador/practicante/copiloto/auto)
 │   │   ├── doctor.md              # /doctor → diagnóstico harness + memoria
 │   │   ├── record.md              # /record → persistir progreso (5 campos)
 │   │   ├── review.md              # /review → decisiones stale (review_after)
@@ -154,6 +155,7 @@ node consigliere/init.mjs --dir /ruta/proyecto --force
 - `/review` — lista decisiones stale (`review_after` +90d).
 - `/rotate-memory` — rotación semanal manual.
 - `/compact-state` — compacta `PROJECT_STATE.md` §2 (dedup + archive).
+- `/modo <educador|practicante|copiloto|auto>` — fija el modo de comunicación del advisor (session-scoped, no persiste en memoria; sin arg muestra el actual).
 
 ## Sistema de memoria (3 capas, inspirado Engram pero md+grep)
 

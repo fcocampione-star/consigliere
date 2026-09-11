@@ -5,6 +5,17 @@
 
 ---
 
+## 2026-09-11 — Comunicación adaptativa §8 (educador/practicante/copiloto/auto) + /modo
+
+topic: sdd/communication-adaptive
+review_after: 2026-12-10
+**Goal:** Detectar nivel de usuario por señales (sin preguntar) y adaptar estilo con reglas anti-molestia.
+**Discoveries:** /modo sesión-only propaga a subagentes; espejo raíz↔templates solo {{PROJECT_NAME}}; doctor 15/16 (index stale pre-existente, no bloqueante).
+**Accomplished:** advisor.md §8 con 4 modos + 6 reglas anti-molestia; command /modo nuevo; AGENTS.md línea pipeline; _project-docs chunk communication + refresh; README. Decisión: comunicación adaptativa por señales, sin preguntar nivel.
+**Next:** commitear feat/communication-adaptive cuando indique; rotar lunes; revisar en review_after.
+**Files:** `git log --oneline -5` → 84c1d02 (feat en worktree, sin commit).
+**Verificación:** PASS — doctor 15/16 (stale → buildIndex), npm test ok, loader chunk communication ok.
+
 ## 2026-09-11 — Release B+A empaquetado público limpio (npm pack + git archive)
 
 topic: release/publico
