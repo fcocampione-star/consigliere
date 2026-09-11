@@ -5,6 +5,17 @@
 
 ---
 
+## 2026-09-11 — Release B+A empaquetado público limpio (npm pack + git archive)
+
+topic: release/publico
+review_after: 2026-12-10
+**Goal:** Preparar release público: excluir runtime/privado de paquete y repo sin romper demo ni doctor.
+**Discoveries:** `.advisor` (chunks/.migrated/manifest) y `.agents` son runtime; `dev/` no debe viajar; git archive filtraba por gitignore parcial.
+**Accomplished:** `.gitignore` runtime anclado (`.advisor` chunks/.migrated/manifest, `.agents`, opencode.json), `.gitattributes` `export-ignore dev/` raíz, `git rm --cached` de chunks+manifest+opencode.json, package.json `files` OK. Decisión: dev/ solo local.
+**Next:** commitear cuando indique; verificar `npm publish --dry-run`; rotar lunes.
+**Files:** `git log --oneline -5` → 4eb42ee, bb59a2d, dbbd3d9, fd1df61, 6dee3b6 (B+A en worktree).
+**Verificación:** PASS — ls-files 0 dev, npm pack 38 files (init+templates) 68.8kB, git archive sin fuga, demo install exit 0, doctor 16/16, npm test ok.
+
 ## 2026-09-10 — Purga F1–F6b sunset legacy completo (solo .advisor vivo)
 
 topic: sdd/advisor-purge-improvements

@@ -1,0 +1,16 @@
+# Export-ignore — ficheros de desarrollo de este repo (NO entran en release público:
+# npm pack via files, git archive via export-ignore). Lo público = templates/** + init.*
+# NOTA: los patrones con / están anclados a la raíz; no afectan a templates/.
+/opencode.json    export-ignore
+/.opencode/**     export-ignore
+/.advisor/**      export-ignore
+/.agents/**       export-ignore
+/skills-lock.json export-ignore
+/scripts/**       export-ignore
+/SUMMARY.md       export-ignore
+/PROJECT_STATE.md export-ignore
+/AGENTS.md        export-ignore
+/CHANGELOG/**     export-ignore
+/.memory-lock/**  export-ignore
+/.gitignore       export-ignore
+/.gitattributes   export-ignore

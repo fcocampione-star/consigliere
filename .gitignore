@@ -41,5 +41,10 @@ tmp/
 .advisor/skill-registry.cache.json
 .advisor/backups/
 .advisor/memory-index.json
-# .advisor/chunks/  ← descomenta si no quieres versionar sync local
-# .agents/skills/   ← descomenta para no versionar autoskills
+.advisor/.migrated
+.advisor/memory-manifest.json
+.advisor/chunks/
+.agents/skills/
+
+# ADVISOR 2.0 — config dev de este repo (la pública vive en templates/opencode.json)
+opencode.json
