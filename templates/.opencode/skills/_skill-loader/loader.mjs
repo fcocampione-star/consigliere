@@ -121,30 +121,76 @@ function readFrontmatter(content) {
   const m = content.match(/^---\n([\s\S]*?)\n---/);
   if (!m) return {};
   const fm = {};
-  const desc = m[1].match(/description:\s*(?:\n\s*\|)?\s*([\s\S]*?)\n\w+:/);
-  for (const line of m[1].split('\n')) {
-    const kv = line.match(/^(\w+):\s*(.*)$/);
-    if (kv) fm[kv[1]] = kv[2].replace(/^['"]|['"]$/g, '');
+  const lines = m[1].split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const kv = lines[i].match(/^(\w+):\s*(.*)$/);
+    if (!kv) continue;
+    const key = kv[1];
+    let val = kv[2].trim();
+    if (val === '|' || val === '>') {
+      const buf = [];
+      while (i + 1 < lines.length && /^[ \t]+/.test(lines[i + 1])) buf.push(lines[++i].replace(/^ {1,2}/, ''));
+      val = val === '>' ? buf.join(' ').trim() : buf.join('\n').trim();
+    } else {
+      val = val.replace(/^['"]|['"]$/g, '');
+    }
+    fm[key] = val;
+    if (key === 'chunks') fm.chunksList = val.replace(/^\[|\]$/g, '').split(',').map((s) => s.trim()).filter(Boolean);
   }
-  if (desc) fm.description = desc[1].trim();
   return fm;
 }
 
+function validateSkill(name, content, fm) {
+  const warnings = [];
+  if (fm.name && fm.name !== name) warnings.push(`frontmatter name "${fm.name}" ≠ directorio "${name}"`);
+  if (fm.chunksList) {
+    const actual = chunkNames(content);
+    for (const c of fm.chunksList) {
+      if (!actual.includes(c)) warnings.push(`chunks: declara "${c}" sin marcador <!-- CHUNK: ${c} -->`);
+    }
+  }
+  return warnings;
+}
+
+function fenceSpans(content) {
+  const spans = [];
+  const re = /```/g;
+  let m, open = -1;
+  while ((m = re.exec(content))) {
+    if (open === -1) open = m.index;
+    else { spans.push([open, m.index + 3]); open = -1; }
+  }
+  return spans;
+}
+
+function inSpans(spans, idx) {
+  for (const [a, b] of spans) if (idx >= a && idx < b) return true;
+  return false;
+}
+
 function chunkNames(content) {
+  const spans = fenceSpans(content);
   const names = [];
   const re = /<!--\s*CHUNK:\s*([\w-]+)\s*-->/g;
   let m;
-  while ((m = re.exec(content))) names.push(m[1]);
+  while ((m = re.exec(content))) if (!inSpans(spans, m.index)) names.push(m[1]);
   return names;
 }
 
 function extractChunks(content, wanted) {
-  const re = /<!--\s*CHUNK:\s*([\w-]+)\s*-->([\s\S]*?)<!--\s*\/CHUNK\s*-->/g;
+  const spans = fenceSpans(content);
+  const re = /<!--\s*(\/)?CHUNK(?::\s*([\w-]+))?\s*-->/g;
   let m;
   const out = [];
   const set = new Set(wanted);
+  let open = null;
   while ((m = re.exec(content))) {
-    if (set.has(m[1])) out.push(`<!-- CHUNK: ${m[1]} -->\n${m[2].trim()}`);
+    if (inSpans(spans, m.index)) continue;
+    if (!m[1]) open = { name: m[2], start: m.index + m[0].length };
+    else if (open) {
+      if (set.has(open.name)) out.push(`<!-- CHUNK: ${open.name} -->\n${content.slice(open.start, m.index).trim()}`);
+      open = null;
+    }
   }
   return out;
 }
@@ -206,6 +252,7 @@ switch (cmd) {
     console.log(`Path: ${s.path}`);
     console.log(`Description: ${(fm.description || '').trim()}`);
     console.log(`Chunks: ${chunkNames(content).join(', ') || '(ninguno)'}`);
+    for (const w of validateSkill(s.name, content, fm)) console.error(`Aviso: ${w}`);
     break;
   }
   case 'chunk': {
@@ -213,6 +260,7 @@ switch (cmd) {
     if (!s) { console.error(`Skill "${arg}" no encontrada.`); process.exit(1); }
     const content = readFileSync(s.path, 'utf8');
     const wanted = (arg2 || 'all').split(',').map((x) => x.trim()).filter(Boolean);
+    for (const w of validateSkill(s.name, content, readFrontmatter(content))) console.error(`Aviso: ${w}`);
     let parts;
     if (wanted.includes('all')) parts = extractChunks(content, chunkNames(content));
     else parts = extractChunks(content, wanted);

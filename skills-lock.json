@@ -1,8 +1,17 @@
 {
+  "version": 1,
   "autoskills": {
     "installed_by": "consigliere",
     "managed": true,
     "version": "0.0.0",
     "note": "Regenerar con `npx autoskills` tras añadir dependencias. Editar libremente."
+  },
+  "skills": {
+    "bash-defensive-patterns": {
+      "source": "wshobson/agents",
+      "sourceType": "autoskills-registry",
+      "version": "hash-pinned-2026-09-11",
+      "computedHash": "1f566c2d9c3b50a784b05d08f6b08ebfeb31f038e4d4173f2d488484edb058a6"
+    }
   }
 }

@@ -5,15 +5,15 @@
 
 ---
 
-## 2026-09-11 — Purga F1+F2+F3 docs PASS
+## 2026-09-11 — Purga F1+F2+F3+F4 docs PASS
 
 topic: sdd/advisor-purge-improvements
-**Goal:** Purgar legacy instaladores (F1+F2) + docs-only F3 sin commitear F3.
-**Discoveries:** F3 docs-only: doctor 16-17 variable por condicionales §2/topic/manifest/index; routine 3 formas + cierre /record; discover/record routing + cadena; doctor.md manuales; check-memory subset.
-**Accomplished:** F1 01600b0 y F2 6dee3b6 commiteadas. F3 sin commit: docs doctor/routine/discover/record + check-memory subset verificados.
-**Next:** Commit F3 a demanda; validar demo Fase 1; rotar a CHANGELOG el lunes.
+**Goal:** Purgar legacy instaladores (F1+F2) + docs F3/F4 sin commitear F4.
+**Discoveries:** F4: loader block-scalar+validate+fence-aware, _skill-loader 3 chunks, _project-docs §2 + commands recortado, skills-lock unificado, cache 4 skills.
+**Accomplished:** F1 01600b0 y F2 6dee3b6 commiteadas. F3+F4 sin commit: docs doctor/routine/discover/record + loader/skills verificados.
+**Next:** Commit F3+F4 a demanda; validar demo Fase 1; rotar a CHANGELOG el lunes.
 **Files:** `git log --oneline -5` → 6dee3b6, 01600b0, 35c35fc, 42de753, 5fbebed.
-**Verificación:** grep 14/14 0 fuera historia, doctor 14/16 +2 warnings esperados, npm test OK, routine-model --dry-run --model-builder foo OK.
+**Verificación:** node --check x2 OK, list 4, chunks OK, doctor 14/16 +2 warnings, npm test OK, diff espejos solo placeholders.
 
 ## 2026-09-10 — Fixes P0/P1/P2 verificados PASS
 

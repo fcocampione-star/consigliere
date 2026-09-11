@@ -25,6 +25,9 @@ metadata:
 | grep + perl (memory-index) | https://www.gnu.org/software/grep/manual/ | https://perldoc.perl.org/perlre | — | md+grep sin SQLite fallback |
 
 <!-- /CHUNK -->
+
+## 2. Fetch Patterns
+
 <!-- CHUNK: patterns -->
 Use `webfetch` con estas queries para documentación en vivo.
 
@@ -55,9 +58,9 @@ webfetch "https://www.gnu.org/software/bash/manual/" --format markdown
 
 ---
 
+<!-- /CHUNK -->
 ## 3. Shortcuts / Aliases
 
-<!-- /CHUNK -->
 <!-- CHUNK: shortcuts -->
 | Shortcut | Expands To | Use Case |
 |----------|------------|----------|
@@ -71,9 +74,10 @@ webfetch "https://www.gnu.org/software/bash/manual/" --format markdown
 
 ---
 
+<!-- /CHUNK -->
+
 ## 4. Copy-Ready Examples
 
-<!-- /CHUNK -->
 <!-- CHUNK: examples -->
 ### 4.1 Harness install (Node ESM universal)
 ```bash
@@ -108,9 +112,10 @@ node .opencode/scripts/doctor.mjs --json
 
 ---
 
+<!-- /CHUNK -->
+
 ## 5. Dev Commands
 
-<!-- /CHUNK -->
 <!-- CHUNK: commands -->
 ```bash
 # Dev — harness CLI por proyecto
@@ -123,8 +128,7 @@ node .opencode/scripts/memory-sync.mjs status         # estado sync local chunks
 bash scripts/check-memory-limits.sh                   # límites 100/150 líneas (PROJECT_STATE/SUMMARY)
 node init.mjs /tmp/demo --name demo                   # probar instalador universal
 ```
-
----
+<!-- /CHUNK -->
 
 ## 6. Quick Reference Card
 
@@ -143,5 +147,3 @@ node init.mjs /tmp/demo --name demo                   # probar instalador univer
 - Carga solo los chunks necesarios via `_skill-loader` para ahorrar tokens.
 
 **Related:** `.agents/skills/*/SKILL.md` (autoskills autoinstaladas).
-
-<!-- /CHUNK -->
