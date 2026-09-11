@@ -25,6 +25,10 @@ const INDEX_VERSION = 1;
 const INDEX_FILE = join(ROOT, '.advisor', 'memory-index.json');
 const LEGACY_INDEX_FILE = join(ROOT, '.consigliere', 'memory-index.json'); // solo lectura
 
+function slugId(date, title) {
+  return `${date}--${String(title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30)}`;
+}
+
 function parseEntries(text, source) {
   const entries = [];
   let m; const lines = text.split('\n');
@@ -42,7 +46,7 @@ function parseEntries(text, source) {
     const body = b.lines.join('\n');
     const topic = (body.match(/topic:\s*([a-z0-9\/\-]+)/i)||[])[1]||null;
     const review_after = (body.match(/review_after:\s*(\d{4}-\d{2}-\d{2})/i)||[])[1]||null;
-    entries.push({ id: `${b.date}--${b.title.toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,30)}`, date: b.date, title: b.title, topic, review_after, source: b.source, preview: b.lines.slice(1,5).join(' ').slice(0,160) });
+    entries.push({ id: slugId(b.date, b.title), date: b.date, title: b.title, topic, review_after, source: b.source, preview: b.lines.slice(1,5).join(' ').slice(0,160) });
   }
   return entries;
 }
@@ -135,8 +139,17 @@ function writeIndex() {
   return data;
 }
 
+// NOTA: substring case-insensitive, no regex perl. `timeline`/`get`
+// aceptan id exacto, fecha o subcadena de título por la misma razón.
 function matches(e, q) {
   return (e.title + ' ' + e.preview + ' ' + (e.topic || '')).toLowerCase().includes(q);
+}
+
+function freshEntries() {
+  const loaded = loadIndex();
+  if (loaded && loaded.fresh) return loaded.data.entries;
+  if (loaded) console.error('⚠️ memory-index.json desactualizado (stale) — fallback md+grep.');
+  return allEntries();
 }
 
 function main() {
@@ -170,7 +183,7 @@ function main() {
     case 'timeline':
     case 'get': {
       if (!arg) { console.error(`Uso: memory-index.mjs ${cmd} <id-or-date>`); process.exit(1); }
-      const entries = allEntries();
+      const entries = freshEntries();
       const hit = entries.find(e=>e.id===arg || e.date===arg || e.title.toLowerCase().includes(arg.toLowerCase()));
       if (!hit) { console.error(`No encontrado: ${arg}. Prueba: search "query"`); process.exit(1); }
       // for get, dump full file section
@@ -178,6 +191,11 @@ function main() {
       const src = hit.source.includes('SUMMARY')?SUMMARY: hit.source.includes('CHANGELOG')?join(ROOT,hit.source):STATE;
       try { text=readFileSync(src,'utf8'); } catch {}
       if (cmd==='get') {
+        if (hit.source.startsWith('PROJECT_STATE')) {
+          const sec2 = (text.split('## 2.')[1]||'').split('## 3.')[0]||'';
+          console.log(`# PROJECT_STATE.md §2 — ${hit.title}\n${sec2.trim().slice(0,2000)}`);
+          break;
+        }
         // extract block of this entry
         const re = new RegExp(`##\\s+${hit.date.replace(/-/g,'\\-')}[\\s\\S]*?(?=\\n##\\s+\\d{4}-\\d{2}-\\d{2}|$)`, 'm');
         const m = text.match(re);
@@ -213,4 +231,4 @@ let isMain = false;
 try { isMain = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href; } catch { isMain = false; }
 if (isMain) main();
 
-export { allEntries, fingerprint, isFresh, score, loadIndex, writeIndex, INDEX_VERSION };
+export { allEntries, fingerprint, isFresh, score, loadIndex, writeIndex, slugId, INDEX_VERSION };

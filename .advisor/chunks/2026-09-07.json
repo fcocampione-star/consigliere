@@ -1,0 +1,16 @@
+[
+  {
+    "id": "2026-09-10--fixes-p0-p1-p2-verificados-pas",
+    "date": "2026-09-10",
+    "monday": "2026-09-07",
+    "body": "## 2026-09-10 — Fixes P0/P1/P2 verificados PASS\n\ntopic: maintenance/harness-fixes\n**Goal:** Aplicar y verificar fixes P0/P1/P2 del harness sin commitear.\n**Discoveries:** Legacy `consigliere/` anidada requería ignore anclado; renames orchestrator→advisor duplicados en routine-model.\n**Accomplished:** Fixes aplicados: `.gitignore` +`/consigliere/`, PROJECT_STATE §2 decisión + review_after 2026-12-03 y §3 pendiente legacy, routine-model orchestrator→advisor x2, `_project-docs` CHUNK fix, AGENTS.md harness-only x2, cache regenerada.\n**Next:** Validar demo Fase 1 (`init.mjs --upgrade`, doctor, flujo /discover→/routine→/record); rotar a CHANGELOG el lunes.\n**Files:** `git log --oneline -5` → 35c35fc, 42de753, 5fbebed, aa1f864, c3fff40.\n**Verificación:** doctor 14/14 PASS, npm test PASS, loader 4 skills, chunk OK.\n\n> Cuando registres progreso (via `/record` o `summarizer`), añade entradas al inicio, tras este bloque (formato 2.0 con topic + 5 campos, compat viejo `Qué/Verificación`):\n\n```markdown\n## YYYY-MM-DD — <Título corto>\n\ntopic: <family/kebab>  <!-- ej architecture/auth, sdd/login/spec -->\n**Goal:** <objetivo>\n**Discoveries:** <hallazgos>\n**Accomplished:** <qué se hizo y decisiones>\n**Next:** <siguientes pasos>\n**Verificación:** <comandos y resultado>\n```\n\n> Topic upsert: mismo `topic:` en 7d → actualiza no duplicar. No agregues listas archivos (usa `git log`). Rotación automática hook post-commit (lunes o >150 líneas) o `/rotate-memory`. Búsqueda: `node .opencode/scripts/memory-index.mjs search \"query\"`.\n\n---\n\n## Índice de historial archivado (CAPA 2)\n\n| Semana (lunes) | Archivo |\n|----------------|---------|\n| (aún sin historial) | — |",
+    "exportedAt": "2026-09-11T04:04:55.131Z"
+  },
+  {
+    "id": "2026-09-11--purga-f1-f2-f3-f4-docs-pass",
+    "date": "2026-09-11",
+    "monday": "2026-09-07",
+    "body": "## 2026-09-11 — Purga F1+F2+F3+F4 docs PASS\n\ntopic: sdd/advisor-purge-improvements\n**Goal:** Purgar legacy instaladores (F1+F2) + docs F3/F4 sin commitear F4.\n**Discoveries:** F4: loader block-scalar+validate+fence-aware, _skill-loader 3 chunks, _project-docs §2 + commands recortado, skills-lock unificado, cache 4 skills.\n**Accomplished:** F1 01600b0 y F2 6dee3b6 commiteadas. F3+F4 sin commit: docs doctor/routine/discover/record + loader/skills verificados.\n**Next:** Commit F3+F4 a demanda; validar demo Fase 1; rotar a CHANGELOG el lunes.\n**Files:** `git log --oneline -5` → 6dee3b6, 01600b0, 35c35fc, 42de753, 5fbebed.\n**Verificación:** node --check x2 OK, list 4, chunks OK, doctor 14/16 +2 warnings, npm test OK, diff espejos solo placeholders.",
+    "exportedAt": "2026-09-11T04:05:35.738Z"
+  }
+]

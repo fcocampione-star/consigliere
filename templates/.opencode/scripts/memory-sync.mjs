@@ -8,7 +8,7 @@
  * git-ignored, regenerable). Fingerprint y parsers se reutilizan desde
  * memory-index.mjs (única fuente de verdad).
  * Uso:
- *   node memory-sync.mjs export [--all]  # chunks + manifest + index
+ *   node memory-sync.mjs export [--force]  # chunks + manifest + index (--all = alias)
  *   node memory-sync.mjs import          # importa chunks a CHANGELOG si faltan
  *   node memory-sync.mjs status
  *   node memory-sync.mjs buildManifest   # solo manifest
@@ -16,7 +16,7 @@
  */
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { allEntries, fingerprint, isFresh, writeIndex, INDEX_VERSION } from './memory-index.mjs';
+import { allEntries, fingerprint, isFresh, writeIndex, slugId, INDEX_VERSION } from './memory-index.mjs';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const ADVISOR_DIR = join(ROOT, '.advisor'); // escritura siempre aquí
@@ -30,6 +30,10 @@ const MANIFEST_FILE = join(ADVISOR_DIR, 'memory-manifest.json');
 const INDEX_FILE = join(ADVISOR_DIR, 'memory-index.json');
 const MANIFEST_VERSION = 1;
 
+// Lunes ISO en UTC compartido por export/import. NOTA: el hook
+// post-commit usa hora LOCAL (calibración %u); cerca del cambio de
+// semana ambos pueden nombrar distinto archivo semanal — export/import
+// leen todos los chunks existentes, así que no se pierde contenido.
 function mondayOf(dateStr) {
   const d = new Date(dateStr);
   const day = d.getUTCDay();
@@ -38,7 +42,7 @@ function mondayOf(dateStr) {
   return d.toISOString().slice(0,10);
 }
 
-function exportChunks(all=false) {
+function exportChunks(force=false) {
   mkdirSync(CHUNKS_DIR, { recursive: true });
   const entries=[];
   if (existsSync(SUMMARY)) {
@@ -46,11 +50,12 @@ function exportChunks(all=false) {
     // split by ## date blocks
     const blocks = text.split(/\n(?=##\s+\d{4}-\d{2}-\d{2}\s+[—\-])/g).filter(b=>b.trim().startsWith('##'));
     for (const b of blocks) {
-      const date = (b.match(/##\s+(\d{4}-\d{2}-\d{2})/)||[])[1]||new Date().toISOString().slice(0,10);
+      const hm = b.match(/^##\s+(\d{4}-\d{2}-\d{2})\s*[—\-]\s*(.+)$/m);
+      const date = hm?hm[1]:new Date().toISOString().slice(0,10);
       const monday = mondayOf(date);
       const file = join(CHUNKS_DIR, `${monday}.json`);
-      let arr=[]; if (existsSync(file) && !all) try { arr=JSON.parse(readFileSync(file,'utf8')); } catch {}
-      const id = `${date}--${b.slice(0,60).replace(/\W+/g,'-')}`;
+      let arr=[]; if (existsSync(file) && !force) try { arr=JSON.parse(readFileSync(file,'utf8')); } catch {}
+      const id = slugId(date, hm?hm[2].trim():b.slice(0,60));
       if (!arr.find(x=>x.id===id)) { arr.push({ id, date, monday, body: b.trim(), exportedAt: new Date().toISOString() }); writeFileSync(file, JSON.stringify(arr,null,2),'utf8'); entries.push(id); }
     }
   }
@@ -59,7 +64,7 @@ function exportChunks(all=false) {
     const body = readFileSync(STATE,'utf8');
     writeFileSync(file, JSON.stringify({ exportedAt: new Date().toISOString(), body }, null, 2), 'utf8');
   }
-  console.log(`Export: ${entries.length} bloques nuevos → ${CHUNKS_DIR}${all?' (all)':''}`);
+  console.log(`Export: ${entries.length} bloques ${force?'forzados':'nuevos'} → ${CHUNKS_DIR}${force?' (--force)':''}`);
 }
 
 function importChunks() {
@@ -67,6 +72,7 @@ function importChunks() {
   const dirs = [CHUNKS_DIR, LEGACY_CHUNKS_DIR].filter((d, i, a) => existsSync(d) && a.indexOf(d) === i);
   if (!dirs.length) { console.log('Sin chunks en .advisor/chunks/'); return; }
   let imported=0;
+  const seen=new Set(); // dedup por id entre vivo+legacy y dentro de cada archivo
   for (const dir of dirs) {
   for (const f of readdirSync(dir)) {
     if (!f.endsWith('.json') || f==='state.json') continue;
@@ -75,6 +81,8 @@ function importChunks() {
     const changelog = join(ROOT,'CHANGELOG', f.replace('.json','.md'));
     let existing=''; if (existsSync(changelog)) existing=readFileSync(changelog,'utf8');
     for (const e of arr) {
+      if (seen.has(e.id)) continue;
+      seen.add(e.id);
       if (!existing.includes(e.body.slice(0,80))) {
         const header = existsSync(changelog)?'':`# Changelog ${e.monday}\n\n> Historial semanal archivado desde SUMMARY.md. Detalle: \`git log\`.\n\n`;
         const toAppend = (existsSync(changelog)?'':header) + e.body + '\n\n';
@@ -175,9 +183,12 @@ function status() {
 }
 
 const cmd = process.argv[2];
-if (cmd==='export') { exportChunks(process.argv.includes('--all')); buildManifest(); buildIndex(); }
+const force = process.argv.includes('--force') || process.argv.includes('--all'); // --all = alias legacy de --force
+if (cmd==='export') { exportChunks(force); buildManifest(); buildIndex(); }
 else if (cmd==='import') importChunks();
 else if (cmd==='buildManifest') buildManifest();
 else if (cmd==='buildIndex') buildIndex();
 else if (cmd==='status' || !cmd) status();
-else { console.log('Uso: node memory-sync.mjs export [--all] | import | status | buildManifest | buildIndex'); process.exit(1); }
+else { console.log('Uso: node memory-sync.mjs export [--force|--all] | import | status | buildManifest | buildIndex'); process.exit(1); }
+
+export { mondayOf, exportChunks, importChunks, buildManifest, buildIndex };

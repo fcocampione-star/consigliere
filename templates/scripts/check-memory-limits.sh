@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # ADVISOR — Verificación de límites de memoria persistente.
+# Subset de doctor (solo 100/150+manifest; §2/topic/lock solo en doctor.mjs).
 # Comprueba que PROJECT_STATE.md y SUMMARY.md respeten los límites de líneas
 # y sugiere la compactación o rotación correspondiente.
 #

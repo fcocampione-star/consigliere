@@ -30,11 +30,16 @@ exec 9>"$LOCK_DIR/.lock"
 flock -n 9 || { echo "No se pudo adquirir lock de memoria; reintente en un momento." >&2; exit 1; }
 trap 'rm -f "$LOCK_DIR/.lock" 2>/dev/null; rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT
 
-# Detectar lunes de la semana actual (GNU date o BSD date)
-if date -d "last monday" +%Y-%m-%d >/dev/null 2>&1; then
-  THIS_MONDAY="$(date -d "last monday" +%Y-%m-%d)"
+# Lunes de la semana actual (ISO: lunes actual, nunca pasado ni futuro).
+# `date -d "last monday"` retrocede 7 días si hoy es lunes;
+# `date -d monday` avanza al lunes siguiente. Calibración por día
+# numérico (%u: 1=lunes..7=domingo) restando (DOW-1) días.
+if date -d "1970-01-05" +%u >/dev/null 2>&1; then
+  _DOW="$(date +%u)"; _OFF=$((_DOW - 1))
+  THIS_MONDAY="$(date -d "$_OFF days ago" +%Y-%m-%d)"
 else
-  THIS_MONDAY="$(date -v-Mon +%Y-%m-%d)"
+  _DOW="$(date +%u)"; _OFF=$((_DOW - 1))
+  THIS_MONDAY="$(date -v-"${_OFF}"d +%F)"
 fi
 
 CHANGELOG_FILE="$CHANGELOG_DIR/$THIS_MONDAY.md"
@@ -49,14 +54,14 @@ summary_stats() {
   if [[ "$LINES" -lt 0 ]]; then LINES=0; fi
 }
 
-# Rota UNA entrada (la más antigua) a CHANGELOG/<lunes>.md.
+# Rota UNA entrada (la más antigua = ÚLTIMO bloque ##, las nuevas se
+# añaden al inicio según summarizer.md) a CHANGELOG/<lunes>.md.
 # Retorna 0 si rotó, 1 si no había nada que rotar. Suma a ROTATED.
 rotate_one() {
   local entry
   entry="$(perl -0777 -ne '
-    if (/\n(##\s*[0-9]{4}-[0-9]{2}-[0-9]{2} .+?)(?:\n## |\z)/gs) {
-      print $1;
-    }
+    my @b = split(/^(?=##\s+\d{4}-\d{2}-\d{2}\s+[—\-])/m, $_);
+    print $b[-1] if @b > 1;
   ' "$SUMMARY")"
 
   [[ -n "$entry" ]] || return 1
@@ -64,14 +69,15 @@ rotate_one() {
     printf '# Changelog %s\n\n> Historial semanal archivado desde SUMMARY.md. Detalle de diffs: `git log`.\n\n' "$THIS_MONDAY" > "$CHANGELOG_FILE"
   fi
   printf '%s\n\n' "$entry" >> "$CHANGELOG_FILE"
-  # Una sola sustitución (sin /g) + lookahead: elimina exactamente la
-  # primera entrada sin consumir el delimitador `\n## ` de la siguiente.
+  # Elimina exactamente el ÚLTIMO bloque ## (la entrada más antigua);
+  # split con lookahead + pop preserva cabecera y bloques restantes.
   perl -0777 -pi -e '
-    s/\n##\s*[0-9]{4}-[0-9]{2}-[0-9]{2} .+?(?=\n## |\z)//s;
+    my @b = split(/^(?=##\s+\d{4}-\d{2}-\d{2}\s+[—\-])/m, $_, -1);
+    if (@b > 1) { pop @b; $_ = join("", @b); $_ =~ s/\s+\z/\n/; }
   ' "$SUMMARY"
   if [[ -f "$PROJECT_STATE" ]]; then
-    WEEK_KEY="| $THIS_MONDAY | $CHANGELOG_FILE |"
-    if ! grep -qF "$WEEK_KEY" "$PROJECT_STATE"; then
+    WEEK_KEY="| $THIS_MONDAY | $THIS_MONDAY.md | rotación automática |"
+    if ! grep -qF "| $THIS_MONDAY |" "$PROJECT_STATE"; then
       sed -i "/^## 4. Índice de historial archivado/a $WEEK_KEY" "$PROJECT_STATE"
     fi
   fi

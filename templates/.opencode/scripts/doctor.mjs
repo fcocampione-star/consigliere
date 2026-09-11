@@ -60,12 +60,14 @@ if (existsSync(lock)) {
   } catch { add('.memory-lock','⚠️','existe','rmdir .memory-lock'); }
 } else add('.memory-lock','✅','sin lock (ok)');
 
-// 5 skills loader cache (dual-path: .advisor/ primero, legacy .consigliere/ read-only)
-const cache = existsSync(join(ROOT,'.advisor','skill-registry.cache.json'))
-  ? join(ROOT,'.advisor','skill-registry.cache.json')
-  : join(ROOT,'.consigliere','skill-registry.cache.json');
-if (existsSync(cache)) {
-  try { const j=JSON.parse(readFileSync(cache,'utf8')); add('skill cache', j.version===2?'✅':'⚠️', `${j.entries?.length||0} skills cacheadas (${cache.includes('.consigliere')?'legacy':'vivo'})`, j.version!==2?'node .opencode/skills/_skill-loader/loader.mjs refresh --force':''); } catch { add('skill cache','⚠️','cache corrupta','node .opencode/skills/_skill-loader/loader.mjs refresh --force'); }
+// 5 skills loader cache (vivo primero; legacy solo nota residual read-only)
+const cacheVivo = join(ROOT,'.advisor','skill-registry.cache.json');
+const cacheLegacy = join(ROOT,'.consigliere','skill-registry.cache.json');
+const cache = existsSync(cacheVivo) ? cacheVivo : null;
+if (cache) {
+  try { const j=JSON.parse(readFileSync(cache,'utf8')); add('skill cache', j.version===2?'✅':'⚠️', `${j.entries?.length||0} skills cacheadas (vivo)`, j.version!==2?'node .opencode/skills/_skill-loader/loader.mjs refresh --force':''); } catch { add('skill cache','⚠️','cache corrupta','node .opencode/skills/_skill-loader/loader.mjs refresh --force'); }
+} else if (existsSync(cacheLegacy)) {
+  add('skill cache','⚠️','solo legacy residual (read-only)','node .opencode/skills/_skill-loader/loader.mjs refresh');
 } else add('skill cache','⚠️','sin cache (se genera en /discover)','node .opencode/skills/_skill-loader/loader.mjs refresh');
 
 // 6 scripts
@@ -74,39 +76,42 @@ for (const s of ['memory-index.mjs','memory-sync.mjs','doctor.mjs']) {
   add(`script ${s}`, existsSync(p)?'✅':'❌', existsSync(p)?'presente':'falta','npx advisor-harness@latest . --upgrade');
 }
 
-// 7 dirs (dual-path estado: .advisor/ vivo, legacy .consigliere/ read-only)
+// 7 dirs (estado vivo .advisor/; legacy .consigliere/ solo nota residual)
 for (const [label, vivo, legacy] of [['CHANGELOG','CHANGELOG',null],['backups','.advisor/backups','.consigliere/backups'],['chunks','.advisor/chunks','.consigliere/chunks']]) {
-  const p = existsSync(join(ROOT,vivo)) ? vivo : (legacy && existsSync(join(ROOT,legacy)) ? legacy : vivo);
-  const okDir = existsSync(join(ROOT,p));
-  add(`dir ${label}`, okDir?'✅':'⚠️', okDir?`ok (${p})`:'falta','mkdir -p '+vivo);
+  if (existsSync(join(ROOT,vivo))) add(`dir ${label}`, '✅', `ok (${vivo})`);
+  else if (legacy && existsSync(join(ROOT,legacy))) add(`dir ${label}`, '⚠️', `solo legacy residual (${legacy})`, 'mkdir -p '+vivo);
+  else add(`dir ${label}`, '⚠️', 'falta', 'mkdir -p '+vivo);
 }
 
-// 8 manifest derivado (warning: regenerable, nunca error)
-const manifest = existsSync(join(ROOT,'.advisor','memory-manifest.json'))
-  ? join(ROOT,'.advisor','memory-manifest.json')
-  : join(ROOT,'.consigliere','memory-manifest.json');
-if (existsSync(manifest)) {
+// 8 manifest derivado (vivo primero; legacy solo nota residual; warning regenerable, nunca error)
+// NOTA: sin check de drift raíz-vs-templates (diferido a F6 con LEGACY_* sunset).
+const manifestVivo = join(ROOT,'.advisor','memory-manifest.json');
+const manifestLegacy = join(ROOT,'.consigliere','memory-manifest.json');
+const manifest = existsSync(manifestVivo) ? manifestVivo : null;
+if (manifest) {
   try {
     const m = JSON.parse(readFileSync(manifest,'utf8'));
     const ml = lines(manifest);
     if (m.version===1 && Array.isArray(m.recent) && m.recent.length<=5 && ml<15)
-      add('manifest', '✅', `${m.recent.length} recientes, ${ml} líneas (${manifest.includes('.consigliere')?'legacy':'vivo'})`);
+      add('manifest', '✅', `${m.recent.length} recientes, ${ml} líneas (vivo)`);
     else add('manifest','⚠️','estructura inesperada o ≥15 líneas','node .opencode/scripts/memory-sync.mjs buildManifest');
   } catch { add('manifest','⚠️','manifest corrupto','node .opencode/scripts/memory-sync.mjs buildManifest'); }
-} else add('manifest','⚠️','sin manifest (se genera en escritura)','node .opencode/scripts/memory-sync.mjs buildManifest');
+} else if (existsSync(manifestLegacy)) add('manifest','⚠️','solo legacy residual (read-only)','node .opencode/scripts/memory-sync.mjs buildManifest');
+else add('manifest','⚠️','sin manifest (se genera en escritura)','node .opencode/scripts/memory-sync.mjs buildManifest');
 
-// 9 index derivado (warning: stale o ausente no bloquea search, hay fallback md+grep)
+// 9 index derivado (vivo primero; legacy solo nota residual; stale o ausente no bloquea: fallback md+grep)
 const indexVivo = join(ROOT,'.advisor','memory-index.json');
 const indexLegacy = join(ROOT,'.consigliere','memory-index.json');
-const index = existsSync(indexVivo) ? indexVivo : indexLegacy;
-if (existsSync(index)) {
+const index = existsSync(indexVivo) ? indexVivo : null;
+if (index) {
   try {
     const data = JSON.parse(readFileSync(index,'utf8'));
     if (data.version===1 && isFresh(data, fingerprint()))
-      add('index', '✅', `${data.entries?.length||0} entries fresh (${index.includes('.consigliere')?'legacy':'vivo'})`);
+      add('index', '✅', `${data.entries?.length||0} entries fresh (vivo)`);
     else add('index','⚠️','índice desactualizado (stale)','node .opencode/scripts/memory-sync.mjs buildIndex');
   } catch { add('index','⚠️','índice corrupto','node .opencode/scripts/memory-sync.mjs buildIndex'); }
-} else add('index','⚠️','sin índice (search usa fallback md+grep)','node .opencode/scripts/memory-sync.mjs buildIndex');
+} else if (existsSync(indexLegacy)) add('index','⚠️','solo legacy residual (read-only)','node .opencode/scripts/memory-sync.mjs buildIndex');
+else add('index','⚠️','sin índice (search usa fallback md+grep)','node .opencode/scripts/memory-sync.mjs buildIndex');
 
 const hasError = checks.some(c=>c.status==='❌');
 const hasWarn = checks.some(c=>c.status==='⚠️');

@@ -5,15 +5,15 @@
 
 ---
 
-## 2026-09-11 — Purga F1+F2+F3+F4 docs PASS
+## 2026-09-11 — Purga F1–F5 docs PASS (F5: hook/index/sync/doctor)
 
 topic: sdd/advisor-purge-improvements
-**Goal:** Purgar legacy instaladores (F1+F2) + docs F3/F4 sin commitear F4.
-**Discoveries:** F4: loader block-scalar+validate+fence-aware, _skill-loader 3 chunks, _project-docs §2 + commands recortado, skills-lock unificado, cache 4 skills.
-**Accomplished:** F1 01600b0 y F2 6dee3b6 commiteadas. F3+F4 sin commit: docs doctor/routine/discover/record + loader/skills verificados.
-**Next:** Commit F3+F4 a demanda; validar demo Fase 1; rotar a CHANGELOG el lunes.
-**Files:** `git log --oneline -5` → 6dee3b6, 01600b0, 35c35fc, 42de753, 5fbebed.
-**Verificación:** node --check x2 OK, list 4, chunks OK, doctor 14/16 +2 warnings, npm test OK, diff espejos solo placeholders.
+**Goal:** Purgar legacy + docs F1–F5 con F5 sin commit.
+**Discoveries:** F5: hook ISO + último bloque + 3 cols; index slug30 + fresh + state §2; sync dedup id + --force; doctor vivo-first 16/16; side-effect verifier solo timestamp/recientes manifest.
+**Accomplished:** F1 01600b0, F2 6dee3b6, F3 fd1df61, F4 dbbd3d9 commiteadas. F5 sin commit: manifest/index generados, search purga 1 hit, timeline/get ok.
+**Next:** Commit F5 a demanda; validar demo Fase 1; rotar a CHANGELOG el lunes.
+**Files:** `git log --oneline -5` → dbbd3d9, fd1df61, 6dee3b6, 01600b0, 35c35fc.
+**Verificación:** hook ISO + 3 cols OK, index slug30/fresh/state §2 OK, sync dedup + --force OK, doctor 16/16, search 1 hit timeline/get OK, limits 63/100 49/150.
 
 ## 2026-09-10 — Fixes P0/P1/P2 verificados PASS
 

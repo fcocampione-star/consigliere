@@ -1,13 +1,10 @@
 {
   "version": 1,
-  "generatedAt": "2026-09-10T06:42:12.889Z",
-  "counts": {"stateDecisions": 6, "recentEntries": 7, "archivedWeeks": 0},
+  "generatedAt": "2026-09-11T04:05:35.748Z",
+  "counts": {"stateDecisions": 5, "recentEntries": 2, "archivedWeeks": 0},
   "recent": [
-    {"id": "2026-09-09--rename-consigliere-advisor-ins", "topic": "architecture/advisor-rename", "date": "2026-09-09"},
-    {"id": "2026-09-09--spec-sdd-lite-advisor-rename-m", "topic": "sdd/advisor-rename-modular-install/spec", "date": "2026-09-09"},
-    {"id": "2026-09-04--fix-docs-instaladores-consigli", "topic": "dx/docs-fix-consigliere-init", "date": "2026-09-04"},
-    {"id": "2026-09-04--fix-gap-upgrade-preservaci-n-m", "topic": "architecture/upgrade-preserve", "date": "2026-09-04"},
-    {"id": "2026-09-04--spec-sdd-lite-upgrade-preserve", "topic": "sdd/installer-upgrade-preserve", "date": "2026-09-04"}
+    {"id": "2026-09-11--purga-f1-f2-f3-f4-docs-pass", "topic": "sdd/advisor-purge-improvements", "date": "2026-09-11"},
+    {"id": "2026-09-10--fixes-p0-p1-p2-verificados-pas", "topic": "maintenance/harness-fixes", "date": "2026-09-10"}
   ],
   "stale": []
 }
