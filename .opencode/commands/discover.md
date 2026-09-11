@@ -38,3 +38,7 @@ Con ambos retornos, sintetiza y entrega al usuario:
 5. **Siguiente paso recomendado:** `/routine "<tarea>"` o `/record` si solo fue auditoría.
 
 No edites archivos ni instales skills automáticamente — solo propón comandos. Si el usuario confirma, el siguiente `/routine` ejecutará los cambios via `builder`.
+
+Routing: este comando no decide ruta; si la auditoría deriva en trabajo aplica `direct/delegated/spec-lite → advisor.md §2`.
+
+Cadena: `/discover` sugiere `/routine` o `/record` (auditoría → ejecución o registro).

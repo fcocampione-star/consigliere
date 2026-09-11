@@ -63,7 +63,7 @@ webfetch "https://www.gnu.org/software/bash/manual/" --format markdown
 |----------|------------|----------|
 | `/discover` | `node .opencode/scripts/doctor.mjs` + skill audit | Audita stack real vs declarado |
 | `/routine` | routing orgánico direct/delegated + spec-lite ≤650w | Flujo explore→plan→critic→build→verify→record |
-| `/doctor` | `node .opencode/scripts/doctor.mjs --json` | Diagnóstico 14 checks |
+| `/doctor` | `node .opencode/scripts/doctor.mjs --json` | Diagnóstico 16-17 checks (variable por condicionales §2/topic/manifest/index) |
 | `/record` | 5 campos Goal/Discoveries/Accomplished/Next/Files + topic | Persistir memoria |
 | `/review` | stale review_after +90d | Listar decisiones caducadas |
 | `memory/search` | `node .opencode/scripts/memory-index.mjs search "query"` | Búsqueda md+grep |
@@ -116,7 +116,7 @@ node .opencode/scripts/doctor.mjs --json
 # Dev — harness CLI por proyecto
 npm test                                              # node --check init.mjs + loader + doctor + memory scripts
 node --check init.mjs && node --check .opencode/scripts/doctor.mjs  # validación ESM syntax
-node .opencode/scripts/doctor.mjs --json              # diagnóstico harness (14 checks)
+node .opencode/scripts/doctor.mjs --json              # diagnóstico harness (16-17 checks, variable por condicionales §2/topic/manifest/index)
 node .opencode/skills/_skill-loader/loader.mjs list --json  # listar skills (cache fingerprint)
 node .opencode/scripts/memory-index.mjs search "query"      # búsqueda memoria md+grep
 node .opencode/scripts/memory-sync.mjs status         # estado sync local chunks
@@ -130,7 +130,7 @@ node init.mjs /tmp/demo --name demo                   # probar instalador univer
 
 | Need | Command |
 |------|---------|
-| doctor 14/14 | `node .opencode/scripts/doctor.mjs --json` |
+| doctor 16-17 | `node .opencode/scripts/doctor.mjs --json` |
 | list skills | `node .opencode/skills/_skill-loader/loader.mjs list --json` |
 | search memoria | `node .opencode/scripts/memory-index.mjs search "query"` |
 | check límites | `bash scripts/check-memory-limits.sh` |

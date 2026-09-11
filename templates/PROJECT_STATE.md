@@ -10,7 +10,7 @@
 |------|-------------|--------|
 | Fase 0 Bootstrap — Harness CLI por proyecto | Harness-only: Node >=18 ESM + Bash 4+ / PowerShell 5.1+ + git/tar; memoria 3 capas md+grep (PROJECT_STATE/SUMMARY/CHANGELOG), routing orgánico y SDD-lite integrados | ✅ Completada |
 
-> Próximo hito: Fase 1 — validar harness en proyecto demo (init.mjs --upgrade, doctor 14/14, flujo /discover → /routine → /record).
+> Próximo hito: Fase 1 — validar harness en proyecto demo (init.mjs --upgrade, doctor 16-17 (variable por condicionales §2/topic/manifest/index), flujo /discover → /routine → /record).
 
 ---
 

@@ -24,7 +24,12 @@ Recordatorio de tu flujo como Advisor (routing orgánico + SDD-lite integrado, A
 Flags:
 - `--parallel` — exploración/planificación en paralelo si independiente.
 - `--skip-verify` / `--skip-critic` — omite pasos (solo trivial).
-- `--model=<m>` — override modelo para esta rutina.
+- `--model=<m>` — override global para esta rutina (`node .opencode/scripts/routine-model.mjs --model=<m>`).
+- `--model-<agent>=<m>` — override por agente (`advisor|planner|builder|verifier|critic|summarizer|explore`); ej. `node .opencode/scripts/routine-model.mjs --dry-run --model-builder foo`.
+- `--persist` — guarda overrides en `opencode.json` (merge atómico); `--dry-run` — previsualiza sin escribir.
 - `--spec` — fuerza spec-lite aunque routing diga direct.
+- Nota: `--model-*` solo resuelve via `routine-model.mjs`; hoy `init.mjs:403-409` solo ofrece prompts interactivos de modelo (sin flags CLI).
+
+Cierra la rutina con `/record` (cadena `/discover` → `/routine` → `/record`).
 
 Devuelve: qué resolviste, ruta elegida (direct/delegated/spec-lite), spec si hubo, subagentes usados, verificación y commit propuesto.

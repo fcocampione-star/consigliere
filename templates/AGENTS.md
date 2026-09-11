@@ -58,7 +58,7 @@
 ```bash
 npm test                                              # node --check init.mjs + loader + doctor + memory scripts
 node --check init.mjs && node --check .opencode/scripts/doctor.mjs  # validación ESM syntax
-node .opencode/scripts/doctor.mjs --json              # diagnóstico harness (14 checks)
+node .opencode/scripts/doctor.mjs --json              # diagnóstico harness (16-17 checks, variable por condicionales §2/topic/manifest/index)
 node .opencode/skills/_skill-loader/loader.mjs list --json  # listar skills (cache fingerprint)
 node .opencode/scripts/memory-index.mjs search "query"      # búsqueda memoria md+grep
 node .opencode/scripts/memory-sync.mjs status         # estado sync local chunks

@@ -5,15 +5,15 @@
 
 ---
 
-## 2026-09-11 — Purga F1+F2 advisor PASS
+## 2026-09-11 — Purga F1+F2+F3 docs PASS
 
 topic: sdd/advisor-purge-improvements
-**Goal:** Purgar legacy instaladores (F1+F2) sin commitear F2.
-**Discoveries:** F2: loop entrecomillado en init.cmd; templates con AGENT-ORCHESTRATION residual; verifier cuenta 16 checks (2 warnings manifest/index esperados) vs doctor 14/14.
-**Accomplished:** F1 commiteada 01600b0. F2: fix loop init.cmd, rename templates AGENT-ORCHESTRATION→AGENT-PIPELINE vía git mv + README:33.
-**Next:** Commit F2 a demanda; validar demo Fase 1; rotar a CHANGELOG el lunes.
-**Files:** `git log --oneline -5` → 01600b0, 35c35fc, 42de753, 5fbebed, aa1f864.
-**Verificación:** grep 0 en templates, node --check OK, bash -n OK, doctor 14/14, npm test OK, demo /tmp/demo-f2 exit 0 + doctor demo 13/16.
+**Goal:** Purgar legacy instaladores (F1+F2) + docs-only F3 sin commitear F3.
+**Discoveries:** F3 docs-only: doctor 16-17 variable por condicionales §2/topic/manifest/index; routine 3 formas + cierre /record; discover/record routing + cadena; doctor.md manuales; check-memory subset.
+**Accomplished:** F1 01600b0 y F2 6dee3b6 commiteadas. F3 sin commit: docs doctor/routine/discover/record + check-memory subset verificados.
+**Next:** Commit F3 a demanda; validar demo Fase 1; rotar a CHANGELOG el lunes.
+**Files:** `git log --oneline -5` → 6dee3b6, 01600b0, 35c35fc, 42de753, 5fbebed.
+**Verificación:** grep 14/14 0 fuera historia, doctor 14/16 +2 warnings esperados, npm test OK, routine-model --dry-run --model-builder foo OK.
 
 ## 2026-09-10 — Fixes P0/P1/P2 verificados PASS
 

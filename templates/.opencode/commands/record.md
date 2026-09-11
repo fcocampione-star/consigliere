@@ -20,3 +20,7 @@ Como Summarizer, aplica las reglas:
 Contexto a registrar: $ARGUMENTS
 
 Detalle de archivos si el usuario lo pidiera: remítete a `git log`, no lo dupliques en SUMMARY.
+
+Routing: aquí no se decide ruta; el trabajo previo vino de `direct/delegated/spec-lite → advisor.md §2`.
+
+Cadena: este comando cierra `/discover` → `/routine` → `/record`.
