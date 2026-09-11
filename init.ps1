@@ -12,6 +12,8 @@
 param(
   [switch]$Version,
   [switch]$Help,
+  [switch]$Quick,
+  [switch]$Interactive,
   [string]$Dir,
   [string]$Name,
   [string]$StackDb,
@@ -81,10 +83,13 @@ function Show-Help {
   Write-Host @"
 ADVISOR v$HARNESS_VERSION — Harness de agentes + memoria persistente para opencode (solo por proyecto).
 
-Uso:
-  .\init.ps1                          modo interactivo
-  .\init.ps1 -Version | -Help
-  .\init.ps1 <ruta\proyecto>           crear proyecto
+Uso rápido:
+  .\init.ps1                     cwd vacío → genera directamente | cwd no vacío → asistente interactivo
+  .\init.ps1 -Quick | -y         happy path forzado (aunque el cwd no esté vacío)
+  .\init.ps1 <ruta\proyecto>     no-interactivo (con flags)
+
+Uso avanzado:
+  .\init.ps1 -Version | -Help | -Interactive
   .\init.ps1 <ruta\proyecto> -Upgrade [-Part harness|memoria|autoskills|all]  actualizar (backup keep 5, preserva memoria/config)
   .\init.ps1 <ruta\proyecto> -Status   estado read-only (no escribe)
   .\init.ps1 <ruta\proyecto> -Restore -From <advisor|harness>-<ts>.tgz  restaurar backup
@@ -93,6 +98,8 @@ Uso:
   .\init.ps1 <ruta\proyecto> -Force    sobrescribir destino no vacío (solo sin -Upgrade)
 
 Flags:
+  -Quick | -y               happy path forzado (sin prompts; cwd o ruta/-Dir)
+  -Interactive | -i         forzar asistente interactivo (aunque el cwd esté vacío)
   -Dir <ruta>              directorio destino
   -Name <nombre>           nombre del proyecto
   -StackDb/-StackBackend/-StackFrontend/-StackAuth/-StackValidation/-StackDeploy <v>
@@ -108,9 +115,18 @@ Flags:
 
 Estado: solo vivo en .advisor/ (paridad init.mjs/init.sh).
 
+Genera: .opencode/ (agents, commands, plans, skills, scripts), AGENTS.md,
+PROJECT_STATE.md, SUMMARY.md, CHANGELOG/, .advisor/, .gitignore, skills-lock.json.
+
 Instalación: solo por proyecto, sin binario global.
   npx advisor-harness@latest C:\ruta\proyecto
   powershell -File init.ps1 C:\ruta\proyecto
+
+FLUJO RECOMENDADO:
+  1. npx advisor-harness@latest .   ('.' = carpeta actual; vacía → directo, con archivos → asistente)
+  2. En el asistente: nombre → stack → modelos (por defecto o personalizar) → autoskills → git
+  3. Dentro del proyecto: edita AGENTS.md y .opencode/skills/_project-docs/SKILL.md
+  4. Arranca: opencode → /discover → /routine "configurar base del proyecto" → /doctor
 "@
 }
 
@@ -225,14 +241,20 @@ function Invoke-InteractiveCreate {
   $STACK_VALIDATION = Prompt-StackItem "Validación" @("zod","valibot","joi","yup")
   $STACK_DEPLOY = Prompt-StackItem "Deploy" @("docker","vercel","fly","railway","aws")
   Write-Host ""
-  Write-Info "Modelos por subagente (opcional — cheap=verifier/summarizer/explore, strong=builder/planner/critic)."
-  $MODEL_ADVISOR = Read-Host "  Modelo [advisor] (Enter = heredar)"
-  $MODEL_PLANNER = Read-Host "  Modelo [planner] (Enter = heredar)"
-  $MODEL_BUILDER = Read-Host "  Modelo [builder] (Enter = heredar)"
-  $MODEL_CRITIC = Read-Host "  Modelo [critic] (Enter = heredar)"
-  $MODEL_VERIFIER = Read-Host "  Modelo [verifier] (Enter = heredar)"
-  $MODEL_SUMMARIZER = Read-Host "  Modelo [summarizer] (Enter = heredar)"
-  $MODEL_EXPLORE = Read-Host "  Modelo [explore] (Enter = heredar)"
+  Write-Info "Modelos por subagente (opcional — heredar todos por defecto). cheap=verifier/summarizer/explore, strong=builder/planner/critic."
+  $MODEL_CHOICE = Read-Host "  ¿Modelos por defecto (heredar todos)? [recomendado]/personalizar"
+  $MODEL_ADVISOR = ""; $MODEL_PLANNER = ""; $MODEL_BUILDER = ""; $MODEL_VERIFIER = ""; $MODEL_CRITIC = ""; $MODEL_SUMMARIZER = ""; $MODEL_EXPLORE = ""
+  if ($MODEL_CHOICE -match '^[Pp]') {
+    $MODEL_RAW = Read-Host "  Modelos coma-separados en orden (advisor,planner,builder,critic,verifier,summarizer,explore). Vacío = heredar"
+    $MODEL_LIST = @($MODEL_RAW -split ',' | ForEach-Object { $_.Trim() })
+    if ($MODEL_LIST.Count -ge 1) { $MODEL_ADVISOR = $MODEL_LIST[0] }
+    if ($MODEL_LIST.Count -ge 2) { $MODEL_PLANNER = $MODEL_LIST[1] }
+    if ($MODEL_LIST.Count -ge 3) { $MODEL_BUILDER = $MODEL_LIST[2] }
+    if ($MODEL_LIST.Count -ge 4) { $MODEL_CRITIC = $MODEL_LIST[3] }
+    if ($MODEL_LIST.Count -ge 5) { $MODEL_VERIFIER = $MODEL_LIST[4] }
+    if ($MODEL_LIST.Count -ge 6) { $MODEL_SUMMARIZER = $MODEL_LIST[5] }
+    if ($MODEL_LIST.Count -ge 7) { $MODEL_EXPLORE = $MODEL_LIST[6] }
+  }
   $LANG_BACKEND = "typescript"
   if ($STACK_BACKEND -like "*python*") { $LANG_BACKEND = "python" }
   elseif ($STACK_BACKEND -like "*go*") { $LANG_BACKEND = "go" }
@@ -247,6 +269,19 @@ function Invoke-InteractiveCreate {
   $go = Read-Host "  ¿Continuar? [S/n]"
   if ($go -match '^[Nn]$') { Write-Info "Cancelado."; exit 0 }
   Invoke-CreateProject -ProjectName $projectName -TargetDir $targetDir -STACK_DB $STACK_DB -STACK_BACKEND $STACK_BACKEND -STACK_FRONTEND $STACK_FRONTEND -STACK_AUTH $STACK_AUTH -STACK_VALIDATION $STACK_VALIDATION -STACK_DEPLOY $STACK_DEPLOY -LANG_BACKEND $LANG_BACKEND -MODEL_ADVISOR $MODEL_ADVISOR -MODEL_PLANNER $MODEL_PLANNER -MODEL_BUILDER $MODEL_BUILDER -MODEL_CRITIC $MODEL_CRITIC -MODEL_VERIFIER $MODEL_VERIFIER -MODEL_SUMMARIZER $MODEL_SUMMARIZER -MODEL_EXPLORE $MODEL_EXPLORE -AUTO_CHOICE $AUTO_CHOICE -DO_GIT $DO_GIT
+}
+
+function Invoke-HappyPath {
+  param([string]$TargetDir = "")
+  if (-not $TargetDir) { $TargetDir = (Get-Location).Path }
+  Show-Banner
+  Write-Step "Happy path — generando ADVISOR 2.0 en '.' ($TargetDir)"
+  Write-Ok "Defaults aplicados (modelos heredados, sin stack)."
+  Write-Ok "Autoskills: 3 (omitir) | Git init: Sí"
+  $targetDir = $TargetDir
+  $projectName = Split-Path $targetDir -Leaf
+  Invoke-CreateProject -ProjectName $projectName -TargetDir $targetDir -STACK_DB "" -STACK_BACKEND "" -STACK_FRONTEND "" -STACK_AUTH "" -STACK_VALIDATION "" -STACK_DEPLOY "" -LANG_BACKEND "typescript" -MODEL_ADVISOR "" -MODEL_PLANNER "" -MODEL_BUILDER "" -MODEL_CRITIC "" -MODEL_VERIFIER "" -MODEL_SUMMARIZER "" -MODEL_EXPLORE "" -AUTO_CHOICE "3" -DO_GIT $true
+  exit 0
 }
 
 function Invoke-CreateProject {
@@ -409,14 +444,37 @@ function Uninstall-Harness($targetDir, $projectName, $part, $dry, $force) {
 }
 
 # ---- Dispatch ----
+function Resolve-QuickTarget {
+  param([string]$Dir, [string[]]$After)
+  if ($Dir) { return $Dir }
+  foreach ($r in $After) {
+    if ($r -and -not $r.StartsWith('-')) { return $r }
+  }
+  return ""
+}
 if ($Version) { Write-Host "ADVISOR v$HARNESS_VERSION"; exit 0 }
 if ($Help) { Show-Help; exit 0 }
+if ($Quick) {
+  $q = Resolve-QuickTarget -Dir $Dir -After $Remaining
+  if (-not $q) { $q = (Get-Location).Path }
+  if ((Test-Path $q) -and (Get-ChildItem -Path $q -Force | Measure-Object).Count -gt 0) { Write-Warn "Directorio no vacío — happy path forzado con -Quick." }
+  Invoke-HappyPath -TargetDir $q
+}
+if ($Interactive) { Invoke-InteractiveCreate; exit 0 }
 
 # Parse Remaining: support --dry-run/--force/--upgrade and --dir style for parity
 if ($Remaining) {
   for ($ri = 0; $ri -lt $Remaining.Count; $ri++) {
     $r = $Remaining[$ri]
     switch ($r) {
+      "--version" { Write-Host "ADVISOR v$HARNESS_VERSION"; exit 0 }
+      "-v" { Write-Host "ADVISOR v$HARNESS_VERSION"; exit 0 }
+      "--help" { Show-Help; exit 0 }
+      "-h" { Show-Help; exit 0 }
+      "--quick" { $q = Resolve-QuickTarget -Dir $Dir -After $Remaining[($ri+1)..($Remaining.Count-1)]; if (-not $q) { $q = (Get-Location).Path }; if ((Test-Path $q) -and (Get-ChildItem -Path $q -Force | Measure-Object).Count -gt 0) { Write-Warn "Directorio no vacío — happy path forzado con --quick." }; Invoke-HappyPath -TargetDir $q }
+      "-y" { $q = Resolve-QuickTarget -Dir $Dir -After $Remaining[($ri+1)..($Remaining.Count-1)]; if (-not $q) { $q = (Get-Location).Path }; if ((Test-Path $q) -and (Get-ChildItem -Path $q -Force | Measure-Object).Count -gt 0) { Write-Warn "Directorio no vacío — happy path forzado con -y." }; Invoke-HappyPath -TargetDir $q }
+      "--interactive" { Invoke-InteractiveCreate; exit 0 }
+      "-i" { Invoke-InteractiveCreate; exit 0 }
       "--dry-run" { $DryRun = $true; continue }
       "-DryRun" { $DryRun = $true; continue }
       "--force" { $Force = $true; continue }
@@ -569,13 +627,6 @@ if ($Dir -or $Name -or $StackDb -or $StackBackend -or $Status -or $Restore -or $
   exit 0
 }
 
-# Sin args → interactivo
-Show-Banner
-Write-Host ""
-Write-Host "  ¿Qué quieres hacer? 1) Crear nuevo proyecto (harness)  2) Salir"
-$choice = Read-Host "  > Elección [1-2]"
-switch ($choice) {
-  "1" { Invoke-InteractiveCreate }
-  "2" { exit 0 }
-  default { Write-Warn "Opción inválida." }
-}
+# Sin args → cwd vacío: happy path | cwd no vacío: asistente interactivo
+if ((Get-ChildItem -Path (Get-Location).Path -Force | Measure-Object).Count -eq 0) { Invoke-HappyPath }
+else { Invoke-InteractiveCreate }

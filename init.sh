@@ -162,14 +162,20 @@ interactive_create() {
   prompt_stack_item "Deploy" STACK_DEPLOY "docker" "vercel" "fly" "railway" "aws"
 
   echo
-  info "Modelos por subagente (opcional — cheap=verifier/summarizer/explore, strong=builder/planner/critic)."
-  prompt_model "advisor" MODEL_ADVISOR
-  prompt_model "planner" MODEL_PLANNER
-  prompt_model "builder" MODEL_BUILDER
-  prompt_model "critic" MODEL_CRITIC
-  prompt_model "verifier" MODEL_VERIFIER
-  prompt_model "summarizer" MODEL_SUMMARIZER
-  prompt_model "explore" MODEL_EXPLORE
+  info "Modelos por subagente (opcional — heredar todos por defecto). cheap=verifier/summarizer/explore, strong=builder/planner/critic."
+  read -rp "  ¿Modelos por defecto (heredar todos)? [recomendado]/personalizar: " MODEL_CHOICE
+  MODEL_ADVISOR=""; MODEL_PLANNER=""; MODEL_BUILDER=""; MODEL_VERIFIER=""; MODEL_CRITIC=""; MODEL_SUMMARIZER=""; MODEL_EXPLORE=""
+  if [[ "$MODEL_CHOICE" =~ ^[Pp] ]]; then
+    read -rp "  Modelos coma-separados en orden (advisor,planner,builder,critic,verifier,summarizer,explore). Vacío = heredar: " MODEL_RAW
+    local -a MODEL_LIST=(); IFS=',' read -r -a MODEL_LIST <<< "$MODEL_RAW"
+    [[ ${#MODEL_LIST[@]} -ge 1 ]] && MODEL_ADVISOR="${MODEL_LIST[0]}"
+    [[ ${#MODEL_LIST[@]} -ge 2 ]] && MODEL_PLANNER="${MODEL_LIST[1]}"
+    [[ ${#MODEL_LIST[@]} -ge 3 ]] && MODEL_BUILDER="${MODEL_LIST[2]}"
+    [[ ${#MODEL_LIST[@]} -ge 4 ]] && MODEL_CRITIC="${MODEL_LIST[3]}"
+    [[ ${#MODEL_LIST[@]} -ge 5 ]] && MODEL_VERIFIER="${MODEL_LIST[4]}"
+    [[ ${#MODEL_LIST[@]} -ge 6 ]] && MODEL_SUMMARIZER="${MODEL_LIST[5]}"
+    [[ ${#MODEL_LIST[@]} -ge 7 ]] && MODEL_EXPLORE="${MODEL_LIST[6]}"
+  fi
 
   case "$STACK_BACKEND" in
     *python*) LANG_BACKEND="python" ;;
@@ -220,12 +226,6 @@ prompt_stack_item() {
   else
     printf -v "$varname" '%s' "$val"
   fi
-}
-
-prompt_model() {
-  local role="$1" varname="$2"
-  read -rp "  Modelo [$role] (Enter = heredar): " val
-  printf -v "$varname" '%s' "$val"
 }
 
 create_project() {
@@ -492,12 +492,52 @@ uninstall_cmd() {
   ok "Desinstalado --part $part: $n/${#present[@]} ítems"
 }
 
+# Happy path sin prompts: defaults, modelos heredados, autoskills omitido (CI-safe), git init+commit.
+happy_path() {
+  local target="${1:-$PWD}"
+  banner
+  step "Happy path — generando ADVISOR 2.0 en '.' ($target)"
+  ok "Defaults aplicados (modelos heredados, sin stack)."
+  ok "Autoskills: 3 (omitir) | Git init: Sí"
+  TARGET_DIR="$target"
+  PROJECT_NAME="$(basename "$target")"
+  STACK_DB=""; STACK_BACKEND=""; STACK_FRONTEND=""; STACK_AUTH=""; STACK_VALIDATION=""; STACK_DEPLOY=""
+  LANG_BACKEND="typescript"
+  MODEL_ADVISOR=""; MODEL_PLANNER=""; MODEL_BUILDER=""; MODEL_VERIFIER=""; MODEL_CRITIC=""; MODEL_SUMMARIZER=""; MODEL_EXPLORE=""
+  AUTO_CHOICE="3"; DO_GIT="1"
+  create_project
+  exit 0
+}
+
+# Extrae el destino de --quick/-y desde --dir <val> o ruta posicional; vacío si no hay.
+extract_target_dir() {
+  local i val
+  for ((i=1;i<=$#;i++)); do
+    case "${!i}" in
+      --dir) if ((i < $#)); then echo "${@:i+1:1}"; return; fi ;;
+      -y|-i|-v|-h|--*) : ;;
+      *) echo "${!i}"; return ;;
+    esac
+  done
+  echo ""
+}
+
 # Parser de argumentos / despacho
 parse_args() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --version|-v) echo "ADVISOR v$VERSION"; exit 0 ;;
       --help|-h) show_help; exit 0 ;;
+      --quick|-y)
+        local qdir="${TARGET_DIR:-}"
+        if [[ -z "$qdir" ]]; then
+          qdir="$(extract_target_dir "$@")"
+          [[ -z "$qdir" ]] && qdir="$PWD"
+        fi
+        [[ -n "$(ls -A "$qdir" 2>/dev/null)" ]] && warn "Directorio no vacío — happy path forzado con --quick."
+        happy_path "$qdir"
+        ;;
+      --interactive|-i) interactive_create; exit 0 ;;
       --dir) needValue "$1" "${2:-}"; TARGET_DIR="$2"; shift 2 ;;
       --name) needValue "$1" "${2:-}"; PROJECT_NAME="$2"; shift 2 ;;
       --stack-db) needValue "$1" "${2:-}"; STACK_DB="$2"; shift 2 ;;
@@ -526,10 +566,13 @@ show_help() {
   cat <<EOF
 ADVISOR v$VERSION — Harness de agentes + memoria persistente para opencode (solo por proyecto).
 
-Uso:
-  $SCRIPT_NAME                          modo interactivo
-  $SCRIPT_NAME --version | --help
-  $SCRIPT_NAME <ruta/proyecto>          crear proyecto (no-interactivo, con flags)
+Uso rápido:
+  $SCRIPT_NAME                     cwd vacío → genera directamente | cwd no vacío → asistente interactivo
+  $SCRIPT_NAME --quick | -y        happy path forzado (aunque el cwd no esté vacío)
+  $SCRIPT_NAME <ruta/proyecto>     no-interactivo (con flags)
+
+Uso avanzado:
+  $SCRIPT_NAME --version | --help | --interactive
   $SCRIPT_NAME <ruta/proyecto> --upgrade [--part harness|memoria|autoskills|all]  actualizar (backup keep 5, preserva memoria/config)
   $SCRIPT_NAME <ruta/proyecto> --status   estado read-only (no escribe)
   $SCRIPT_NAME <ruta/proyecto> --restore --from <advisor|harness>-<ts>.tgz  restaurar backup
@@ -537,7 +580,9 @@ Uso:
   $SCRIPT_NAME <ruta/proyecto> --dry-run  simulación sin escribir
   $SCRIPT_NAME <ruta/proyecto> --force    sobrescribir destino no vacío
 
-Flags (no-interactivo):
+Flags:
+  --quick | -y              happy path forzado (sin prompts; cwd o ruta/--dir)
+  --interactive | -i        forzar asistente interactivo (aunque el cwd esté vacío)
   --dir <ruta>              directorio destino
   --name <nombre>           nombre del proyecto
   --stack-db/-backend/-frontend/-auth/-validation/-deploy <v>   stack
@@ -580,13 +625,21 @@ main() {
   fi
 
   if [[ $# -eq 0 ]]; then
-    interactive_create
+    if [[ -z "$(ls -A "$PWD" 2>/dev/null)" ]]; then happy_path; else interactive_create; fi
     exit 0
   fi
 
   local arg0="${1:-}"
   if [[ "$arg0" == "--version" || "$arg0" == "-v" ]]; then echo "ADVISOR v$VERSION"; exit 0; fi
   if [[ "$arg0" == "--help" || "$arg0" == "-h" ]]; then show_help; exit 0; fi
+  if [[ "$arg0" == "--quick" || "$arg0" == "-y" ]]; then
+    local qdir
+    qdir="$(extract_target_dir "$@")"
+    [[ -z "$qdir" ]] && qdir="$PWD"
+    [[ -n "$(ls -A "$qdir" 2>/dev/null)" ]] && warn "Directorio no vacío — happy path forzado con --quick."
+    happy_path "$qdir"
+  fi
+  if [[ "$arg0" == "--interactive" || "$arg0" == "-i" ]]; then interactive_create; exit 0; fi
 
   TARGET_DIR=""; PROJECT_NAME=""; STACK_DB=""; STACK_BACKEND=""; STACK_FRONTEND=""
   STACK_AUTH=""; STACK_VALIDATION=""; STACK_DEPLOY=""; AUTO_CHOICE="1"; DO_GIT="1"; UPGRADE=0; DRY_RUN=0; FORCE=0

@@ -381,14 +381,14 @@ async function interactiveCreate() {
   const STACK_DEPLOY = await promptStackItem('Deploy', ['docker', 'vercel', 'fly', 'railway', 'aws']);
 
   console.log();
-  info('Modelos por subagente (opcional — déjalo vacío para heredar). cheap=verifier/summarizer/explore, strong=builder/planner/critic');
-  const MODEL_ADVISOR = (await ask('  Modelo [advisor] (Enter = heredar): ')).trim();
-  const MODEL_PLANNER = (await ask('  Modelo [planner] (Enter = heredar): ')).trim();
-  const MODEL_BUILDER = (await ask('  Modelo [builder] (Enter = heredar): ')).trim();
-  const MODEL_CRITIC = (await ask('  Modelo [critic] (Enter = heredar): ')).trim();
-  const MODEL_VERIFIER = (await ask('  Modelo [verifier] (Enter = heredar): ')).trim();
-  const MODEL_SUMMARIZER = (await ask('  Modelo [summarizer] (Enter = heredar): ')).trim();
-  const MODEL_EXPLORE = (await ask('  Modelo [explore] (Enter = heredar): ')).trim();
+  info('Modelos por subagente (opcional — heredar todos por defecto). cheap=verifier/summarizer/explore, strong=builder/planner/critic');
+  const MODEL_CHOICE = (await ask('  ¿Modelos por defecto (heredar todos)? [recomendado]/personalizar: ')).trim();
+  let MODEL_ADVISOR = '', MODEL_PLANNER = '', MODEL_BUILDER = '', MODEL_VERIFIER = '', MODEL_CRITIC = '', MODEL_SUMMARIZER = '', MODEL_EXPLORE = '';
+  if (/^p/i.test(MODEL_CHOICE)) {
+    const raw = (await ask('  Modelos coma-separados en orden (advisor,planner,builder,critic,verifier,summarizer,explore). Vacío = heredar: ')).trim();
+    const parts = raw.split(',').map((s) => s.trim()).slice(0, 7);
+    [MODEL_ADVISOR, MODEL_PLANNER, MODEL_BUILDER, MODEL_CRITIC, MODEL_VERIFIER, MODEL_SUMMARIZER, MODEL_EXPLORE] = parts;
+  }
 
   let LANG_BACKEND = 'typescript';
   if (STACK_BACKEND.includes('python')) LANG_BACKEND = 'python';
@@ -480,10 +480,13 @@ function needPart(val) {
 function showHelp(scriptName) {
   console.log(`ADVISOR v${VERSION} — Harness de agentes + memoria persistente para opencode (solo por proyecto).
 
-Uso:
-  ${scriptName}                          modo interactivo
-  ${scriptName} --version | --help
-  ${scriptName} <ruta/proyecto>          crear proyecto (con flags)
+Uso rápido:
+  ${scriptName}                     cwd vacío → genera directamente | cwd no vacío → asistente interactivo
+  ${scriptName} --quick | -y        happy path forzado (aunque el cwd no esté vacío)
+  ${scriptName} <ruta/proyecto>     no-interactivo (con flags)
+
+Uso avanzado:
+  ${scriptName} --version | --help | --interactive
   ${scriptName} <ruta/proyecto> --upgrade [--part harness|memoria|autoskills|all]  actualizar (backup keep 5, preserva memoria/config)
   ${scriptName} <ruta/proyecto> --status   estado read-only (no escribe)
   ${scriptName} <ruta/proyecto> --restore --from <advisor|harness>-<ts>.tgz  restaurar backup
@@ -491,7 +494,9 @@ Uso:
   ${scriptName} <ruta/proyecto> --dry-run  simulación sin escribir
   ${scriptName} <ruta/proyecto> --force    sobrescribir destino no vacío / no preguntar
 
-Flags (no-interactivo):
+Flags:
+  --quick | -y              happy path forzado (sin prompts; cwd o ruta/--dir)
+  --interactive | -i        forzar asistente interactivo (aunque el cwd esté vacío)
   --dir <ruta>              directorio destino
   --name <nombre>           nombre del proyecto
   --stack-db/-backend/-frontend/-auth/-validation/-deploy <v>
@@ -507,11 +512,65 @@ Flags (no-interactivo):
 
 Estado: vivo en .advisor/.
 
+Genera: .opencode/ (agents, commands, plans, skills, scripts), AGENTS.md,
+PROJECT_STATE.md, SUMMARY.md, CHANGELOG/, .advisor/, .gitignore, skills-lock.json.
+
 Instalación: solo por proyecto, sin binario global.
   npx advisor-harness@latest /ruta/proyecto
   node ./init.mjs /ruta/proyecto
   bash ./init.sh --dir /ruta/proyecto
+
+FLUJO RECOMENDADO:
+  1. npx advisor-harness@latest .   ('.' = carpeta actual; vacía → directo, con archivos → asistente)
+  2. En el asistente: nombre → stack → modelos (por defecto o personalizar) → autoskills → git
+  3. Dentro del proyecto: edita AGENTS.md y .opencode/skills/_project-docs/SKILL.md
+  4. Arranca: opencode → /discover → /routine "configurar base del proyecto" → /doctor
 `);
+}
+
+function cwdEmpty() {
+  return !existsSync(process.cwd()) || readdirSync(process.cwd()).length === 0;
+}
+
+// Happy path sin prompts: defaults, modelos heredados, autoskills omitido (CI-safe), git init+commit.
+function happyPath(targetDir = process.cwd()) {
+  const cwd = targetDir;
+  const projectName = basename(cwd);
+  banner();
+  step(`Happy path — generando ADVISOR 2.0 en '.' (${cwd})`);
+  ok('Defaults aplicados (modelos heredados, sin stack).');
+  ok('Autoskills: 3 (omitir) | Git init: Sí');
+  createProject({
+    projectName, targetDir: cwd, STACK_DB: '', STACK_BACKEND: '', STACK_FRONTEND: '', STACK_AUTH: '',
+    STACK_VALIDATION: '', STACK_DEPLOY: '', LANG_BACKEND: 'typescript',
+    MODEL_ADVISOR: '', MODEL_PLANNER: '', MODEL_BUILDER: '', MODEL_VERIFIER: '', MODEL_CRITIC: '',
+    MODEL_SUMMARIZER: '', MODEL_EXPLORE: '', AUTO_CHOICE: '3', DO_GIT: true, PART: 'all',
+  });
+}
+
+// Extrae el destino de --quick/-y desde --dir <val> o ruta posicional; '' si no hay.
+function extractTargetDir(args) {
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a === '--dir') { if (i + 1 < args.length) return args[i + 1]; }
+    else if (!a.startsWith('--') && a !== '-y' && a !== '-i' && a !== '-v' && a !== '-h') return a;
+  }
+  return '';
+}
+
+// Despacho de --quick/-y: respeta --dir/posicional como destino, si no → cwd.
+function quickPath(args) {
+  let targetDir = extractTargetDir(args);
+  if (targetDir) {
+    targetDir = targetDir.replace(/^~/, HOME);
+    targetDir = isAbsolute(targetDir) ? resolve(targetDir) : resolve(process.cwd(), targetDir);
+  } else {
+    targetDir = process.cwd();
+  }
+  if (existsSync(targetDir) && readdirSync(targetDir).length > 0) {
+    warn(`Directorio no vacío — happy path forzado con --quick (${targetDir}).`);
+  }
+  happyPath(targetDir);
 }
 
 async function main() {
@@ -527,12 +586,18 @@ async function main() {
   }
 
   if (args.length === 0) {
+    if (cwdEmpty()) { happyPath(); return; }
     await interactiveCreate();
     return;
   }
 
   if (args[0] === '--version' || args[0] === '-v') { console.log(`ADVISOR v${VERSION}`); return; }
   if (args[0] === '--help' || args[0] === '-h') { showHelp(scriptName); return; }
+  if (args[0] === '--interactive' || args[0] === '-i') { await interactiveCreate(); return; }
+  if (args[0] === '--quick' || args[0] === '-y') {
+    quickPath(args);
+    return;
+  }
 
   // parse no-interactivo
   let TARGET_DIR = ''; let PROJECT_NAME = '';
@@ -570,6 +635,8 @@ async function main() {
       case '--uninstall': UNINSTALL = true; break;
       case '--dry-run': DRY_RUN = true; break;
       case '--force': FORCE = true; break;
+      case '--quick': case '-y': quickPath(args); return;
+      case '--interactive': case '-i': await interactiveCreate(); return;
       case '--help': case '-h': showHelp(scriptName); return;
       case '--version': case '-v': console.log(`ADVISOR v${VERSION}`); return;
       default:

@@ -1,13 +1,25 @@
 # ADVISOR 2.0 — Harness de agentes + memoria persistente para opencode
 
-> **Solo por proyecto.** Reusable scaffold que arranca cada proyecto con **agentes/subagentes** orquestados y **memoria persistente de 3 capas** (progresiva + buscable) + routing orgánico + SDD-lite integrado.
+> **Solo por proyecto.** Un scaffold reutilizable que deja cada proyecto listo para trabajar con opencode: agentes orquestados, memoria que recuerda decisiones entre sesiones y comandos para auditar, registrar y revisar el progreso. Sin binarios globales, sin servicios: es Markdown + scripts que se instalan **dentro** del proyecto.
 
-> **⚠️ Disponibilidad de `npx`:** la instalación vía `npx advisor-harness@latest` requiere que el paquete esté publicado en npm (hito futuro, aún no publicado). **Hoy solo funcionan las instrucciones locales** (`git clone` + `node init.mjs` / `bash init.sh` / `powershell -File init.ps1`). Tras el publish, la vía `npx` quedará disponible sin cambios de uso.
+> **⚠️ Disponibilidad de `npx`:** la vía `npx advisor-harness@latest` requiere que el paquete esté publicado en npm (hito futuro, aún no publicado). **Hoy usa las instrucciones locales** (`git clone` + `node init.mjs` / `./init.sh` / `powershell -File init.ps1`). Cuando se publique, `npx` funcionará igual sin cambiar nada.
 
-> **Primeros pasos (30 segundos):**
-> 1. `git clone https://github.com/fcocampione-star/consigliere.git && cd consigliere && node init.mjs` → responde el asistente (`📁 Ruta → Nombre → Stack → Modelos → Autoskills → Git`)
-> 2. `cd /ruta/mi-app` → abre `opencode`
-> 3. `/discover` (audita contexto + skills) → `/routine "configurar base del proyecto"` → `/doctor`
+## En 30 segundos
+
+1. En una carpeta **vacía**, ejecuta (desde el clon del repo):
+
+   ```bash
+   node init.mjs          # o: ./init.sh  /  powershell -File init.ps1
+   ```
+
+   No necesitas responder nada: detecta que la carpeta está vacía y genera el harness directamente. Cero prompts, con un resumen de 3 líneas (destino, defaults aplicados — modelos heredados y sin stack — y opciones finales: autoskills omitido + git init).
+
+2. Abre esa carpeta con `opencode`.
+
+3. Escribe:
+   `/discover` (revisa contexto y skills) → `/routine "configurar base del proyecto"` (planifica y ejecuta la tarea) → `/doctor` (verifica que todo está sano).
+
+Ese es el día a día. Si tu carpeta **no está vacía**, el mismo comando abre un asistente que te guía (ver [Instalación](#instalación)).
 
 ## ¿Qué genera?
 
@@ -15,7 +27,7 @@
 <proyecto>/
 ├── .opencode/
 │   ├── agents/
-│   │   ├── advisor.md             # primario, routing 1-3 vs 4+ files + SDD-lite
+│   │   ├── advisor.md             # agente primario que coordina (routing + spec-lite)
 │   │   ├── explore.md             # audita contexto + skills (leaf, depth 2)
 │   │   ├── planner.md             # diseña + spec Given/When/Then (≤650w)
 │   │   ├── critic.md              # revisa decisiones de diseño
@@ -41,11 +53,10 @@
 │   │   ├── memory-sync.mjs        # export/import chunks locales
 │   │   └── doctor.mjs             # health check
 │   └── hooks/                     # post-commit-memory-rotate.sh + sync
-├── .advisor/                    # estado VIVO (backups/chunks/cache)
-│   ├── backups/                   # advisor-*.tgz completo keep 5 (upgrade; acepta harness-* legacy)
+├── .advisor/                      # estado VIVO del harness
+│   ├── backups/                   # advisor-*.tgz completo keep 5 (upgrade; compat rename)
 │   ├── chunks/                    # memoria sync local (git-tracked opcional)
 │   └── skill-registry.cache.json  # fingerprint cache v2
-├── .consigliere/                  # legacy pre-rename: fallback SOLO lectura (no escribir, sin symlink)
 ├── AGENTS.md                      # instrucciones raíz + stack + comandos dev
 ├── opencode.json                  # default_agent, modelos cheap vs strong, bash harden
 ├── PROJECT_STATE.md               # CAPA 0 — siempre cargada + review_after
@@ -56,50 +67,50 @@
 └── skills-lock.json
 ```
 
-## Instalación — solo por proyecto
+> **Repo público ≠ proyecto instalado.** En este repositorio, `opencode.json`, `skills-lock.json`, `scripts/` y la memoria (`PROJECT_STATE.md`, `SUMMARY.md`, `CHANGELOG/`, `.advisor/`) quedan **fuera del paquete público** (`package.json` `files`: `init.*` + `templates/`; `export-ignore` en `git archive`). Todos ellos **sí se generan** en cada proyecto que instalas: el árbol de arriba es lo que obtiene el proyecto, no lo que se publica en npm.
 
-Usa uno de estos (todos 100% por proyecto):
+## Instalación
+
+Tres caminos, todos 100% por proyecto. El instalador decide solo: carpeta vacía → genera directo; carpeta con archivos → asistente.
+
+### Camino simple: happy path (0 prompts)
 
 ```bash
-# Recomendado — desde clon del repo (la vía npx vendrá con el publish a npm)
-git clone https://github.com/fcocampione-star/consigliere.git
-node consigliere/init.mjs /ruta/proyecto --name mi-app --stack-backend node/express --autoskills 1 --git yes
-
-# Mismo clon, otros instaladores
-bash consigliere/init.sh --dir /ruta/proyecto --name mi-app --stack-backend node/express --autoskills 1 --git yes
-powershell -File consigliere/init.ps1 C:\ruta\proyecto -Name mi-app -StackBackend node/express -Autoskills 1 -Git yes
-init.cmd C:\ruta\proyecto
-
-# Actualizar harness existente: --upgrade hace backup completo keep 5
-# (incluye .opencode/, AGENTS.md, PROJECT_STATE.md, SUMMARY.md, CHANGELOG/, .advisor/,
-#  .consigliere/ legacy, opencode.json, .gitignore, skills-lock.json, scripts/) y preserva memoria/config
-# (PROJECT_STATE.md, SUMMARY.md, opencode.json, AGENTS.md, .gitignore). Si el backup falla, aborta.
-node consigliere/init.mjs /ruta/proyecto --upgrade
-bash consigliere/init.sh --dir /ruta/proyecto --upgrade
-powershell -File consigliere/init.ps1 C:\ruta\proyecto -Upgrade
+git clone https://github.com/fcocampione-star/consigliere.git && cd <carpeta-del-clon>  # por defecto: consigliere
+node init.mjs            # en una carpeta vacía: genera directo, sin preguntar nada
 ```
 
-## Uso interactivo (guiado)
+- Defaults: modelos heredados (sin asignar), sin stack, autoskills omitido (3), `git init` + commit.
+- CI-safe: no lee de stdin, apto para pipelines.
+- Mismo comportamiento en `./init.sh` y `powershell -File init.ps1`.
 
-Todos estos son **guiados** — no necesitas pasar ruta por adelantado, te preguntan `📁 Ruta → Nombre → Stack → Modelos cheap vs strong → Autoskills → Git`:
+**Forzar happy path en cualquier carpeta** (aunque no esté vacía): `--quick` / `-y`. Respeta `--dir <ruta>` o la ruta posicional como destino; si no hay, usa la carpeta actual:
 
 ```bash
-# guiado — con git clone (recomendado; la vía npx llegará con el publish a npm)
+node init.mjs --quick
+node init.mjs -y /ruta/proyecto
+node init.mjs --quick --dir /ruta/proyecto
+```
+
+### Camino guiado: asistente interactivo
+
+Sin ruta por adelantado: pregunta `📁 Ruta → Nombre → Stack → Modelos → Autoskills → Git`.
+
+```bash
 git clone https://github.com/fcocampione-star/consigliere.git
 cd consigliere
-node init.mjs                # universal
-./init.sh                    # macOS/Linux/Git Bash
+node init.mjs            # cwd con archivos → asistente (o fuerza con --interactive/-i)
+./init.sh                # macOS/Linux/Git Bash
 powershell -File init.ps1    # Windows
 init.cmd                     # CMD
-
-# download ZIP (sin git clone)
-# Descarga ZIP desde GitHub → descomprime → cd consigliere-main
-node init.mjs          # o ./init.sh / powershell -File init.ps1
 ```
 
-> Descarga ZIP / git clone: 1) `cd consigliere` (o carpeta descomprimida) → 2) ejecuta un comando guiado de la sección anterior → 3) responde `📁 Ruta` (ej `C:\ruta\mi-app` o `/tmp/mi-app`) → 4) sigue Stack/Modelos/Git → 5) continúa en el paso 2 de **Primeros pasos** (cd /ruta/mi-app → opencode → /discover → /routine → /doctor).
+- **`--interactive` / `-i`**: fuerza el asistente aunque la carpeta esté vacía.
+- **Stack** (opcional, Enter = saltar): base de datos, backend, frontend, auth, validación, deploy — pre-rellena `AGENTS.md` y `SKILL.md`.
+- **Modelos**: un solo prompt — `¿Modelos por defecto (heredar todos)? [recomendado]/personalizar`. Si eliges *personalizar*, los 7 modelos se piden en una línea, coma-separados, en orden `advisor,planner,builder,critic,verifier,summarizer,explore` (vacío = heredar). Ya no hay 7 preguntas separadas.
+- Descarga ZIP: descomprime → `cd <carpeta-del-zip>` (nombre de carpeta del ZIP, normalmente `consigliere-main`) → mismo comando de arriba.
 
-## Uso no-interactivo (CI / scripts)
+### Camino avanzado: no-interactivo (CI / scripts)
 
 ```bash
 # Mismo CLI que ofrecerá el paquete npm cuando se publique (hoy: desde el clon del repo)
@@ -128,12 +139,18 @@ node consigliere/init.mjs --dir /ruta/proyecto --dry-run
 node consigliere/init.mjs --dir /ruta/proyecto --force
 ```
 
+> `--upgrade` hace backup completo keep 5 (incluye `.opencode/`, `AGENTS.md`, `PROJECT_STATE.md`, `SUMMARY.md`, `CHANGELOG/`, `.advisor/`, `opencode.json`, `.gitignore`, `skills-lock.json`, `scripts/`) y preserva memoria/config (`PROJECT_STATE.md`, `SUMMARY.md`, `opencode.json`, `AGENTS.md`, `.gitignore`). Si el backup falla, aborta.
+
+### Ayuda por capas
+
+`--help` / `-h` muestra primero un **Uso rápido** de 3 líneas (el 90% de los casos) y después el **Uso avanzado**: operaciones (`--upgrade`, `--status`, `--restore`, `--uninstall`, `--dry-run`, `--force`), flags completos, qué genera y el flujo recomendado.
+
 ## Compatibilidad rename (consigliere → Advisor)
 
 - **Display**: `Advisor`; **npm**: `advisor-harness` (`npx advisor-harness@latest`); **bin**: `advisor`, `advisor-harness` + alias `consigliere-harness` (1 versión de transición).
 - **Publicación**: `advisor-harness` nuevo + `consigliere-harness@final` como shim (warning + exec `advisor-harness`) con `npm deprecate` apuntando al nuevo nombre.
 - **Repo**: `https://github.com/fcocampione-star/consigliere.git`.
-- **Estado dual-dir (sin symlink, Windows-safe)**: leer `.advisor/` primero, fallback read-only a legacy `.consigliere/`; escribir **solo** `.advisor/`; migración por copia + `.advisor/.migrated`. Precedencia documentada: `.advisor/` gana siempre.
+- **Estado vivo**: solo `.advisor/` (backups, chunks, cache). Sin directorios legacy.
 - **Backups**: nuevos `advisor-<ts>.tgz`; restore/prune aceptan `^(harness|advisor)-` (keep 5 combinado). Skill-cache v2 (`refresh --force` invalida v1).
 - **Se preserva a propósito**: historial `SUMMARY.md`/`CHANGELOG/`, autor git `CONSIGLIERE` + email `consigliere@local`, `installed_by: consigliere` en `skills-lock.json`.
 - **Seguridad uninstall**: sin `--force` pide confirmación; memoria solo con `--part memoria` (+ `--force`) y backup previo obligatorio (aborta si falla); borrado solo de rutas listadas explícitamente, nunca `.git`; mantiene harden bash (`deny` irreparable + `ask` sensibles).
@@ -149,7 +166,7 @@ node consigliere/init.mjs --dir /ruta/proyecto --force
 ### Comandos del harness
 
 - `/discover [foco]` — audita stack real vs declarado + skills presentes/faltantes.
-- `/routine <tarea> [--parallel --skip-verify --skip-critic]` — routing orgánico: direct 1-3 files vs delegated 4+, plan/spec≤650w → critic → build → verify (stash rollback, 3 intentos) → record. SDD-lite integrado por defecto.
+- `/routine <tarea> [--parallel --skip-verify --skip-critic]` — enruta la tarea por sí solo: pocos archivos → directo; muchos → delega en subagentes (plan → revisión → implementación → verificación → registro). Para los detalles técnicos, ver *Notas de diseño v2.0*.
 - `/doctor` — diagnóstico: `opencode.json`, memoria `<100/<150`, hook, lock huérfano, skills.
 - `/record <contexto>` — persiste con formato 5 campos `Goal/Discoveries/Accomplished/Next/Files` (compat `Qué/Verificación`).
 - `/review` — lista decisiones stale (`review_after` +90d).
@@ -166,7 +183,7 @@ node consigliere/init.mjs --dir /ruta/proyecto --force
 | 2 | `CHANGELOG/YYYY-MM-DD.md` | rare | historial semanal (lunes) + `DECISIONS-ARCHIVE.md` |
 
 - **Topic upsert**: `topic: architecture/auth-model` 2 niveles; mismo topic → upsert no duplicado.
-- **Búsqueda progresiva (sin SQLite)**: `node .opencode/scripts/memory-index.mjs search "query"` → IDs, `timeline <id>`, `get <id>` (grep+perl, fallback si `sqlite3` ausente).
+- **Búsqueda progresiva (sin SQLite)**: `node .opencode/scripts/memory-index.mjs search "query"` → IDs, `timeline <id>`, `get <id>` (grep+perl; `sqlite3` solo si está instalado).
 - **Rotación**: automática `post-commit` (lunes o >150 líneas) + `flock` + `.memory-lock`.
 - **Sync local**: `node .opencode/scripts/memory-sync.mjs export` → `.advisor/chunks/<monday>.json` (git-tracked), `import` restaura en clone.
 - **Session summary**: 5 campos `Goal/Discoveries/Accomplished/Next Steps/Files`.
@@ -193,9 +210,11 @@ advisor/
 ├── init.ps1                # instalador PowerShell solo proyecto
 ├── init.cmd                # shim CMD → init.ps1
 ├── init.mjs                # instalador Node universal (o `npx` cuando esté publicado)
-├── package.json            # publica en npm como `advisor-harness` v2.0.0
-└── templates/              # plantillas {{VAR}} + scripts + cache
+├── package.json            # publica en npm como `advisor-harness` v2.0.0 (files: init.* + templates/)
+└── templates/              # plantillas {{VAR}} + scripts + cache (lo único que se publica, junto a init.*)
 ```
+
+> Los ficheros de desarrollo de este repo (`opencode.json`, `skills-lock.json`, `scripts/`, `.opencode/` raíz, `.advisor/`, memoria) quedan fuera del paquete y del `git archive` (`export-ignore`), pero **se generan completos en cada proyecto instalado**.
 
 ## Dependencias
 
@@ -205,12 +224,13 @@ advisor/
 | `init.sh` | `bash 4+`, `coreutils`, `git`, `tar` (requerido para `--upgrade`) | `node` (autoskills) |
 | `init.ps1` | `PowerShell 5.1+`, `git`, `tar` (requerido para `--upgrade`) | `node` (autoskills) |
 
-## Notas de diseño v2.0
+## Notas de diseño v2.0 (detalle técnico)
 
 - **Solo por proyecto**: cero `~/.local/bin`, cero `PATH`, cero drift.
-- **Routing orgánico**: 1-3 files direct vs 4+ delegated.
+- **Routing orgánico**: el advisor decide por tamaño — 1-3 files direct vs 4+ delegated (subagentes). Sin burocracia en tareas pequeñas.
 - **SDD-lite integrado en `routine`** (≤650w Given/When/Then), no 10 fases pesadas.
+- **Modelos cheap vs strong**: `{{MODEL_*}}` en `opencode.json` — cheap=verifier/summarizer/explore, strong=builder/planner/critic.
 - **Harden bash**: deny extendido `**/*.pem,**/*.key,**/.env*,~/.ssh/*,**/secrets/*`.
 - **Memoria md+grep**: topic upsert + stale + sync local (Engram SQLite → md+grep sin deps).
-- **Ops**: `/doctor` + backups completos keep 5 + ` --upgrade` (preserva memoria/config; aborta si el backup falla) + `--part/--status/--restore/--uninstall` modulares.
-- **Rename**: display `Advisor`, npm `advisor-harness` (shim `consigliere-harness@final` + deprecate), estado `.advisor/` + fallback legacy read-only, cache v2 (ver § Compatibilidad rename).
+- **Ops**: `/doctor` + backups completos keep 5 + `--upgrade` (preserva memoria/config; aborta si el backup falla) + `--part/--status/--restore/--uninstall` modulares.
+- **Rename**: display `Advisor`, npm `advisor-harness` (shim `consigliere-harness@final` + deprecate), estado vivo solo en `.advisor/`, cache v2 (ver § Compatibilidad rename).

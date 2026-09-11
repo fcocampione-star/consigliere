@@ -5,6 +5,17 @@
 
 ---
 
+## 2026-09-11 — Installer zero-flags: happy path sin args + --quick/-y + --interactive + help por capas
+
+topic: sdd/installer-zero-flags
+review_after: 2026-12-10
+**Goal:** Instalador sin flags: 0 prompts en dir vacío, determinista, paridad mjs/sh/ps1.
+**Discoveries:** AUTO_CHOICE=3 hace el happy path determinista; prompt MODEL_* colapsable en 1 (coma-separado); ps1 pierde menú y adopta flags posicionales + Show-Help paridad; pwsh no disponible → ps1 validado estático.
+**Accomplished:** Happy path sin args (0 prompts, resumen 3 líneas); --quick/-y forzado respeta --dir/posicional tras fix; --interactive nuevo; help por capas (Uso rápido 3 líneas + avanzado + Genera/Flujo); CI-safe </dev/null. Decisión: interactivo explícito, default determinista.
+**Next:** commitear feat/installer-zero-flags cuando indique; rotar lunes.
+**Files:** `git log --oneline -5` → 88d9376 (feat en worktree, sin commit; init.mjs/sh/ps1 modificados).
+**Verificación:** PASS — node --check, bash -n, npm test ok, demos /tmp ok + limpiados.
+
 ## 2026-09-11 — Comunicación adaptativa §8 (educador/practicante/copiloto/auto) + /modo
 
 topic: sdd/communication-adaptive
