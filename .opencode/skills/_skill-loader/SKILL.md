@@ -67,5 +67,6 @@ Declara los chunks en el frontmatter (`chunks: [urls, patterns, ...]`); `loader.
 
 - Cache generada en `.advisor/skill-registry.cache.json` (v2 `path+mtime+size`); está ignorada por git (`.gitignore`), no commitear el inicial — se regenera con `refresh`.
 - Mantener sincronizados los espejos raíz (`.opencode/skills/`) y `templates/.opencode/skills/` (solo cambian placeholders `{{PROJECT_NAME}}`); sin check doctor aún.
+- **Divergencia intencional**: `doctor.mjs` y `commands/doctor.md` NO son espejos 1:1 entre raíz y templates — la raíz diagnostica el repo del harness (16-17 checks con ⚠️/❌), templates diagnostica el proyecto instalado (capas A proyecto / B regenerable / C adopción, exit 0 siempre). No los sincronices ciegamente.
 - Autoskill `bash-defensive-patterns` monolítica sin chunks: carga completa (full-load), no admite `chunk`.
 - Si `loader.mjs` no se puede ejecutar (sin Node), usa `grep`/`read` directo sobre los SKILL.md correspondientes, cargando solo la sección que necesitas.

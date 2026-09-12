@@ -4,17 +4,21 @@ agent: explore
 subtask: true
 ---
 
-Ejecuta diagnóstico del harness Advisor 2.0. Revisa (read-only, sin editar):
+Ejecuta diagnóstico del harness Advisor 2.0. Revisa (read-only, sin editar) por capas:
 
-1. `opencode.json` — schema, default_agent `advisor`, subagent_depth 2, agents placeholders, bash harden deny/ask.
+**A) Proyecto** (puede dar ✅/⚠️/❌):
+1. `opencode.json` — schema, default_agent `advisor`, subagent_depth 2, bash harden deny/ask.
 2. Memoria: `PROJECT_STATE.md` <100 líneas, §2 <80, `SUMMARY.md` <150, entradas con `topic:`, `review_after`, índice §4 coherente con `CHANGELOG/` (índice §4 y `review_after` = manual, no en `doctor.mjs`).
-3. Hooks: `.git/hooks/post-commit` existe y es ejecutable, apunta a `post-commit-memory-rotate.sh`.
-4. Skills: `node .opencode/skills/_skill-loader/loader.mjs list` (usa cache) + `.agents/skills` vs `AGENTS.md` stack declarado, reporta faltantes (comparativa vs stack = manual, no en `doctor.mjs`).
-5. Memoria lock: `.memory-lock` huérfano (si existe sin escritura anidada >5min).
-6. Scripts: `.opencode/scripts/memory-index.mjs`, `memory-sync.mjs`, `doctor.mjs` existen (`node --check` de cada uno = manual, no en `doctor.mjs`).
-7. Directorio: `CHANGELOG/`, `.advisor/backups/`, `.advisor/chunks/` existen, `.advisor/skill-registry.cache.json` v2 válido si existe.
-8. Git: `git status` limpio, `git log --oneline -5` (manual, no en `doctor.mjs`).
+3. Lock: `.memory-lock` huérfano (>5min).
+4. Directorio: `CHANGELOG/`, `.advisor/backups/`, `.advisor/chunks/` existen.
 
-También ejecuta `node .opencode/scripts/doctor.mjs` si existe para chequeo programático (16-17 checks, variable por condicionales §2/topic/manifest/index).
+**B) Infra regenerable** (nunca error — fix único `npx advisor-harness@latest . --upgrade`):
+- Hook `post-commit`, cache de skills, manifest, index, scripts ausentes → `ℹ️ regenerable`.
 
-Devuelve tabla: Check | Estado (✅/⚠️/❌) | Detalle | Fix sugerido (no aplicar). No edites nada.
+**C) Adopción stack** (informativo, sin sugerir fix):
+- `<!--ADOPTION-STACK-->` presente en `AGENTS.md` → `ℹ️ "Stack sin editar — /routine para rellenar"`.
+- Ausente → `✅` (stack ya editado).
+
+También ejecuta `node .opencode/scripts/doctor.mjs` si existe para el chequeo programático (capas A/B/C; el exit code solo depende de la capa A).
+
+Devuelve tabla: Check | Estado (✅/⚠️/ℹ️/❌) | Detalle | Fix sugerido (no aplicar). No edites nada.

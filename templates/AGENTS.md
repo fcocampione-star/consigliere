@@ -19,68 +19,63 @@
 
 ## Agent pipeline (Advisor 2.0 — routing orgánico + SDD-lite)
 
-- Custom agents live in `.opencode/agents/`; commands in `.opencode/commands/`.
-- `advisor` is the additional **primary** agent (Tab) que coordina: siempre lee `PROJECT_STATE.md` primero, luego aplica **routing orgánico**: `direct` (1-3 files) vs `delegated` (4+ files / 2+ writes) vs `spec-lite` (ambigüedad duradera → spec ≤650w Given/When/Then).
-- **Desambiguación**: `bin advisor` (CLI) ≠ `agent advisor` (Tab local primario); `Orchestrator` = harness GLOBAL distinto.
+- `advisor` is the **primary** agent (Tab) que coordina: siempre lee `PROJECT_STATE.md` primero, luego aplica **routing orgánico**: `direct` (1-3 files) vs `delegated` (4+ files / 2+ writes) vs `spec-lite` (ambigüedad duradera → spec ≤650w Given/When/Then).
 - **One level of depth** (advisor delega); leaf agents `task: deny` (except `planner→explore` depth 2).
-- **Models**: per-agent `model:` en `opencode.json` (placeholders `{{MODEL_*}}` → cheap=verifier/summarizer/explore, strong=builder/planner/critic).
 - **Builder safety**: bash harden `*: allow`, `deny` irreparable + `ask` sensibles (`**/.env*`, `**/*.pem`, `**/*.key`, `**/secrets/*`, `~/.ssh/*`, `git push`).
 - **Commits proposed, never automatic** (`git commit/push/amend → ask`).
-- Quick commands: `/discover [foco]`, `/routine <tarea> [--parallel --skip-verify --skip-critic]` (routing+spec-lite integrado), `/doctor`, `/record <contexto>` (5 campos + topic), `/review`, `/rotate-memory`, `/compact-state`, `/modo <educador|practicante|copiloto|auto>`.
+- Quick commands: `/discover [foco]`, `/routine <tarea> [--parallel --skip-verify --skip-critic]`, `/record <contexto>` (5 campos + topic), `/review`, `/modo <educador|practicante|copiloto|auto>`.
 - **Comunicación adaptativa**: Advisor detecta nivel por señales (educador→copiloto), nunca pregunta nivel; reglas anti-molestia en `advisor.md §8`.
 
 ## Stack
 
 | Layer | Choice |
 |-------|--------|
-| DB | N/A — Markdown + grep (PROJECT_STATE.md / SUMMARY.md / CHANGELOG/YYYY-MM-DD.md + memory-index.mjs grep+perl, cache .advisor/skill-registry.cache.json; sqlite3 solo fallback) |
-| Backend | Node.js >=18 ESM (init.mjs) + Bash 4+ / PowerShell 5.1+ + git/tar — harness CLI (scripts .opencode/scripts/*.mjs, loader.mjs) |
-| Frontend | N/A — harness CLI sin UI (genera .opencode/ para opencode TUI; instalador para proyecto vacío) |
-| Auth | N/A — local sin auth; bash harden opencode.json (*:allow, deny rm/dd/mkfs, ask **/.env*/**/*.pem/**/.key/**/secrets/*/~/.ssh/* + git push) |
-| Validation | node --check syntax (npm test = check init.mjs + loader + doctor + memory-index + memory-sync) |
-| Deploy | npm registry advisor-harness@latest v2.0.0 via npx / init.mjs + init.sh + init.ps1 per-project, --upgrade con backup keep 5 en .advisor/backups/ |
+| DB | `{{STACK_DB}}` |
+| Backend | `{{STACK_BACKEND}}` ({{LANG_BACKEND}}) |
+| Frontend | `{{STACK_FRONTEND}}` |
+| Auth | `{{STACK_AUTH}}` |
+| Validación | `{{STACK_VALIDATION}}` |
+| Deploy | `{{STACK_DEPLOY}}` |
 
-## Skills (con cache fingerprint)
+<!--ADOPTION-STACK-->
 
-- **Project docs**: `.opencode/skills/_project-docs/SKILL.md` — URLs, shortcuts, patterns, examples. Edita con tu stack real.
-- **Autoskills**: `.agents/skills/*/SKILL.md` — auto `npx autoskills`.
-- **Skill loader** (cache `.advisor/skill-registry.cache.json`):
-  - `node .opencode/skills/_skill-loader/loader.mjs list [--refresh|--json]`
-  - `node .opencode/skills/_skill-loader/loader.mjs refresh`
-  - `node .opencode/skills/_skill-loader/loader.mjs search "query"`
-  - `node .opencode/skills/_skill-loader/loader.mjs chunk "<skill>" urls,shortcuts,examples`
-- **Memoria buscable** (md+grep, sin SQLite): `node .opencode/scripts/memory-index.mjs search "query"` → `timeline <id>` → `get <id>`
-- **Sync local**: `node .opencode/scripts/memory-sync.mjs export|import|status` → `.advisor/chunks/`
-- **Doctor**: `node .opencode/scripts/doctor.mjs [--json]` o `/doctor`
-- **Estado vivo .advisor + plantilla limpia**: solo `.advisor/` vivo, sin fallback legacy; instala/actualiza modular con `node init.mjs <dir> --upgrade [--part harness|memoria|autoskills|all]`, `--status`, `--restore --from`, `--uninstall --part` (memoria exige backup previo + `--force`)
-
-## Development commands
+## Dev commands
 
 ```bash
-npm test                                              # node --check init.mjs + loader + doctor + memory scripts
-node --check init.mjs && node --check .opencode/scripts/doctor.mjs  # validación ESM syntax
-node .opencode/scripts/doctor.mjs --json              # diagnóstico harness (16-17 checks, variable por condicionales §2/topic/manifest/index)
-node .opencode/skills/_skill-loader/loader.mjs list --json  # listar skills (cache fingerprint)
-node .opencode/scripts/memory-index.mjs search "query"      # búsqueda memoria md+grep
-node .opencode/scripts/memory-sync.mjs status         # estado sync local chunks
-bash scripts/check-memory-limits.sh                   # límites 100/150 líneas (PROJECT_STATE/SUMMARY)
-node init.mjs /tmp/demo --name demo                   # probar instalador universal
+# Añade aquí tus comandos
+{{DEV_COMMANDS}}
 ```
 
-## Directory structure (2.0 solo por proyecto)
+## Directory structure
 
 ```
 {{PROJECT_NAME}}/
-├── .opencode/               # agents/, commands/, plans/, skills/, scripts/, hooks/
-├── .agents/skills/          # autoskills (npx autoskills)
-├── .advisor/            # backups/ (keep 5) + chunks/ (sync) + skill-registry.cache.json
-├── PROJECT_STATE.md         # capa 0 — siempre + review_after
-├── SUMMARY.md               # capa 1 — última semana + topic
-├── CHANGELOG/               # capa 2 — semanal + DECISIONS-ARCHIVE.md
-├── AGENTS.md                # este archivo
+├── src/                  # código del proyecto
+├── tests/                # tests del proyecto
+├── docs/                 # documentación
+├── PROJECT_STATE.md      # capa 0 — estado, decisiones, pendientes
+├── SUMMARY.md            # capa 1 — progreso reciente
+├── CHANGELOG/            # capa 2 — histórico semanal
+├── AGENTS.md             # este archivo
 ├── .gitignore
-└── harness-only sin src/ (init.mjs + scripts .opencode/scripts/*.mjs)
+└── Harness (no tocar)/
+    ├── .opencode/        # agents, commands, skills, scripts del harness
+    ├── .agents/skills/   # autoskills autoinstaladas
+    └── .advisor/         # estado vivo: backups/, chunks/, caches
 ```
+
+## Harness (no tocar)
+
+El harness de agentes + memoria (`.opencode/`, `.agents/skills/`, `.advisor/` y el pipeline de arriba) se instala y actualiza por comando. No edites sus internos a mano (se regeneran con `--upgrade`).
+
+| Operación | Cómo |
+|-----------|------|
+| Diagnóstico | `/doctor` |
+| Registrar progreso | `/record <contexto>` |
+| Rotar memoria semanal | `/rotate-memory` |
+| Compactar PROJECT_STATE | `/compact-state` |
+| Límites memoria | `PROJECT_STATE.md` <100 líneas · `SUMMARY.md` <150 |
+| Actualizar harness | `npx advisor-harness@latest . --upgrade` |
 
 ## Key architecture decisions
 

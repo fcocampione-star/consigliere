@@ -5,6 +5,17 @@
 
 ---
 
+## 2026-09-11 — Fix templates instalables: AGENTS.md orientado al proyecto + doctor por capas A/B/C
+
+topic: sdd/project-templates-clean
+review_after: 2026-12-10
+**Goal:** Templates instalables sin refs internas: AGENTS.md proyecto-orientado, doctor regenerable, docs enmascaradas.
+**Discoveries:** Sentinel ADOPTION-STACK + placeholders {{STACK_*}}/{{LANG_BACKEND}}/{{DEV_COMMANDS}} aíslan AGENTS.md del repo; doctor capas A/B/C (exit solo capa A, infra/adopción ℹ️ sin fix-loop); _skill-loader raíz+templates divergen por diseño.
+**Accomplished:** templates/AGENTS.md con placeholders + sentinel + sección "Harness (no tocar)" sin rutas; templates doctor.mjs por capas con fix --upgrade; docs enmascaradas (_project-docs, check-memory-limits); nota divergencia _skill-loader. Raíz AGENTS/doctor/_project-docs/check-memory NO tocados por el fix.
+**Next:** commitear cuando indique; rotar lunes; revisar en review_after.
+**Files:** `git log --oneline -5` → e208ff3 (fix en worktree, sin commit; templates + skills + scripts).
+**Verificación:** PASS — doctor exit 0, 12✅ 5ℹ️ 0❌/⚠️, grep refs 0, sentinel presente, npm test ok.
+
 ## 2026-09-11 — Installer zero-flags: happy path sin args + --quick/-y + --interactive + help por capas
 
 topic: sdd/installer-zero-flags

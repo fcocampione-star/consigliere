@@ -66,11 +66,11 @@ webfetch "https://www.gnu.org/software/bash/manual/" --format markdown
 |----------|------------|----------|
 | `/discover` | `node .opencode/scripts/doctor.mjs` + skill audit | Audita stack real vs declarado |
 | `/routine` | routing orgánico direct/delegated + spec-lite ≤650w | Flujo explore→plan→critic→build→verify→record |
-| `/doctor` | `node .opencode/scripts/doctor.mjs --json` | Diagnóstico 16-17 checks (variable por condicionales §2/topic/manifest/index) |
+| `/doctor` | `node .opencode/scripts/doctor.mjs --json` | Diagnóstico por capas (A proyecto / B regenerable / C adopción) |
 | `/record` | 5 campos Goal/Discoveries/Accomplished/Next/Files + topic | Persistir memoria |
 | `/review` | stale review_after +90d | Listar decisiones caducadas |
 | `memory/search` | `node .opencode/scripts/memory-index.mjs search "query"` | Búsqueda md+grep |
-| `skill/load` | `node .opencode/skills/_skill-loader/loader.mjs chunk "<skill>" urls,patterns` | Carga chunks bajo demanda |
+| `skill/load` | skill `_skill-loader` — `chunk "<skill>" urls,patterns` | Carga chunks bajo demanda |
 
 ---
 
@@ -82,8 +82,7 @@ webfetch "https://www.gnu.org/software/bash/manual/" --format markdown
 ### 4.1 Harness install (Node ESM universal)
 ```bash
 npx advisor-harness@latest /ruta/proyecto --name mi-app --stack-backend node/express --git yes
-node init.mjs /tmp/demo --name demo
-bash init.sh --dir /tmp/demo --name demo
+npx advisor-harness@latest . --upgrade   # actualizar harness existente (backup keep 5)
 ```
 
 ### 4.2 Memory search (md+grep)
@@ -95,10 +94,8 @@ node .opencode/scripts/memory-index.mjs get <id>
 
 ### 4.3 Skill loader cache fingerprint
 ```bash
-node .opencode/skills/_skill-loader/loader.mjs list --json
-node .opencode/skills/_skill-loader/loader.mjs chunk "_project-docs" urls,shortcuts,examples
-node .opencode/skills/_skill-loader/loader.mjs refresh --force
-# cache: .advisor/skill-registry.cache.json v2 (path+mtime+size)
+# cache: .advisor/skill-registry.cache.json v2 (path+mtime+size) — se regenera sola
+# carga de chunks bajo demanda: usa la skill _skill-loader (list / search / chunk)
 # bin: advisor + advisor-harness + alias consigliere-harness (1 versión transición)
 ```
 
@@ -118,15 +115,12 @@ node .opencode/scripts/doctor.mjs --json
 
 <!-- CHUNK: commands -->
 ```bash
-# Dev — harness CLI por proyecto
-npm test                                              # node --check init.mjs + loader + doctor + memory scripts
-node --check init.mjs && node --check .opencode/scripts/doctor.mjs  # validación ESM syntax
-node .opencode/scripts/doctor.mjs --json              # diagnóstico harness (16-17 checks, variable por condicionales §2/topic/manifest/index)
-node .opencode/skills/_skill-loader/loader.mjs list --json  # listar skills (cache fingerprint)
+# Dev — comandos del proyecto
+node .opencode/scripts/doctor.mjs --json              # diagnóstico harness por capas (A proyecto / B regenerable / C adopción)
 node .opencode/scripts/memory-index.mjs search "query"      # búsqueda memoria md+grep
 node .opencode/scripts/memory-sync.mjs status         # estado sync local chunks
 bash scripts/check-memory-limits.sh                   # límites 100/150 líneas (PROJECT_STATE/SUMMARY)
-node init.mjs /tmp/demo --name demo                   # probar instalador universal
+npx advisor-harness@latest . --upgrade                # actualizar harness (internos no se tocan a mano)
 ```
 <!-- /CHUNK -->
 
@@ -134,10 +128,11 @@ node init.mjs /tmp/demo --name demo                   # probar instalador univer
 
 | Need | Command |
 |------|---------|
-| doctor 16-17 | `node .opencode/scripts/doctor.mjs --json` |
-| list skills | `node .opencode/skills/_skill-loader/loader.mjs list --json` |
+| doctor | `node .opencode/scripts/doctor.mjs --json` |
+| list skills | `/discover` o skill `_skill-loader` |
 | search memoria | `node .opencode/scripts/memory-index.mjs search "query"` |
 | check límites | `bash scripts/check-memory-limits.sh` |
+| upgrade harness | `npx advisor-harness@latest . --upgrade` |
 
 ---
 
