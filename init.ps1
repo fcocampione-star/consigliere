@@ -1,7 +1,7 @@
 ﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
-  ADVISOR 2.0 — Harness de agentes + memoria persistente para opencode (solo por proyecto).
+  Consigliere 2.0 (Advisor Harness) — Harness de agentes + memoria persistente para opencode (solo por proyecto).
 .DESCRIPTION
   Sin instalación global. Uso: npx advisor-harness@latest <ruta> o powershell -File init.ps1 <ruta>
 .EXAMPLE

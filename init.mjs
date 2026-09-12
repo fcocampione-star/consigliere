@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ADVISOR 2.0 — Harness de agentes + memoria persistente para opencode.
+ * Consigliere 2.0 (Advisor Harness) — Harness de agentes + memoria persistente para opencode.
  * Instalador/generador SOLO por proyecto (Node 18+). Sin instalación global.
  *
  * Estado vivo en `.advisor/` (sin ramas legacy).

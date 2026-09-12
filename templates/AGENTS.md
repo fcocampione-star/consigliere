@@ -17,7 +17,7 @@
 - **Rule**: historical detail lives in `CHANGELOG/` + `git log`. Never duplicate archived entries back into `SUMMARY.md`.
 - **Anti-concurrency**: a `.memory-lock` directory guards concurrent memory writes; never leave it orphaned.
 
-## Agent pipeline (Advisor 2.0 — routing orgánico + SDD-lite)
+## Agent pipeline (Consigliere 2.0 (Advisor Harness) — routing orgánico + SDD-lite)
 
 - `advisor` is the **primary** agent (Tab) que coordina: siempre lee `PROJECT_STATE.md` primero, luego aplica **routing orgánico**: `direct` (1-3 files) vs `delegated` (4+ files / 2+ writes) vs `spec-lite` (ambigüedad duradera → spec ≤650w Given/When/Then).
 - **One level of depth** (advisor delega); leaf agents `task: deny` (except `planner→explore` depth 2).

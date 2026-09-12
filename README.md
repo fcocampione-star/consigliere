@@ -1,4 +1,4 @@
-# ADVISOR 2.0 — Harness de agentes + memoria persistente para opencode
+# Consigliere 2.0 (Advisor Harness) — Harness de agentes + memoria persistente para opencode
 
 > **Solo por proyecto.** Un scaffold reutilizable que deja cada proyecto listo para trabajar con opencode: agentes orquestados, memoria que recuerda decisiones entre sesiones y comandos para auditar, registrar y revisar el progreso. Sin binarios globales, sin servicios: es Markdown + scripts que se instalan **dentro** del proyecto.
 

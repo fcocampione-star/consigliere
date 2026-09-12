@@ -36,7 +36,7 @@ tmp/
 *.tmp
 *.bak
 
-# ADVISOR 2.0 — memoria persistente (solo por proyecto)
+# Consigliere 2.0 (Advisor Harness) — memoria persistente (solo por proyecto)
 .memory-lock/
 .advisor/skill-registry.cache.json
 .advisor/backups/
@@ -46,5 +46,5 @@ tmp/
 .advisor/chunks/
 .agents/skills/
 
-# ADVISOR 2.0 — config dev de este repo (la pública vive en templates/opencode.json)
+# Consigliere 2.0 (Advisor Harness) — config dev de este repo (la pública vive en templates/opencode.json)
 opencode.json

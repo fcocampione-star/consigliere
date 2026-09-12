@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# ADVISOR 2.0 — Harness de agentes + memoria persistente para proyectos opencode.
+# Consigliere 2.0 (Advisor Harness) — Harness de agentes + memoria persistente para proyectos opencode.
 # SOLO por proyecto. Sin instalación global.
 #
 # Uso:

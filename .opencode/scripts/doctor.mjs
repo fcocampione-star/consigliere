@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ADVISOR 2.0 — doctor.mjs (health check programático, md+grep)
+ * Consigliere 2.0 (Advisor Harness) — doctor.mjs (health check programático, md+grep)
  * Uso: node .opencode/scripts/doctor.mjs [--json]
  * Códigos: 0 ok, 1 warnings, 2 errors
  */

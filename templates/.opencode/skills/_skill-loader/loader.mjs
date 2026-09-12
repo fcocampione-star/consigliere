@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ADVISOR 2.0 — Skill Loader runtime con cache fingerprint
+ * Consigliere 2.0 (Advisor Harness) — Skill Loader runtime con cache fingerprint
  *
  * Carga skills bajo demanda (proyecto + autoskills) + chunks.
  * Cache: .advisor/skill-registry.cache.json con fingerprint path+mtime+size

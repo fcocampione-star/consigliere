@@ -1,5 +1,5 @@
 @echo off
-REM ADVISOR 2.0 — Shim CMD solo por proyecto (sin global)
+REM Consigliere 2.0 (Advisor Harness) — Shim CMD solo por proyecto (sin global)
 REM Uso: init.cmd [ruta\proyecto]  o  npx advisor-harness@latest [ruta]
 setlocal
 set "ARGS="

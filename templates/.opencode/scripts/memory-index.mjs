@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ADVISOR 2.0 — memory-index.mjs (md+grep, sin SQLite)
+ * Consigliere 2.0 (Advisor Harness) — memory-index.mjs (md+grep, sin SQLite)
  * Búsqueda progresiva inspirada en Engram: search → timeline → get
  * v2: índice derivado `.advisor/memory-index.json` con fingerprint
  * path+mtime+size (contrato loader.mjs: entradas ordenadas, comparación
