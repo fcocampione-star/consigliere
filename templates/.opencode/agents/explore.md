@@ -1,7 +1,6 @@
 ---
 description: Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns, search code for keywords, or answer questions about the codebase.
 mode: subagent
-model: "{{MODEL_EXPLORE}}"
 permission:
   read: allow
   glob: allow
