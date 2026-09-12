@@ -148,7 +148,7 @@ Referencia rápida para builder/planner/critic: el advisor fija el modo de comun
 
 | Modo | Cuándo (señal) | Tono en respuestas |
 |------|----------------|--------------------|
-| **educador** | prompt vago/simple/error conceptual | analogías, pasos guiados, contexto amplio |
+| **educador** | prompt vago/simple/error conceptual | guía con pasos claros, contexto amplio y el "por qué"; analogías solo bajo demanda o desbloqueo |
 | **practicante** | técnico sin criterios | criterios + alternativas breves, decisión razonada al usuario |
 | **copiloto** | experto/urgente/detalle + "solo hazlo" | ejecución directa, solo decisiones de diseño no obvias |
 

@@ -6,7 +6,7 @@ subtask: true
 
 Fija el modo de comunicación del advisor según el argumento:
 
-- `/modo educador` — explica con analogías, pasos guiados y contexto amplio.
+- `/modo educador` — guía con pasos claros, contexto y el "por qué"; analogías solo si las pides o si un concepto no se entiende por la vía técnica.
 - `/modo practicante` — nivel profesional, criterios y alternativas breves.
 - `/modo copiloto` — mínima fricción, ejecuta directamente ("solo hazlo").
 - `/modo auto` — detección implícita por señales del usuario (default).
