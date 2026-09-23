@@ -17,11 +17,16 @@
 ## 2. Decisiones de diseño (append-only, consolidadas, con review_after)
 
 - Harness-only sin runtime de app: Node >=18 ESM + Bash/PowerShell + git/tar; sin DB/app server, scaffolding por proyecto vía init.mjs/init.sh/init.ps1 [topic: architecture/harness-scope] review_after: 2026-12-03
-- Memoria 3 capas md+grep (PROJECT_STATE/SUMMARY/CHANGELOG) con búsqueda grep+perl y cache fingerprint; SQLite solo fallback [topic: architecture/stack-md-grep] review_after: 2026-12-03
+- Memoria 3 capas md+grep (PROJECT_STATE/SUMMARY/CHANGELOG) con búsqueda md+grep y cache fingerprint; SQLite solo fallback [topic: architecture/stack-md-grep] review_after: 2026-12-03
 - Skill loader con cache fingerprint `.advisor/skill-registry.cache.json` (path+mtime+size) y chunks urls/patterns/shortcuts/examples/commands bajo demanda [topic: dx/skill-loader-cache] review_after: 2026-12-03
 - Copia legacy `consigliere/` anidada ignorada vía `/consigliere/` anclado, no commiteable ni parcheable (append-only) [topic: repo/legacy-ignore] review_after: 2026-12-03
 - Sunset legacy: solo `.advisor/` vivo, fallback read-only `.consigliere/` eliminado de instaladores/scripts y `.gitignore` (F6) [topic: repo/legacy-sunset] review_after: 2026-12-03
 - Advisor-only routing orgánico + SDD-lite ≤650w [topic: sdd/routing-organico] review_after: 2026-12-21
+- Lock canónico `memory-lock.mjs` (mkdir atómico + owner.json/token, takeover por rename, stale configurable `ADVISOR_LOCK_STALE_MS`) — sin `flock` [topic: memory/lock-canonico] review_after: 2026-12-21
+- `mondayOf` UTC único (memory-sync importa de memory-stats); rotación por lunes de cada entrada [topic: memory/utc-mondayof] review_after: 2026-12-21
+- Marcadores `ADVISOR:ENTRIES` + motor único `memory-rotate.mjs`; rotación canónica en `/record`; hook `post-commit` opcional gated [topic: memory/markers-motor] review_after: 2026-12-21
+- Routing por clase de riesgo (conteo = desempate); advisor delega deltas; spec-lite persistida y consumida por builder [topic: process/routing-risk-deltas] review_after: 2026-12-21
+- Contract tests en `npm test` (paridad espejo raíz↔templates con allowlist, invariantes) [topic: test/contracts-antidrift] review_after: 2026-12-21
 
 ---
 
@@ -40,7 +45,7 @@
 
 | Semana (lunes) | Archivo | Resumen |
 |----------------|---------|---------|
-| (aún sin historial) | — | — |
+| 2026-09-07 | 2026-09-07.md | rotación automática |
 
 > Decisiones superadas: `CHANGELOG/DECISIONS-ARCHIVE.md`.
 
