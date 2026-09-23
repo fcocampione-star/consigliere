@@ -9,6 +9,7 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fingerprint, isFresh } from './memory-index.mjs';
 import { LOCK_STALE_MS, dirAgeMs } from './memory-lock.mjs';
+import { sectionText } from './memory-stats.mjs';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const UPGRADE_FIX = 'npx advisor-harness@latest . --upgrade';
@@ -37,7 +38,9 @@ if (existsSync(ps)) {
   const l = lines(ps);
   add('PROJECT_STATE.md', l<100?'✅':l<120?'⚠️':'❌', `${l} líneas (<100 ideal)`, l>=100?'/compact-state o /review':'');
   const c = readFileSync(ps,'utf8');
-  const sec2 = (c.split('## 2.')[1]||'').split('## 3.')[0]||'';
+  // FIX-4: usar la misma extracción tolerante que memory-index (sectionText),
+  // sin `split('## 2.')` con numeración literal rígida.
+  const sec2 = sectionText(c, 2);
   const s2lines = sec2.split('\n').filter(x=>x.trim()).length;
   if (s2lines>80) add('PROJECT_STATE §2','⚠️',`§2 ${s2lines} líneas (>80 compactar)`,'/compact-state');
 }

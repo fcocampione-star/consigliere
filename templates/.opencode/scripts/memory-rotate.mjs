@@ -14,6 +14,9 @@
  *  - Parseo de entradas: dentro de la región, cada entrada empieza en un
  *    heading `## YYYY-MM-DD <sep> Título` con `<sep>` ∈ `[— - : |]`
  *    (regex `^##[ \t]+(\d{4}-\d{2}-\d{2})[ \t]*([—\-:|])[ \t]*(.+?)[ \t]*$`).
+ *    `scanEntryHeads`/`parseRegion` aceptan `{ tolerant: true }` (LECTURA/índice)
+ *    que además admite la coma `,` como separador; la rotación usa el default sin
+ *    coma (no cambia qué líneas son entradas).
  *    Parser FENCE-AWARE: se rastrea el estado de bloques de código (``` / ~~~,
  *    con indentación opcional y cierre por mismo char de longitud >= apertura)
  *    y solo se aceptan headings FUERA de fences; un `## YYYY-MM-DD` dentro de
@@ -59,7 +62,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync, rmSync 
 import { join, resolve, dirname, basename } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { mondayOf, contentLines, ENTRIES_START, ENTRIES_END } from './memory-stats.mjs';
+import { mondayOf, contentLines, entriesRegion, ENTRIES_START, ENTRIES_END } from './memory-stats.mjs';
 import { acquireLock, releaseLock } from './memory-lock.mjs';
 
 const DEFAULT_ROOT = resolve(join(import.meta.dirname, '..', '..'));
@@ -72,6 +75,11 @@ const DEFAULT_MAX = 20;
 // de qué líneas son entradas); la normalización de id SÍ lo acepta (ver
 // HEAD_ID_RE), para que `## F, T` y `## F — T` casen en el dedup.
 const HEAD_RE = /^##[ \t]+(\d{4}-\d{2}-\d{2})[ \t]*([—\-:|])[ \t]*(.+?)[ \t]*$/;
+// Variante tolerante (solo LECTURA/índice, ver `tolerant`): además acepta `,`
+// como separador. La rotación sigue usando HEAD_RE (sin coma) para no cambiar
+// la semántica de qué líneas son entradas; el id canónico (HEAD_ID_RE) ya
+// acepta la coma, así que `## F, T` y `## F — T` casan en el dedup.
+const HEAD_TOLERANT_RE = /^##[ \t]+(\d{4}-\d{2}-\d{2})[ \t]*([—\-:|,])[ \t]*(.+?)[ \t]*$/;
 // Apertura de fence CommonMark básico: hasta 3 espacios de indentación + ```/~~~
 const FENCE_OPEN_RE = /^([ \t]{0,3})(`{3,}|~{3,})(.*)$/;
 // Anclas de pie de SUMMARY (señal adicional; no imprescindible en fallback).
@@ -92,7 +100,10 @@ function normalizeEol(s) {
 // `## <fecha>` solo cuenta si está FUERA de un bloque ``` / ~~~. Un fence se
 // cierra con el mismo char y longitud >= a la apertura (CommonMark básico),
 // con indentación opcional y sin texto tras el cierre.
-function scanEntryHeads(region) {
+// `tolerant: true` usa HEAD_TOLERANT_RE (acepta `,`) para LECTURA/índice; el
+// default (rotación) mantiene HEAD_RE y NO acepta coma.
+function scanEntryHeads(region, { tolerant = false } = {}) {
+  const re = tolerant ? HEAD_TOLERANT_RE : HEAD_RE;
   const heads = [];
   let fence = null; // { char, len }
   let offset = 0;
@@ -107,7 +118,7 @@ function scanEntryHeads(region) {
     }
     const open = FENCE_OPEN_RE.exec(clean);
     if (open) { fence = { char: open[2][0], len: open[2].length }; continue; }
-    const h = HEAD_RE.exec(clean);
+    const h = re.exec(clean);
     if (h) heads.push({ idx: lineStart, date: h[1], title: h[3].trim() });
   }
   return heads;
@@ -130,18 +141,16 @@ function writeAtomic(file, content) {
 }
 
 // Divide el texto en prefix (incluye START), región interna y suffix (desde END).
+// Reutiliza entriesRegion (memory-stats) como única validación; aquí solo se
+// añaden prefix/suffix para poder reensamblar sin tocar lo exterior a los marcadores.
 function splitRegion(text) {
+  let r;
+  try { r = entriesRegion(text); }
+  catch (e) { throw new Error(`Marcadores ADVISOR:ENTRIES parciales, duplicados o en orden inválido (${e.message}).`); }
+  if (!r.marked) return { prefix: '', region: text, suffix: '', marked: false, advisory: r.advisory };
   const s = text.indexOf(ENTRIES_START);
   const e = text.indexOf(ENTRIES_END);
-  if (s === -1 && e === -1) {
-    return { prefix: '', region: text, suffix: '', marked: false, advisory: 'Faltan marcadores ADVISOR:ENTRIES (START/END); se usó fallback whole-file.' };
-  }
-  const s2 = s === -1 ? -1 : text.indexOf(ENTRIES_START, s + 1);
-  const e2 = e === -1 ? -1 : text.indexOf(ENTRIES_END, e + 1);
-  if (s === -1 || e === -1 || s2 !== -1 || e2 !== -1 || s > e) {
-    throw new Error('Marcadores ADVISOR:ENTRIES parciales, duplicados o en orden inválido.');
-  }
-  return { prefix: text.slice(0, s + ENTRIES_START.length), region: text.slice(s + ENTRIES_START.length, e), suffix: text.slice(e), marked: true, advisory: null };
+  return { prefix: text.slice(0, s + ENTRIES_START.length), region: r.region, suffix: text.slice(e), marked: true, advisory: null };
 }
 
 function ensureTrailingBlank(p) {
@@ -153,8 +162,8 @@ function ensureTrailingBlank(p) {
 // Parsea la región en { preamble, entries[], epilogue }.
 // entries[i].text es el bloque completo (trim de cola). epilogue = cola tras la
 // última entrada (pie/índice en fallback; vacío en región marcada).
-function parseRegion(region) {
-  const heads = scanEntryHeads(region);
+function parseRegion(region, { tolerant = false } = {}) {
+  const heads = scanEntryHeads(region, { tolerant });
   if (!heads.length) return { preamble: region, entries: [], epilogue: '' };
   const preamble = region.slice(0, heads[0].idx);
   const lastHead = heads[heads.length - 1];
@@ -230,11 +239,20 @@ function parseEntryHeading(body) {
 // ~80 chars y la inconsistencia de comparar el título case-sensitive.
 function hasEntry(existing, { date, title }) {
   if (!title) return false;
-  const want = `${date}--${normalize(title)}`;
-  for (const line of normalizeEol(existing).split('\n')) {
-    if (headingToId(line) === want) return true;
+  return entryIds(existing).has(`${date}--${normalize(title)}`);
+}
+
+// Set de ids canónicos presentes en un archivo de entradas (SUMMARY/CHANGELOG).
+// Permite dedup O(1) por entrada indexando el destino UNA vez (evita el O(n²)
+// de escanear el contenido completo por cada entrada importada). Misma
+// normalización que `hasEntry`/dedup intra-run.
+function entryIds(text) {
+  const ids = new Set();
+  for (const line of normalizeEol(text).split('\n')) {
+    const id = headingToId(line);
+    if (id) ids.add(id);
   }
-  return false;
+  return ids;
 }
 
 function renderRegion(preamble, entries, epilogue) {
@@ -457,4 +475,4 @@ let isMain = false;
 try { isMain = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href; } catch { isMain = false; }
 if (isMain) main();
 
-export { splitRegion, parseRegion, renderRegion, updateStateIndex, scanEntryHeads, appendToChangelog, hasEntry, headingToId, parseEntryHeading, normalize, CHANGELOG_LINE_LIMIT, DEFAULT_MAX };
+export { splitRegion, parseRegion, renderRegion, updateStateIndex, scanEntryHeads, appendToChangelog, hasEntry, entryIds, headingToId, parseEntryHeading, normalize, CHANGELOG_LINE_LIMIT, DEFAULT_MAX };

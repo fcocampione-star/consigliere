@@ -7,6 +7,16 @@
  * por mapa, version:1). Escritura y lectura solo `.advisor/`. Score solo
  * en salida search --json, nunca persistido. Sin índice o stale → fallback
  * md+grep sin error.
+ * v3 (F3.2/F3.3/F3.5): parseo por REGIÓN de marcadores ADVISOR:ENTRIES
+ * (entriesRegion de memory-stats; fallback whole-file + advisory) y parser
+ * tolerante en separador `— - : | ,` vía parseRegion({tolerant:true}) del
+ * motor (headingToId). Id canónico = headingToId; slugId añade hash corto para
+ * evitar colisiones por truncado. `allEntries` memoiza por fingerprint
+ * (path+mtime+size) para no releer CHANGELOG en buildManifest+buildIndex.
+ * `invalidateEntriesCache()` invalida ese memo explícitamente (FIX-2); lo
+ * llaman las rutas de escritura de memory-sync (export/import) para que el
+ * proceso anfitrión no sirva entradas stale. Se mantiene el fingerprint
+ * path+mtime+size (decisión P3.1: NO hash de contenido para freshness).
  * Uso:
  *   node memory-index.mjs search "query" [--json] [--refresh]
  *   node memory-index.mjs timeline <id-or-date>  (date YYYY-MM-DD o índice)
@@ -14,8 +24,11 @@
  *   node memory-index.mjs list [--json]
  */
 import { readFileSync, existsSync, readdirSync, statSync, mkdirSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { entriesRegion, sectionText } from './memory-stats.mjs';
+import { headingToId, parseRegion } from './memory-rotate.mjs';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const SUMMARY = join(ROOT, 'SUMMARY.md');
@@ -24,35 +37,61 @@ const CHANGELOG_DIR = join(ROOT, 'CHANGELOG');
 const INDEX_VERSION = 1;
 const INDEX_FILE = join(ROOT, '.advisor', 'memory-index.json');
 
+// Id de respaldo cuando no hay heading de entrada reconocible (p.ej. decisiones
+// §2 sin `## fecha`). Incluye un hash corto (sha1 hex, 6) del título COMPLETO
+// para que títulos largos con prefijo común NO colisionen por el truncado a 30.
+// Los headings usan el id canónico `headingToId` (fecha--título normalizado).
 function slugId(date, title) {
-  return `${date}--${String(title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 30)}`;
+  const raw = String(title || '');
+  const slug = raw.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30);
+  const hash = createHash('sha1').update(raw).digest('hex').slice(0, 6);
+  return `${date}--${slug}-${hash}`;
 }
 
-function parseEntries(text, source) {
-  const entries = [];
-  let m; const lines = text.split('\n');
-  // collect blocks by ## headings
-  const blocks = []; let cur=null;
-  for (let i=0;i<lines.length;i++) {
-    const h = lines[i].match(/^##\s+(\d{4}-\d{2}-\d{2})\s*[—\-]\s*(.+)$/);
-    if (h) {
-      if (cur) blocks.push(cur);
-      cur = { date: h[1], title: h[2].trim(), start: i, source, lines: [lines[i]] };
-    } else if (cur) cur.lines.push(lines[i]);
+// Parsea entradas de un texto. Para SUMMARY.md, restringe el parseo a la región
+// de marcadores (entriesRegion; fallback whole-file + advisory). Usa el parser
+// fence-aware y TOLERANTE en separador (`— - : | ,`) del motor, y el id
+// canónico `headingToId` — misma identidad que memory-sync export/import.
+function parseEntries(text, source, { advisory = false } = {}) {
+  let r;
+  try { r = entriesRegion(text); }
+  catch (e) {
+    r = { region: String(text ?? ''), marked: false, advisory: `Marcadores ADVISOR:ENTRIES inválidos (${e.message}); se usó el archivo completo.` };
   }
-  if (cur) blocks.push(cur);
+  if (advisory && !r.marked && r.advisory) console.error(`⚠️ ${source}: ${r.advisory}`);
+  const { entries: blocks } = parseRegion(r.region, { tolerant: true });
+  const entries = [];
   for (const b of blocks) {
-    const body = b.lines.join('\n');
-    const topic = (body.match(/topic:\s*([a-z0-9\/\-]+)/i)||[])[1]||null;
-    const review_after = (body.match(/review_after:\s*(\d{4}-\d{2}-\d{2})/i)||[])[1]||null;
-    entries.push({ id: slugId(b.date, b.title), date: b.date, title: b.title, topic, review_after, source: b.source, preview: b.lines.slice(1,5).join(' ').slice(0,160) });
+    const heading = b.text.split('\n', 1)[0];
+    const topic = (b.text.match(/topic:\s*([a-z0-9\/\-]+)/i)||[])[1]||null;
+    const review_after = (b.text.match(/review_after:\s*(\d{4}-\d{2}-\d{2})/i)||[])[1]||null;
+    entries.push({
+      id: headingToId(heading) || slugId(b.date, b.title),
+      date: b.date, title: b.title, topic, review_after, source,
+      preview: b.text.split('\n').slice(1, 5).join(' ').slice(0, 160),
+    });
   }
   return entries;
 }
 
+// Memoización por invocación: evita releer/reparsear SUMMARY+CHANGELOG+STATE
+// cuando buildManifest y buildIndex corren en el mismo proceso (export). Se
+// invalida si cambia el fingerprint path+mtime+size de alguna fuente.
+let _entriesCache = null;
+function fpKey(fp) { return fp.map(e => `${e.path}:${e.mtime}:${e.size}`).join('|'); }
+
+// FIX-2: invalidación explícita del memo. El fingerprint path+mtime+size es una
+// decisión consolidada (P3.1: NO hash de contenido para freshness), pero una
+// escritura del mismo tamaño con mtime no actualizado (mtime granularidad
+// gruesa / FS) dejaría servir datos stale in-process. Las rutas de escritura
+// (memory-sync export/import) llaman aquí para forzar relectura en su proceso.
+function invalidateEntriesCache() { _entriesCache = null; }
+
 function allEntries() {
+  const key = fpKey(fingerprint());
+  if (_entriesCache && _entriesCache.key === key) return _entriesCache.entries;
   const out=[];
-  if (existsSync(SUMMARY)) out.push(...parseEntries(readFileSync(SUMMARY,'utf8'), 'SUMMARY.md'));
+  if (existsSync(SUMMARY)) out.push(...parseEntries(readFileSync(SUMMARY,'utf8'), 'SUMMARY.md', { advisory: true }));
   if (existsSync(CHANGELOG_DIR)) {
     for (const f of readdirSync(CHANGELOG_DIR)) {
       if (!f.endsWith('.md')) continue;
@@ -61,15 +100,16 @@ function allEntries() {
     }
   }
   if (existsSync(STATE)) {
-    // decisions §2 as entries-like
+    // decisions §2 as entries-like (sección extraída de forma tolerante)
     const c = readFileSync(STATE,'utf8');
-    const sec2 = (c.split('## 2.')[1]||'').split('## 3.')[0]||'';
-    const lines = sec2.split('\n').filter(l=>l.trim().startsWith('-'));
+    // FIX-3: `- ` (guion + espacio) evita contar la regla horizontal `---`.
+    const lines = sectionText(c, 2).split('\n').filter(l=>l.trim().startsWith('- '));
     for (const l of lines) {
       const topic = (l.match(/topic:\s*([a-z0-9\/\-]+)/i)||[])[1]||null;
       out.push({ id: `state--${l.slice(2,40).replace(/[^a-z0-9]+/gi,'-')}`, date: 'state', title: l.slice(2,80).trim(), topic, source: 'PROJECT_STATE.md §2', preview: l.slice(0,160) });
     }
   }
+  _entriesCache = { key, entries: out };
   return out;
 }
 
@@ -85,6 +125,10 @@ function sourceFiles() {
   return files.sort();
 }
 
+// P3.1 (decisión consolidada, PROJECT_STATE §2): el fingerprint de freshness
+// sigue siendo path+mtime+size, NO hash de contenido — hashear todo el corpus
+// encarecería `search`. El hash (sha1) se usa SOLO a nivel de entrada, en
+// `slugId`, para desambiguar ids truncados; nunca para decidir staleness.
 function fingerprint() {
   const fp = [];
   for (const rel of sourceFiles()) {
@@ -188,7 +232,9 @@ function main() {
       try { text=readFileSync(src,'utf8'); } catch {}
       if (cmd==='get') {
         if (hit.source.startsWith('PROJECT_STATE')) {
-          const sec2 = (text.split('## 2.')[1]||'').split('## 3.')[0]||'';
+          // FIX-4: misma extracción tolerante (sectionText) que doctor.mjs, sin
+          // `split('## 2.')` con numeración literal rígida.
+          const sec2 = sectionText(text, 2);
           console.log(`# PROJECT_STATE.md §2 — ${hit.title}\n${sec2.trim().slice(0,2000)}`);
           break;
         }
@@ -227,4 +273,4 @@ let isMain = false;
 try { isMain = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href; } catch { isMain = false; }
 if (isMain) main();
 
-export { allEntries, fingerprint, isFresh, score, loadIndex, writeIndex, slugId, INDEX_VERSION };
+export { allEntries, parseEntries, fingerprint, isFresh, score, loadIndex, writeIndex, slugId, INDEX_VERSION, invalidateEntriesCache };
