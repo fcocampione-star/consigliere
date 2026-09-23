@@ -15,7 +15,9 @@
  */
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { allEntries, fingerprint, isFresh, writeIndex, slugId, INDEX_VERSION } from './memory-index.mjs';
+import { mondayOf } from './memory-stats.mjs';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const ADVISOR_DIR = join(ROOT, '.advisor'); // escritura siempre aquí
@@ -27,17 +29,10 @@ const MANIFEST_FILE = join(ADVISOR_DIR, 'memory-manifest.json');
 const INDEX_FILE = join(ADVISOR_DIR, 'memory-index.json');
 const MANIFEST_VERSION = 1;
 
-// Lunes ISO en UTC compartido por export/import. NOTA: el hook
-// post-commit usa hora LOCAL (calibración %u); cerca del cambio de
-// semana ambos pueden nombrar distinto archivo semanal — export/import
-// leen todos los chunks existentes, así que no se pierde contenido.
-function mondayOf(dateStr) {
-  const d = new Date(dateStr);
-  const day = d.getUTCDay();
-  const diff = day === 0 ? -6 : 1 - day; // monday
-  d.setUTCDate(d.getUTCDate() + diff);
-  return d.toISOString().slice(0,10);
-}
+// `mondayOf` (lunes ISO en UTC) se reutiliza desde memory-stats.mjs — única
+// fuente de verdad. NOTA: el hook post-commit usa hora LOCAL (calibración %u);
+// cerca del cambio de semana ambos pueden nombrar distinto archivo semanal —
+// export/import leen todos los chunks existentes, así que no se pierde contenido.
 
 function exportChunks(force=false) {
   mkdirSync(CHUNKS_DIR, { recursive: true });
@@ -175,13 +170,19 @@ function status() {
   indexStatus();
 }
 
-const cmd = process.argv[2];
-const force = process.argv.includes('--force') || process.argv.includes('--all'); // --all = alias legacy de --force
-if (cmd==='export') { exportChunks(force); buildManifest(); buildIndex(); }
-else if (cmd==='import') importChunks();
-else if (cmd==='buildManifest') buildManifest();
-else if (cmd==='buildIndex') buildIndex();
-else if (cmd==='status' || !cmd) status();
-else { console.log('Uso: node memory-sync.mjs export [--force|--all] | import | status | buildManifest | buildIndex'); process.exit(1); }
+function main() {
+  const cmd = process.argv[2];
+  const force = process.argv.includes('--force') || process.argv.includes('--all'); // --all = alias legacy de --force
+  if (cmd==='export') { exportChunks(force); buildManifest(); buildIndex(); }
+  else if (cmd==='import') importChunks();
+  else if (cmd==='buildManifest') buildManifest();
+  else if (cmd==='buildIndex') buildIndex();
+  else if (cmd==='status' || !cmd) status();
+  else { console.log('Uso: node memory-sync.mjs export [--force|--all] | import | status | buildManifest | buildIndex'); process.exit(1); }
+}
+
+let isMain = false;
+try { isMain = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href; } catch { isMain = false; }
+if (isMain) main();
 
 export { mondayOf, exportChunks, importChunks, buildManifest, buildIndex };

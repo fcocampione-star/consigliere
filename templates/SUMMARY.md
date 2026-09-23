@@ -5,7 +5,11 @@
 
 ---
 
+<!-- ADVISOR:ENTRIES:START -->
+
 ## (sin entradas todavía)
+
+<!-- ADVISOR:ENTRIES:END -->
 
 > Cuando registres progreso (via `/record` o `summarizer`), añade entradas al inicio, tras este bloque (formato 2.0 con topic + 5 campos, compat viejo `Qué/Verificación`):
 
@@ -20,7 +24,7 @@ topic: <family/kebab>  <!-- ej architecture/auth, sdd/login/spec -->
 **Verificación:** <comandos y resultado>
 ```
 
-> Topic upsert: mismo `topic:` en 7d → actualiza no duplicar. No agregues listas archivos (usa `git log`). Rotación automática hook post-commit (lunes o >150 líneas) o `/rotate-memory`. Búsqueda: `node .opencode/scripts/memory-index.mjs search "query"`.
+> Topic upsert: mismo `topic:` en 7d → actualiza no duplicar. No agregues listas archivos (usa `git log`). Rotación canónica en `/record` vía motor Node (`memory-rotate.mjs`); hook post-commit opcional/gated (`ADVISOR_ROTATE_HOOK=1`); `/rotate-memory` como disparo manual. Búsqueda: `node .opencode/scripts/memory-index.mjs search "query"`.
 
 ---
 
