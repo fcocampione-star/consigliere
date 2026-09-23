@@ -106,5 +106,5 @@ No cargues todo CHANGELOG. Usa `node .opencode/scripts/memory-index.mjs search "
 ## Emergencias
 
 - Si SUMMARY/PROJECT_STATE desordenados, reorganiza.
-- Si lock huérfano >5min (ver `/doctor`), libéralo con `node .opencode/scripts/memory-lock.mjs release --force` (no borres el dir a mano).
+- Si `/doctor` (o `node .opencode/scripts/memory-lock.mjs status`) reporta un lock huérfano, libéralo con `node .opencode/scripts/memory-lock.mjs release --force` (no borres el dir a mano; el umbral lo fija el helper, `LOCK_STALE_MS`).
 - Si `topic:` duplicado en ventana 7d, incrementa `last_seen_at` mental, no nueva fila (upsert).

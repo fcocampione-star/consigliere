@@ -41,6 +41,12 @@ Compat: viejo `**Qué:**/**Verificación:**` se migra a 5 campos.
 - **Canónico**: `/record` → `summarizer` ejecuta `node .opencode/scripts/memory-rotate.mjs rotate`; `/rotate-memory` para disparo manual.
 - **Backup opcional**: `hooks/post-commit-memory-rotate.sh` es un shim gated, **desactivado por defecto** (`ADVISOR_ROTATE_HOOK=1`), no el disparador canónico.
 
+### Definición de "línea" y umbral 150 (divergencia documentada)
+
+- **Motor de rotación** (`memory-rotate.mjs`): usa `contentLines` = líneas **no vacías** estrictamente entre `<!-- ADVISOR:ENTRIES:START -->` y `<!-- ADVISOR:ENTRIES:END -->` (excluye cabecera y pie). Sin marcadores → fallback *whole-file* + advisory.
+- **Consumidores** (`doctor.mjs` y `scripts/check-memory-limits.sh`): cuentan el archivo **completo** (`wc -l` / split por `\n`), cabecera y pie incluidos, así que pueden reportar un número mayor que el motor.
+- **Decisión conservadora**: la divergencia es intencional; los consumidores solo **avisan** (⚠️), el motor es la autoridad de rotación. Si `SUMMARY.md` no tiene marcadores, ambos cuentan el archivo completo y el motor lo señala con advisory — evita conteos engañosos.
+
 ## Búsqueda progresiva (md+grep, sin SQLite)
 
 - `node .opencode/scripts/memory-index.mjs search "query"` → IDs

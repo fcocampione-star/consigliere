@@ -54,8 +54,9 @@ const lock = join(ROOT,'.memory-lock');
 if (existsSync(lock)) {
   try {
     const age = dirAgeMs(lock);
-    add('.memory-lock', age>LOCK_STALE_MS?'❌':'⚠️', age>LOCK_STALE_MS?`huérfano ${Math.round(age/1000)}s`:'lock activo','rmdir .memory-lock si huérfano');
-  } catch { add('.memory-lock','⚠️','existe','rmdir .memory-lock'); }
+    const fix = 'node .opencode/scripts/memory-lock.mjs release --force';
+    add('.memory-lock', age>LOCK_STALE_MS?'❌':'⚠️', age>LOCK_STALE_MS?`huérfano ${Math.round(age/1000)}s`:'lock activo', age>LOCK_STALE_MS?fix:'');
+  } catch { add('.memory-lock','⚠️','existe','node .opencode/scripts/memory-lock.mjs status'); }
 } else add('.memory-lock','✅','sin lock (ok)');
 
 // 4 dirs (estado vivo .advisor/)

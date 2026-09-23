@@ -8,7 +8,7 @@
  * memory-index.mjs (única fuente de verdad).
  * Uso:
  *   node memory-sync.mjs export [--force]  # chunks + manifest + index (--all = alias)
- *   node memory-sync.mjs import          # importa chunks a CHANGELOG si faltan
+ *   node memory-sync.mjs import          # importa chunks a CHANGELOG (idempotente)
  *   node memory-sync.mjs status
  *   node memory-sync.mjs buildManifest   # solo manifest
  *   node memory-sync.mjs buildIndex      # solo índice
@@ -18,6 +18,11 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { allEntries, fingerprint, isFresh, writeIndex, slugId, INDEX_VERSION } from './memory-index.mjs';
 import { mondayOf } from './memory-stats.mjs';
+// Dedup/normalización compartidos con el motor: una sola fuente de verdad para
+// identificar entradas (`fecha--título normalizado`, case-insensitive y
+// separador-agnóstico `— - : | ,`), tanto en `seen` (intra-run) como en
+// `hasEntry` (cross-run).
+import { hasEntry, appendToChangelog, normalize, parseEntryHeading } from './memory-rotate.mjs';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const ADVISOR_DIR = join(ROOT, '.advisor'); // escritura siempre aquí
@@ -60,36 +65,54 @@ function exportChunks(force=false) {
 }
 
 function importChunks() {
-  // Lee vivo; escribe solo CHANGELOG/.
-  const dirs = [CHUNKS_DIR].filter((d, i, a) => existsSync(d) && a.indexOf(d) === i);
-  if (!dirs.length) { console.log('Sin chunks en .advisor/chunks/'); return; }
-  let imported=0;
-  const seen=new Set(); // dedup por id
-  for (const dir of dirs) {
-  for (const f of readdirSync(dir)) {
-    if (!f.endsWith('.json') || f==='state.json') continue;
-    const p = join(dir,f);
-    const arr = JSON.parse(readFileSync(p,'utf8'));
-    const changelog = join(ROOT,'CHANGELOG', f.replace('.json','.md'));
-    let existing=''; if (existsSync(changelog)) existing=readFileSync(changelog,'utf8');
-    for (const e of arr) {
-      if (seen.has(e.id)) continue;
-      seen.add(e.id);
-      if (!existing.includes(e.body.slice(0,80))) {
-        const header = existsSync(changelog)?'':`# Changelog ${e.monday}\n\n> Historial semanal archivado desde SUMMARY.md. Detalle: \`git log\`.\n\n`;
-        const toAppend = (existsSync(changelog)?'':header) + e.body + '\n\n';
-        // append if not exists
-        const cur = existsSync(changelog)?readFileSync(changelog,'utf8'):'';
-        if (!cur.includes(e.body.slice(0,60))) {
-          mkdirSync(join(ROOT,'CHANGELOG'),{recursive:true});
-          const out = cur + (cur && !cur.endsWith('\n')?'\n':'') + toAppend;
-          writeFileSync(changelog, out, 'utf8'); imported++;
-        }
-      }
+  // Lee vivo; escribe solo CHANGELOG/. IDEMPOTENTE: dedup por identificador
+  // robusto `fecha + título normalizado` (mismo criterio que memory-rotate.mjs,
+  // vía hasEntry/normalize) y UNA sola escritura por archivo destino (evita el
+  // O(n²) de reescribir el CHANGELOG por cada entrada y el no-op si no cambia).
+  if (!existsSync(CHUNKS_DIR)) { console.log('Sin chunks en .advisor/chunks/'); return; }
+  const files = readdirSync(CHUNKS_DIR).filter((f) => f.endsWith('.json') && f !== 'state.json');
+  if (!files.length) { console.log('Sin chunks en .advisor/chunks/'); return; }
+
+  // Agrupa por archivo destino (CHANGELOG/<monday>.md).
+  const byDest = new Map(); // destRel → { monday, entries[] }
+  for (const f of files) {
+    let arr;
+    try { arr = JSON.parse(readFileSync(join(CHUNKS_DIR, f), 'utf8')); }
+    catch { console.error(`import: chunk ilegible, omitido: ${f}`); continue; }
+    if (!Array.isArray(arr)) continue;
+    const monday = f.replace(/\.json$/, '');
+    const destRel = join('CHANGELOG', `${monday}.md`);
+    if (!byDest.has(destRel)) byDest.set(destRel, { monday, entries: [] });
+    byDest.get(destRel).entries.push(...arr);
+  }
+
+  let imported = 0;
+  let written = 0;
+  const seen = new Set(); // dedup intra-ejecución por id canónico `fecha--título normalizado`
+  for (const [destRel, group] of byDest) {
+    const changelog = join(ROOT, destRel);
+    const before = existsSync(changelog) ? readFileSync(changelog, 'utf8') : '';
+    let content = before;
+    for (const e of group.entries) {
+      const body = String(e.body ?? '');
+      if (!body.trim()) continue;
+      const parsed = parseEntryHeading(body);
+      const idKey = parsed ? parsed.id : (e.id || normalize(body).slice(0, 80));
+      if (seen.has(idKey)) continue;
+      seen.add(idKey);
+      const entry = { date: parsed ? parsed.date : String(e.date || ''), title: parsed ? parsed.title : '' };
+      // Dedup cross-run contra el CHANGELOG (mismo id canónico que intra-run).
+      if (entry.title ? hasEntry(content, entry) : content.includes(body.trim())) continue;
+      content = appendToChangelog(content, e.monday || group.monday, body.trim());
+      imported++;
+    }
+    if (content !== before) {
+      mkdirSync(join(ROOT, 'CHANGELOG'), { recursive: true });
+      writeFileSync(changelog, content, 'utf8');
+      written++;
     }
   }
-  } // for dir
-  console.log(`Import: ${imported} bloques a CHANGELOG/`);
+  console.log(`Import: ${imported} bloques a CHANGELOG/ (${written} archivo(s) escrito(s))`);
 }
 
 function stateDecisions() {

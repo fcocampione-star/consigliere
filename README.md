@@ -184,7 +184,7 @@ node consigliere/init.mjs --dir /ruta/proyecto --force
 
 - **Topic upsert**: `topic: architecture/auth-model` 2 niveles; mismo topic → upsert no duplicado.
 - **Búsqueda progresiva (sin SQLite)**: `node .opencode/scripts/memory-index.mjs search "query"` → IDs, `timeline <id>`, `get <id>` (grep+perl; `sqlite3` solo si está instalado).
-- **Rotación**: automática `post-commit` (lunes o >150 líneas) + `flock` + `.memory-lock`.
+- **Rotación**: canónica en `/record` vía el motor Node `.opencode/scripts/memory-rotate.mjs` (dispara por lunes o `contentLines` > 150, con dedup + §4). El hook `post-commit` es un **backup opcional/gated** (`ADVISOR_ROTATE_HOOK=1`, desactivado por defecto). Sin `flock`: el lock lo gestiona `memory-lock.mjs`.
 - **Sync local**: `node .opencode/scripts/memory-sync.mjs export` → `.advisor/chunks/<monday>.json` (git-tracked), `import` restaura en clone.
 - **Session summary**: 5 campos `Goal/Discoveries/Accomplished/Next Steps/Files`.
 - **Stale**: `/review` lista `needs_review` si `review_after` pasado.

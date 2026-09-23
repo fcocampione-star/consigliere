@@ -4,6 +4,11 @@
 # Comprueba que PROJECT_STATE.md y SUMMARY.md respeten los límites de líneas
 # y sugiere la compactación o rotación correspondiente.
 #
+# NOTA (B7): este script cuenta líneas del archivo COMPLETO (wc -l, incluye
+# cabecera y pie), mientras el motor `memory-rotate.mjs` usa `contentLines`
+# (líneas no vacías entre los marcadores ADVISOR:ENTRIES). La divergencia es
+# intencional: aquí es solo un aviso; la rotación canónica la decide el motor.
+#
 # Uso:
 #   ./scripts/check-memory-limits.sh          (ejecútalo desde la raíz del proyecto)
 #   SCRIPT_NAME check-memory-limits.sh

@@ -30,9 +30,10 @@
  *    anteriores. Las anclas de pie (EPILOGUE_RE) se conservan como señal
  *    adicional, pero la preservación del pie NO depende de reconocerlo.
  *    Si la única entrada restante supera por sí sola el umbral → warning.
- *  - Dedup: identificador robusto `fecha + título normalizado`, comparado por
- *    heading exacto separador-agnóstico contra el CHANGELOG (en vez del prefijo
- *    de ~80 chars que daba falsos positivos).
+ *  - Dedup: identificador robusto `fecha + título normalizado` (ver
+ *    `headingToId`), comparado contra el CHANGELOG con la MISMA normalización
+ *    que el dedup intra-run (`seen`): case-insensitive y separador-agnóstico
+ *    (`— - : | ,`), en vez del prefijo de ~80 chars que daba falsos positivos.
  *  - Separación: al anexar 2+ entradas al mismo CHANGELOG se normaliza a una
  *    única línea en blanco entre entradas.
  *  - Atomicidad: escrituras con temp+rename en el mismo directorio.
@@ -67,6 +68,9 @@ const DEFAULT_MAX = 20;
 
 // Heading de entrada tolerante: separador em dash, guion, dos puntos o pipe.
 // Se aplica LÍNEA A LÍNEA y solo fuera de fences (ver scanEntryHeads).
+// NOTA: el parseo/rotación NO acepta `,` como separador (mantiene el historial
+// de qué líneas son entradas); la normalización de id SÍ lo acepta (ver
+// HEAD_ID_RE), para que `## F, T` y `## F — T` casen en el dedup.
 const HEAD_RE = /^##[ \t]+(\d{4}-\d{2}-\d{2})[ \t]*([—\-:|])[ \t]*(.+?)[ \t]*$/;
 // Apertura de fence CommonMark básico: hasta 3 espacios de indentación + ```/~~~
 const FENCE_OPEN_RE = /^([ \t]{0,3})(`{3,}|~{3,})(.*)$/;
@@ -82,10 +86,6 @@ function normalize(s) {
 // core.autocrlf=true) dejaría de parsearse. Cross-platform sin debate.
 function normalizeEol(s) {
   return String(s ?? '').replace(/\r\n?/g, '\n');
-}
-
-function escapeRe(s) {
-  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 // Recorre la región línea a línea manteniendo estado de fence. Un heading
@@ -196,13 +196,45 @@ function appendToChangelog(existing, monday, entryText) {
   return `${base}\n\n${body}\n`;
 }
 
-// Dedup por identificador robusto `fecha + título normalizado`: busca un heading
-// `## <fecha> <sep> <título>` exacto (separador-agnóstico). Evita el falso
-// positivo del prefijo de ~80 chars con títulos largos que comparten inicio.
+// --- Contrato de id de entrada (única fuente de verdad para dedup) ----------
+//   id = `<fecha>--<título normalizado>`
+//     · fecha: YYYY-MM-DD del heading.
+//     · título normalizado: lowercase + espacios colapsados (ver `normalize`),
+//       y separador-agnóstico: cualquiera de `— - : | ,` se ignora, de modo que
+//       `## 2026-09-11, Comma` y `## 2026-09-11 — Comma` producen el MISMO id.
+//   Dos entradas con la misma fecha y el mismo título normalizado se consideran
+//   la misma entrada (limitación conocida: no se soportan colisiones legítimas
+//   de mismo título el mismo día). Esta misma normalización se usa tanto en el
+//   dedup intra-run (`seen` en memory-sync) como en el cross-run (`hasEntry`).
+const ID_SEP = '[—\\-:|,]';
+const HEAD_ID_RE = new RegExp(`^##[ \\t]+(\\d{4}-\\d{2}-\\d{2})[ \\t]*${ID_SEP}[ \\t]*(.+?)[ \\t]*$`, 'm');
+
+// Deriva el id canónico de una línea de heading `## <fecha> <sep> <título>`;
+// null si la línea no es un heading de entrada. Independiente de mayúsculas y
+// del separador usado (incluye la coma).
+function headingToId(line) {
+  const m = HEAD_ID_RE.exec(String(line ?? '').trim());
+  return m ? `${m[1]}--${normalize(m[2])}` : null;
+}
+
+// Descompone un bloque de entrada en { date, title, id } a partir de su heading
+// (o null si no hay heading reconocible). Reutiliza la misma normalización.
+function parseEntryHeading(body) {
+  const m = HEAD_ID_RE.exec(String(body ?? '').trim());
+  return m ? { date: m[1], title: m[2].trim(), id: `${m[1]}--${normalize(m[2])}` } : null;
+}
+
+// Dedup por identificador robusto `fecha + título normalizado`: busca en el
+// CHANGELOG un heading con el MISMO id canónico (case-insensitive y
+// separador-agnóstico, `— - : | ,`). Evita el falso positivo del prefijo de
+// ~80 chars y la inconsistencia de comparar el título case-sensitive.
 function hasEntry(existing, { date, title }) {
   if (!title) return false;
-  const re = new RegExp(`^##[ \\t]+${escapeRe(date)}[ \\t]*[—\\-:|][ \\t]*${escapeRe(title)}[ \\t]*$`, 'm');
-  return re.test(existing);
+  const want = `${date}--${normalize(title)}`;
+  for (const line of normalizeEol(existing).split('\n')) {
+    if (headingToId(line) === want) return true;
+  }
+  return false;
 }
 
 function renderRegion(preamble, entries, epilogue) {
@@ -425,4 +457,4 @@ let isMain = false;
 try { isMain = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href; } catch { isMain = false; }
 if (isMain) main();
 
-export { splitRegion, parseRegion, renderRegion, updateStateIndex, scanEntryHeads, appendToChangelog, hasEntry, normalize, CHANGELOG_LINE_LIMIT, DEFAULT_MAX };
+export { splitRegion, parseRegion, renderRegion, updateStateIndex, scanEntryHeads, appendToChangelog, hasEntry, headingToId, parseEntryHeading, normalize, CHANGELOG_LINE_LIMIT, DEFAULT_MAX };

@@ -9,7 +9,7 @@ Ejecuta diagnóstico del harness Advisor 2.0. Revisa (read-only, sin editar) por
 **A) Proyecto** (puede dar ✅/⚠️/❌):
 1. `opencode.json` — schema, default_agent `advisor`, subagent_depth 2, bash harden deny/ask.
 2. Memoria: `PROJECT_STATE.md` <100 líneas, §2 <80, `SUMMARY.md` <150, entradas con `topic:`, `review_after`, índice §4 coherente con `CHANGELOG/` (índice §4 y `review_after` = manual, no en `doctor.mjs`).
-3. Lock: `.memory-lock` huérfano (>5min).
+3. Lock: `.memory-lock` huérfano (umbral `LOCK_STALE_MS` del helper `memory-lock.mjs`, default 5min); no borres el directorio a mano.
 4. Directorio: `CHANGELOG/`, `.advisor/backups/`, `.advisor/chunks/` existen.
 
 **B) Infra regenerable** (nunca error — fix único `npx advisor-harness@latest . --upgrade`):
