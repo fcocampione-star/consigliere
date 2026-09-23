@@ -30,6 +30,8 @@ permission:
     "cat ~/.ssh/*": ask
     "cat ~/.aws/credentials*": ask
     "cat ~/.config/gh/hosts.yml": ask
+    "git commit*": ask
+    "git amend*": ask
     "git push*": ask
   task: deny
   external_directory: ask
@@ -50,9 +52,9 @@ Eres el implementador. Conviertes el plan en código real **sin delegar** en otr
 
 ## Seguridad: Bash Allowlist (autosuficiente)
 
-Eres **autosuficiente** en cualquier OS/stack: `bash: "*": allow`. Solo lo **irreparable** está bloqueado (`deny` muy específico). `ASK` solo para `git push*` (evita exfiltración).
+Eres **autosuficiente** en cualquier OS/stack: `bash: "*": allow`. Solo lo **irreparable** está bloqueado (`deny` muy específico). `ASK` para los `git` que publican/reescriben historia (`git commit*`, `git amend*`, `git push*`) y las rutas sensibles.
 
-**Bloqueados (`deny`):** `rm -rf /*`, `rm -rf ~*`, `sudo rm*`/`sudo dd*`, `dd if=* of=/dev/*`, `mkfs*`, `chmod -R 777 /*`/`chmod 777*`, `del /f /s C:\*`, `rmdir /s* C:\*`, `Remove-Item* C:\*`, `Format-Volume*`, `diskpart*`. **Sensibles (`ask`):** `cat **/.env*`, `**/*.pem`, `**/*.key`, `**/secrets/*`, `~/.ssh/*`, `~/.aws/credentials`, `~/.config/gh/hosts.yml`, `git push*`. Todo lo demás (incluido `rm -rf ./dist`, `git commit`, `npm/python/go`) está permitido sin fricción. El detalle reparable se recupera vía `git restore`/`stash`.
+**Bloqueados (`deny`):** `rm -rf /*`, `rm -rf ~*`, `sudo rm*`/`sudo dd*`, `dd if=* of=/dev/*`, `mkfs*`, `chmod -R 777 /*`/`chmod 777*`, `del /f /s C:\*`, `rmdir /s* C:\*`, `Remove-Item* C:\*`, `Format-Volume*`, `diskpart*`. **Sensibles (`ask`):** `cat **/.env*`, `**/*.pem`, `**/*.key`, `**/secrets/*`, `~/.ssh/*`, `~/.aws/credentials`, `~/.config/gh/hosts.yml`, `git commit*`, `git amend*`, `git push*`. Todo lo demás (incluido `rm -rf ./dist`, `npm/python/go`) está permitido sin fricción. El detalle reparable se recupera vía `git restore`/`stash`.
 
 ## Skills
 

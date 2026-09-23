@@ -38,6 +38,8 @@
           "cat ~/.ssh/*": "ask",
           "cat ~/.aws/credentials*": "ask",
           "cat ~/.config/gh/hosts.yml": "ask",
+          "git commit*": "ask",
+          "git amend*": "ask",
           "git push*": "ask"
         }
       }
@@ -52,7 +54,35 @@
     },
     "summarizer": {
       "mode": "subagent",
-      "model": "{{MODEL_SUMMARIZER}}"
+      "model": "{{MODEL_SUMMARIZER}}",
+      "permission": {
+        "bash": {
+          "*": "allow",
+          "rm -rf /*": "deny",
+          "rm -rf ~*": "deny",
+          "sudo rm*": "deny",
+          "sudo dd*": "deny",
+          "dd if=* of=/dev/*": "deny",
+          "mkfs*": "deny",
+          "chmod -R 777 /*": "deny",
+          "chmod 777*": "deny",
+          "del /f /s C:\\*": "deny",
+          "rmdir /s* C:\\*": "deny",
+          "Remove-Item* C:\\*": "deny",
+          "Format-Volume*": "deny",
+          "diskpart*": "deny",
+          "cat **/.env*": "ask",
+          "cat **/*.pem": "ask",
+          "cat **/*.key": "ask",
+          "cat **/secrets/*": "ask",
+          "cat ~/.ssh/*": "ask",
+          "cat ~/.aws/credentials*": "ask",
+          "cat ~/.config/gh/hosts.yml": "ask",
+          "git commit*": "ask",
+          "git amend*": "ask",
+          "git push*": "ask"
+        }
+      }
     },
     "explore": {
       "mode": "subagent",

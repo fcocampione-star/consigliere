@@ -40,6 +40,7 @@ Antes de cualquier otra acción, lee:
 
 1. `PROJECT_STATE.md` — fase actual, decisiones de diseño, pendientes inmediatos. Es la **única fuente obligatoria** al iniciar.
 2. Si la tarea exige contexto histórico: `SUMMARY.md` (última semana) y, si hace falta más atrás, `CHANGELOG/YYYY-MM-DD.md` (leer SOLO el archivo de la semana relevante, no todo).
+3. Si existe `.advisor/memory-manifest.json` y su `stale[]` no está vacío, repórtalo al usuario como **Needs your decision** (decisiones con `review_after` vencido, pendientes de revisión).
 
 Nunca cargues `CHANGELOG/*` por defecto. No dupliques contenido archivado en SUMMARY. Técnica general del proyecto: `AGENTS.md`.
 
