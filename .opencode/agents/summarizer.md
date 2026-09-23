@@ -30,6 +30,8 @@ permission:
     "cat ~/.ssh/*": ask
     "cat ~/.aws/credentials*": ask
     "cat ~/.config/gh/hosts.yml": ask
+    "git commit*": ask
+    "git amend*": ask
     "git push*": ask
   task: deny
 ---
@@ -48,9 +50,9 @@ Eres el documentador. Mantienes 3 capas: `PROJECT_STATE.md` (siempre), `SUMMARY.
 
 ## Locking (anti-concurrencia)
 
-Antes de escribir `SUMMARY.md` o `PROJECT_STATE.md`:
-1. `mkdir .memory-lock 2>/dev/null` — atómico; si existe, espera 2s reintenta máx 3, si falla aborta.
-2. Tras escribir, `rmdir .memory-lock`.
+El lock canónico lo gestiona `memory-lock.mjs` (no crees el lock a mano ni hagas retry ad hoc):
+1. Antes de escribir `SUMMARY.md` o `PROJECT_STATE.md`: `node .opencode/scripts/memory-lock.mjs acquire` — guarda el `token` de la salida.
+2. Tras escribir: `node .opencode/scripts/memory-lock.mjs release --token <token>`.
 3. `.memory-lock` en `.gitignore`.
 
 ## Para agregar una entrada nueva (con topic + 5 campos)
@@ -74,13 +76,12 @@ Compat: si el usuario usa formato viejo `**Qué:**/**Verificación:**`, acéptal
 
 ## Rotación semanal
 
-1. Determina lunes de entrada más antigua: `CHANGELOG/YYYY-MM-DD.md`.
-2. Crea header si no existe: `# Changelog YYYY-MM-DD` + nota git log.
-3. Mueve entrada completa al inicio del changelog.
-4. Bórrala de SUMMARY.md, actualiza índice SUMMARY + PROJECT_STATE §4.
-5. Si `.advisor/chunks/` existe, ejecuta `node .opencode/scripts/memory-sync.mjs export` (sync local).
+La rotación es responsabilidad EXCLUSIVA del motor `memory-rotate.mjs` (no la reimplementes a mano):
+1. `node .opencode/scripts/memory-rotate.mjs rotate` mueve las entradas antiguas a `CHANGELOG/<lunes>.md`, actualiza el índice SUMMARY/§4 y hace dedup. Toma y libera su propio lock: invócalo SIN tener el lock tomado.
+2. Es idempotente; si quedan entradas, repite (respeta `--max`, default 20).
+3. Tras rotar, si `.advisor/chunks/` existe, ejecuta `node .opencode/scripts/memory-sync.mjs export` (sync local).
 
-Hook `hooks/post-commit-memory-rotate.sh` automatiza esto; coordina con él.
+`/record` es el disparador CANÓNICO de la rotación; el hook `hooks/post-commit-memory-rotate.sh` es solo un backup gated (`ADVISOR_ROTATE_HOOK=1`), no asumas que corre.
 
 ## Consolidación de decisiones (upsert)
 
@@ -105,5 +106,5 @@ No cargues todo CHANGELOG. Usa `node .opencode/scripts/memory-index.mjs search "
 ## Emergencias
 
 - Si SUMMARY/PROJECT_STATE desordenados, reorganiza.
-- Si lock huérfano >5min (ver `/doctor`), elimínalo.
+- Si lock huérfano >5min (ver `/doctor`), libéralo con `node .opencode/scripts/memory-lock.mjs release --force` (no borres el dir a mano).
 - Si `topic:` duplicado en ventana 7d, incrementa `last_seen_at` mental, no nueva fila (upsert).

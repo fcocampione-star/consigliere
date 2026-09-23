@@ -33,7 +33,7 @@ Reducir el desorden de contexto en sesiones largas delegando el trabajo en agent
 - **Profundidad**: hojas (`planner/builder/verifier/critic/summarizer`) tienen `permission.task: deny`. Solo el advisor delega; `subagent_depth: 2` permite que planner delegue en explore si es estrictamente necesario.
 - **Routing orgánico 2.0** (Gentle AI trigger-rules inspirado, md+grep): `direct` 1-3 files vs `delegated` 4+ files/2+ writes no triviales vs `spec-lite` (ambigüedad duradera). Integrado por defecto en `routine` y `planner` (§2 Routing).
 - **SDD-lite integrado**: `planner` genera spec ≤650w MUST/SHOULD + Given/When/Then + Tasks checklist cuando detecta ambigüedad; `summarizer` persiste como `topic: sdd/<name>/spec` con upsert.
-- **Bash harden 2.0**: `deny` irreparable + `ask` sensibles (`**/.env*`, `**/*.pem`, `**/*.key`, `**/secrets/*`, `~/.ssh/*`, `~/.aws/credentials`, `git push`).
+- **Bash harden 2.0**: `deny` irreparable + `ask` sensibles (`**/.env*`, `**/*.pem`, `**/*.key`, `**/secrets/*`, `~/.ssh/*`, `~/.aws/credentials`) + `ask` para `git commit/amend/push` (historia publicada/reescrita).
 - **Critic**: revisor entre planner y builder para arquitectura/migraciones/refactor; invoca si `delegated` y >3 files acoplados o spec-lite.
 - **Cuándo invocar `critic`** (2.0): antes de `builder` cuando plan/spec propone:
   - Cambio arquitectónico (tabla, esquema/RLS, patrón, refactor), migraciones/breaking/deuda, >3 files acoplados, tipos/APIs/contratos DB.
@@ -49,13 +49,20 @@ Reducir el desorden de contexto en sesiones largas delegando el trabajo en agent
 - `.opencode/commands/routine.md` — `/routine` routing+spec-lite; `/discover`; `/doctor`; `/review`; `/record`; `/rotate-memory`; `/compact-state`.
 - `.opencode/skills/_skill-loader/loader.mjs` — con cache fingerprint `.advisor/skill-registry.cache.json` + `refresh`.
 - `.opencode/scripts/memory-index.mjs` — search/timeline/get (md+grep); `memory-sync.mjs` export/import; `doctor.mjs`.
-- `.opencode/hooks/post-commit-memory-rotate.sh` — rotación + sync export.
+- `.opencode/scripts/memory-rotate.mjs` — motor de rotación canónico (invocado por `/record`/summarizer) + `memory-lock.mjs` (locking). `.opencode/hooks/post-commit-memory-rotate.sh` — shim gated opcional (backup, `ADVISOR_ROTATE_HOOK=1`).
 
 ## Verificación
 
 - Reglas de permission de agentes: `task` con globs (last-match wins, `"*": ask` primero).
 - Commands con `agent: <nombre>` + `subtask: true`.
 - Al dejar `agent.*.model` vacío, el subagente hereda el modelo del invocador; al rellenarlo se fuerza ese modelo.
+
+### Precedencia de permisos (`opencode.json` vs `agents/*.md`)
+
+- **Enforcement real = `opencode.json`.** El instalador escribe `templates/opencode.json` como `opencode.json` del proyecto; esa es la config de agentes que OpenCode carga con autoridad.
+- Dentro de un mismo bloque `bash`, las reglas glob son **last-match-wins**: `"*"` primero y las específicas después.
+- **NOTA (duda no resuelta):** la precedencia exacta entre `agent.<name>.permission` de `opencode.json` y el `permission` del frontmatter `agents/<name>.md` **no está documentada oficialmente**. Por eso ambos se mantienen **consistentes** (defensa en profundidad): `opencode.json` como enforcement real, frontmatter como espejo legible/portable. Si alguna vez divergen, tratar `opencode.json` como autoridad.
+- `verifier` mantiene `deny` (más fuerte) para `git commit/amend/push`; no se debilita a `ask`.
 
 ## Estado 2.0
 

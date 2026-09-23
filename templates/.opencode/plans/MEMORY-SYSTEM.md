@@ -37,9 +37,9 @@ Compat: viejo `**Qué:**/**Verificación:**` se migra a 5 campos.
 ## Rotación semanal
 
 - **Trigger**: lunes O SUMMARY > ~150 líneas.
-- **Acción**: mover entrada más antigua a `CHANGELOG/<lunes>.md`.
-- **Automático**: hook `post-commit-memory-rotate.sh` tras cada commit + `memory-sync.mjs export` a `.advisor/chunks/` (no bloqueante).
-- **Manual**: `/rotate-memory`.
+- **Acción**: mover entrada más antigua a `CHANGELOG/<lunes>.md` (motor `memory-rotate.mjs`: región de marcadores, §4 + dedup + locking propios).
+- **Canónico**: `/record` → `summarizer` ejecuta `node .opencode/scripts/memory-rotate.mjs rotate`; `/rotate-memory` para disparo manual.
+- **Backup opcional**: `hooks/post-commit-memory-rotate.sh` es un shim gated, **desactivado por defecto** (`ADVISOR_ROTATE_HOOK=1`), no el disparador canónico.
 
 ## Búsqueda progresiva (md+grep, sin SQLite)
 
@@ -57,7 +57,7 @@ Compat: viejo `**Qué:**/**Verificación:**` se migra a 5 campos.
 
 ## Locking anti-concurrencia
 
-- `mkdir .memory-lock` (atómico); `rmdir` al terminar; retry 3×2s; `.gitignore`.
+- `node .opencode/scripts/memory-lock.mjs acquire|release [--token <t>]` (mkdir atómico + `owner.json` + token; sin retry ad hoc); `.gitignore`. El motor `memory-rotate.mjs` lo toma y libera internamente.
 
 ## Compactación y dedup (§2)
 

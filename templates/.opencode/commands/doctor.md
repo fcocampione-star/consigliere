@@ -13,7 +13,7 @@ Ejecuta diagnóstico del harness Advisor 2.0. Revisa (read-only, sin editar) por
 4. Directorio: `CHANGELOG/`, `.advisor/backups/`, `.advisor/chunks/` existen.
 
 **B) Infra regenerable** (nunca error — fix único `npx advisor-harness@latest . --upgrade`):
-- Hook `post-commit`, cache de skills, manifest, index, scripts ausentes → `ℹ️ regenerable`.
+- Hook `post-commit` (opcional/backup gated, `ADVISOR_ROTATE_HOOK=1`; ausencia/desactivación no es warning — rotación canónica en `/record`), cache de skills, manifest, index, scripts ausentes → `ℹ️ regenerable`.
 
 **C) Adopción stack** (informativo, sin sugerir fix):
 - `<!--ADOPTION-STACK-->` presente en `AGENTS.md` → `ℹ️ "Stack sin editar — /routine para rellenar"`.

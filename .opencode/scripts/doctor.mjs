@@ -7,6 +7,7 @@
 import { existsSync, readFileSync, statSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { fingerprint, isFresh } from './memory-index.mjs';
+import { LOCK_STALE_MS, dirAgeMs } from './memory-lock.mjs';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const checks = [];
@@ -45,18 +46,31 @@ if (existsSync(sm)) {
   else add('SUMMARY topic','✅','topic presente');
 }
 
-// 3 hook
+// 3 hook (opcional/backup gated: su ausencia o desactivación NO es warning)
 const hook = join(ROOT,'.git','hooks','post-commit');
+const rotationLog = join(ROOT,'.advisor','rotation.log');
+let hookDetail;
 if (existsSync(hook)) {
-  try { statSync(hook); const mode = statSync(hook).mode; add('hook post-commit', (mode & 0o111)?'✅':'⚠️', existsSync(hook)?'instalado':'falta','chmod +x .git/hooks/post-commit'); } catch { add('hook post-commit','⚠️','no legible','reinstala con init.mjs --upgrade'); }
-} else add('hook post-commit','⚠️','no instalado (revise .opencode/hooks/post-commit-memory-rotate.sh)','node init.mjs . --upgrade');
+  let exec = false;
+  try { exec = !!(statSync(hook).mode & 0o111); } catch { exec = false; }
+  hookDetail = exec ? 'presente — backup gated (ADVISOR_ROTATE_HOOK=1)' : 'presente sin bit ejecutable — opcional';
+} else hookDetail = 'ausente — opcional (rotación canónica en /record)';
+if (existsSync(rotationLog)) hookDetail += '; .advisor/rotation.log presente';
+add('hook post-commit','ℹ️', hookDetail, existsSync(hook) ? '' : 'opcional: node init.mjs . --upgrade');
+
+// 3b rotation.log (informativo: errores del backup gated nunca son fallo bloqueante)
+if (existsSync(rotationLog)) {
+  let logErr = false;
+  try { logErr = /(^|\n).*ERROR/i.test(readFileSync(rotationLog,'utf8')); } catch { logErr = false; }
+  add('rotation.log', 'ℹ️', logErr ? 'presente con líneas ERROR (backup gated; revisar, no bloqueante)' : 'presente sin errores', '');
+}
 
 // 4 lock huérfano
 const lock = join(ROOT,'.memory-lock');
 if (existsSync(lock)) {
   try {
-    const age = Date.now() - statSync(lock).mtimeMs;
-    add('.memory-lock', age>300000?'❌':'⚠️', age>300000?`huérfano ${Math.round(age/1000)}s`:'lock activo','rmdir .memory-lock si huérfano');
+    const age = dirAgeMs(lock);
+    add('.memory-lock', age>LOCK_STALE_MS?'❌':'⚠️', age>LOCK_STALE_MS?`huérfano ${Math.round(age/1000)}s`:'lock activo','rmdir .memory-lock si huérfano');
   } catch { add('.memory-lock','⚠️','existe','rmdir .memory-lock'); }
 } else add('.memory-lock','✅','sin lock (ok)');
 
@@ -68,7 +82,7 @@ if (cache) {
 } else add('skill cache','⚠️','sin cache (se genera en /discover)','node .opencode/skills/_skill-loader/loader.mjs refresh');
 
 // 6 scripts
-for (const s of ['memory-index.mjs','memory-sync.mjs','doctor.mjs']) {
+for (const s of ['memory-index.mjs','memory-sync.mjs','memory-lock.mjs','memory-stats.mjs','memory-rotate.mjs','doctor.mjs']) {
   const p = join(ROOT,'.opencode','scripts',s);
   add(`script ${s}`, existsSync(p)?'✅':'❌', existsSync(p)?'presente':'falta','npx advisor-harness@latest . --upgrade');
 }

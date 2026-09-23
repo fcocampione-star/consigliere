@@ -7,11 +7,11 @@ subtask: true
 Compacta la memoria de contexto, reduciendo `PROJECT_STATE.md` a lo esencial.
 
 Como Summarizer:
-1. Aplica locking (`.memory-lock`).
+1. Toma el lock canónico con `node .opencode/scripts/memory-lock.mjs acquire` (guarda el `token`); no crees el lock a mano ni hagas retry ad hoc.
 2. Lee `PROJECT_STATE.md` completo y `CHANGELOG/DECISIONS-ARCHIVE.md` si existe.
 3. **§2 Decisiones**: agrupa decisiones relacionadas en 1-2 líneas. Mueve decisiones obsoletas o superadas a `CHANGELOG/DECISIONS-ARCHIVE.md` (créalo con header si no existe). Conserva solo decisiones vigentes y accionables.
 4. **§5 Patrones**: elimina patrones duplicados o que ya no se usan; conserva solo los reutilizables.
 5. Verifica que `PROJECT_STATE.md` quede < ~100 líneas y `SUMMARY.md` < ~150 líneas.
-6. Libera el lock.
+6. Libera el lock con `node .opencode/scripts/memory-lock.mjs release --token <token>`.
 
 Si `PROJECT_STATE.md` ya está compacto (< ~100 líneas), indícalo y no cambies nada.

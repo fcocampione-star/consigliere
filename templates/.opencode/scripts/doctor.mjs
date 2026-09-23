@@ -8,6 +8,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fingerprint, isFresh } from './memory-index.mjs';
+import { LOCK_STALE_MS, dirAgeMs } from './memory-lock.mjs';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const UPGRADE_FIX = 'npx advisor-harness@latest . --upgrade';
@@ -52,8 +53,8 @@ if (existsSync(sm)) {
 const lock = join(ROOT,'.memory-lock');
 if (existsSync(lock)) {
   try {
-    const age = Date.now() - statSync(lock).mtimeMs;
-    add('.memory-lock', age>300000?'❌':'⚠️', age>300000?`huérfano ${Math.round(age/1000)}s`:'lock activo','rmdir .memory-lock si huérfano');
+    const age = dirAgeMs(lock);
+    add('.memory-lock', age>LOCK_STALE_MS?'❌':'⚠️', age>LOCK_STALE_MS?`huérfano ${Math.round(age/1000)}s`:'lock activo','rmdir .memory-lock si huérfano');
   } catch { add('.memory-lock','⚠️','existe','rmdir .memory-lock'); }
 } else add('.memory-lock','✅','sin lock (ok)');
 
@@ -64,12 +65,24 @@ for (const [label, vivo] of [['CHANGELOG','CHANGELOG'],['backups','.advisor/back
 }
 
 // ── Capa B: infra regenerable (ℹ️, nunca error; fix único --upgrade) ─────
-// 5 hook post-commit
+// 5 hook post-commit (opcional/backup gated; ausencia/desactivación NO es warning)
 const hook = join(ROOT,'.git','hooks','post-commit');
+const rotationLog = join(ROOT,'.advisor','rotation.log');
+let hookDetail;
 if (existsSync(hook)) {
-  try { const mode = statSync(hook).mode; add('hook post-commit', (mode & 0o111)?'✅':'ℹ️', 'instalado pero sin bit ejecutable (regenerable)', UPGRADE_FIX); }
-  catch { add('hook post-commit','ℹ️','no legible (regenerable)', UPGRADE_FIX); }
-} else add('hook post-commit','ℹ️','no instalado (regenerable)', UPGRADE_FIX);
+  let exec = false;
+  try { exec = !!(statSync(hook).mode & 0o111); } catch { exec = false; }
+  hookDetail = exec ? 'presente — backup gated (ADVISOR_ROTATE_HOOK=1)' : 'presente sin bit ejecutable — opcional';
+} else hookDetail = 'ausente — opcional (rotación canónica en /record)';
+if (existsSync(rotationLog)) hookDetail += '; .advisor/rotation.log presente';
+add('hook post-commit','ℹ️', hookDetail, UPGRADE_FIX);
+
+// 5b rotation.log (informativo: errores del backup gated nunca son fallo bloqueante)
+if (existsSync(rotationLog)) {
+  let logErr = false;
+  try { logErr = /(^|\n).*ERROR/i.test(readFileSync(rotationLog,'utf8')); } catch { logErr = false; }
+  add('rotation.log', 'ℹ️', logErr ? 'presente con líneas ERROR (backup gated; revisar, no bloqueante)' : 'presente sin errores', '');
+}
 
 // 6 skills loader cache (vivo)
 const cacheVivo = join(ROOT,'.advisor','skill-registry.cache.json');
@@ -80,7 +93,7 @@ if (cache) {
 } else add('skill cache','ℹ️','sin cache (se genera en /discover)', UPGRADE_FIX);
 
 // 7 scripts
-for (const s of ['memory-index.mjs','memory-sync.mjs','doctor.mjs']) {
+for (const s of ['memory-index.mjs','memory-sync.mjs','memory-lock.mjs','memory-stats.mjs','memory-rotate.mjs','doctor.mjs']) {
   const p = join(ROOT,'.opencode','scripts',s);
   add(`script ${s}`, existsSync(p)?'✅':'ℹ️', existsSync(p)?'presente':'falta (regenerable)', existsSync(p)?'':UPGRADE_FIX);
 }
