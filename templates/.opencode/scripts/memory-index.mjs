@@ -14,8 +14,9 @@
  * evitar colisiones por truncado. `allEntries` memoiza por fingerprint
  * (path+mtime+size) para no releer CHANGELOG en buildManifest+buildIndex.
  * `invalidateEntriesCache()` invalida ese memo explícitamente (FIX-2); lo
- * llaman las rutas de escritura de memory-sync (export/import) para que el
- * proceso anfitrión no sirva entradas stale. Se mantiene el fingerprint
+ * llaman las rutas de escritura de memory-sync (export/import) y, vía el
+ * registro neutro de memory-stats, memory-rotate (rotate/migrate-markers), para
+ * que el proceso anfitrión no sirva entradas stale. Se mantiene el fingerprint
  * path+mtime+size (decisión P3.1: NO hash de contenido para freshness).
  * Uso:
  *   node memory-index.mjs search "query" [--json] [--refresh]
@@ -27,7 +28,7 @@ import { readFileSync, existsSync, readdirSync, statSync, mkdirSync, writeFileSy
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { entriesRegion, sectionText } from './memory-stats.mjs';
+import { entriesRegion, sectionText, registerCacheInvalidator } from './memory-stats.mjs';
 import { headingToId, parseRegion } from './memory-rotate.mjs';
 
 const ROOT = join(import.meta.dirname, '..', '..');
@@ -86,6 +87,10 @@ function fpKey(fp) { return fp.map(e => `${e.path}:${e.mtime}:${e.size}`).join('
 // gruesa / FS) dejaría servir datos stale in-process. Las rutas de escritura
 // (memory-sync export/import) llaman aquí para forzar relectura en su proceso.
 function invalidateEntriesCache() { _entriesCache = null; }
+
+// F4/MINOR: registra la invalidación en el registro neutro de memory-stats para
+// que memory-rotate (rotate/migrate-markers) la dispare sin ciclo de imports.
+registerCacheInvalidator(invalidateEntriesCache);
 
 function allEntries() {
   const key = fpKey(fingerprint());

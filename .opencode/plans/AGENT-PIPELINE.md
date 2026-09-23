@@ -28,18 +28,18 @@ Reducir el desorden de contexto en sesiones largas delegando el trabajo en agent
 ## Decisiones clave
 
 - **Agentes como markdown**: `.opencode/agents/*.md` (convención oficial, per-project).
-- **Orquestador estricto**: `permission` del orquestador con `edit/glob/grep/bash/webfetch: deny`. Su único mecanismo de acción es elaborar prompts autocontenidos y delegar vía `task`. Cada prompt delegado exige estructura: Contexto / Objetivo / Alcance-restricciones / Formato de retorno.
+- **Orquestador estricto**: `permission` del orquestador con `edit/glob/grep/bash/webfetch: deny`. Su único mecanismo de acción es elaborar prompts autocontenidos y delegar vía `task`. Cada prompt delegado pasa **DELTAS, no estado completo**: Delta de contexto (tarea + archivos implicados + decisión §2 por `topic` + id de plan/spec) / Objetivo / Alcance-restricciones / Formato de retorno. Cada hoja lee la memoria que necesita (elimina la duplicación ×5-6 y el teléfono descompuesto).
 - **Modelos por subagente**: tag `model` en `opencode.json` (placeholders al generar; el usuario los rellena). Modelos baratos para verifier/summarizer/explore; caros para builder/planner/critic.
 - **Profundidad**: hojas (`planner/builder/verifier/critic/summarizer`) tienen `permission.task: deny`. Solo el advisor delega; `subagent_depth: 2` permite que planner delegue en explore si es estrictamente necesario.
-- **Routing orgánico 2.0** (Gentle AI trigger-rules inspirado, md+grep): `direct` 1-3 files vs `delegated` 4+ files/2+ writes no triviales vs `spec-lite` (ambigüedad duradera). Integrado por defecto en `routine` y `planner` (§2 Routing).
-- **SDD-lite integrado**: `planner` genera spec ≤650w MUST/SHOULD + Given/When/Then + Tasks checklist cuando detecta ambigüedad; `summarizer` persiste como `topic: sdd/<name>/spec` con upsert.
+- **Routing por CLASE DE RIESGO 2.0** (Gentle AI trigger-rules inspirado, md+grep): la ruta la decide el riesgo (¿toca esquema/auth/contrato/migración/irreversible/arquitectura?), y el **conteo de files es desempate**, no criterio primario. `direct` = riesgo bajo (≤3 files) · `delegated` = riesgo medio (>3 files acoplados / 2+ writes no triviales) · `spec-lite` = riesgo alto o ambigüedad duradera. Integrado por defecto en `routine` y `planner` (§2 Routing).
+- **SDD-lite integrado**: `planner` genera spec ≤650w MUST/SHOULD + Given/When/Then + Tasks checklist cuando detecta ambigüedad; `summarizer` persiste como `topic: sdd/<name>/spec` con upsert. El `builder` **consume la spec persistida** (`node .opencode/scripts/memory-index.mjs get "sdd/<name>/spec"` o inline) antes de implementar.
 - **Bash harden 2.0**: `deny` irreparable + `ask` sensibles (`**/.env*`, `**/*.pem`, `**/*.key`, `**/secrets/*`, `~/.ssh/*`, `~/.aws/credentials`) + `ask` para `git commit/amend/push` (historia publicada/reescrita).
-- **Critic**: revisor entre planner y builder para arquitectura/migraciones/refactor; invoca si `delegated` y >3 files acoplados o spec-lite.
+- **Critic**: revisor entre planner y builder para arquitectura/migraciones/refactor; invoca si la clase de riesgo es alta (esquema/contrato/migración/arquitectura), >3 files acoplados o spec-lite.
 - **Cuándo invocar `critic`** (2.0): antes de `builder` cuando plan/spec propone:
   - Cambio arquitectónico (tabla, esquema/RLS, patrón, refactor), migraciones/breaking/deuda, >3 files acoplados, tipos/APIs/contratos DB.
 
 - **Commits propuestos, no automáticos**: `git commit/push/amend → ask`.
-- **Memoria 2.0**: advisor SIEMPRE lee `PROJECT_STATE.md`; SUMMARY/CHANGELOG on-demand; topic upsert + stale `review_after` + búsqueda `memory-index.mjs` + sync local `memory-sync.mjs`.
+- **Memoria 2.0**: advisor SIEMPRE lee `PROJECT_STATE.md`; SUMMARY/CHANGELOG on-demand; topic upsert + stale `review_after` + búsqueda `memory-index.mjs` + sync local `memory-sync.mjs`. El `review_after` vencido / `stale[]` del manifest se surfacea en `/review` y en `/doctor` como ℹ️ informativo (nunca bloqueante).
 
 ## Archivos 2.0
 

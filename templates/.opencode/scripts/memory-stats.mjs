@@ -102,6 +102,27 @@ export function sectionText(text, n) {
   return next ? src.slice(m.index, m.index + 1 + next.index) : src.slice(m.index);
 }
 
+// Registro neutro de invalidadores de caché in-process (F4/MINOR).
+// memory-index.mjs YA importa memory-rotate.mjs; si memory-rotate importara
+// memory-index se crearía un ciclo. Para evitarlo, la invalidación se expone
+// desde este módulo (importado por ambos): los productores de caché registran
+// su función y los que escriben memoria llaman `invalidateCaches()`.
+const _cacheInvalidators = new Set();
+
+export function registerCacheInvalidator(fn) {
+  if (typeof fn !== 'function') return () => {};
+  _cacheInvalidators.add(fn);
+  return () => _cacheInvalidators.delete(fn);
+}
+
+// Ejecuta todos los invalidadores registrados. Best-effort: una caché no debe
+// romper una escritura de memoria ya completada.
+export function invalidateCaches() {
+  for (const fn of _cacheInvalidators) {
+    try { fn(); } catch { /* best-effort */ }
+  }
+}
+
 function main() {
   const cmd = process.argv[2];
   switch (cmd) {

@@ -227,7 +227,7 @@ advisor/
 ## Notas de diseño v2.0 (detalle técnico)
 
 - **Solo por proyecto**: cero `~/.local/bin`, cero `PATH`, cero drift.
-- **Routing orgánico**: el advisor decide por tamaño — 1-3 files direct vs 4+ delegated (subagentes). Sin burocracia en tareas pequeñas.
+- **Routing orgánico**: el advisor decide por **clase de riesgo** (esquema/auth/contrato/migración/irreversible/arquitectura → delegated/spec-lite; bajo riesgo y pocos files → direct), con el **conteo de files como desempate**. Sin burocracia en tareas pequeñas.
 - **SDD-lite integrado en `routine`** (≤650w Given/When/Then), no 10 fases pesadas.
 - **Modelos cheap vs strong**: `{{MODEL_*}}` en `opencode.json` — cheap=verifier/summarizer/explore, strong=builder/planner/critic.
 - **Harden bash**: deny extendido `**/*.pem,**/*.key,**/.env*,~/.ssh/*,**/secrets/*`.

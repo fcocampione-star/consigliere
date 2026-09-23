@@ -40,21 +40,27 @@ Antes de cualquier otra acción, lee:
 
 1. `PROJECT_STATE.md` — fase actual, decisiones de diseño, pendientes inmediatos. Es la **única fuente obligatoria** al iniciar.
 2. Si la tarea exige contexto histórico: `SUMMARY.md` (última semana) y, si hace falta más atrás, `CHANGELOG/YYYY-MM-DD.md` (leer SOLO el archivo de la semana relevante, no todo).
-3. Si existe `.advisor/memory-manifest.json` y su `stale[]` no está vacío, repórtalo al usuario como **Needs your decision** (decisiones con `review_after` vencido, pendientes de revisión).
+3. Si existe `.advisor/memory-manifest.json` y su `stale[]` no está vacío, **surfacealo como aviso al usuario (no bloqueante)**: `doctor` lo reporta como ℹ️ informativo y `/review` (o `/review --mark <topic>`) permite resolverlo. No lo presentes como "Needs your decision".
 
 Nunca cargues `CHANGELOG/*` por defecto. No dupliques contenido archivado en SUMMARY. Técnica general del proyecto: `AGENTS.md`.
 
-## 2. Routing orgánico (inspirado Gentle AI trigger-rules, md+grep)
+## 2. Routing por CLASE DE RIESGO (conteo de files = desempate)
 
-Decide la ruta mínima antes de descomponer (conteo de files = contexto necesario, no riesgo):
+La ruta se decide por el **riesgo** del cambio, NO por el conteo de archivos. El conteo es solo desempate cuando el riesgo empata.
 
-| Ruta | Cuando | Acción |
-|------|--------|--------|
-| **Direct** | 1-3 files, o 1 file mecánico ya entendido, sin research | Responde inline (si no requiere leer repo) o delega 1 `explore`/`builder` sin SDD |
-| **Delegated** | 4+ files, o writer toca 2+ files no triviales, o research amplia | `explore → planner → critic → builder → verifier` clásico |
-| **Spec-lite** | Ambigüedad duradera o diseño con impacto >1 semana | `planner` genera spec Given/When/Then ≤650w (ver §2.1) antes de `builder` |
+| Clase de riesgo | Señal | Ruta |
+|-----------------|-------|------|
+| **Bajo** | No toca esquema/auth/contrato/migración/arquitectura; cambio mecánico o localizado; ≤3 files sin research | **Direct**: responde inline (si no requiere leer repo) o delega 1 `explore`/`builder` sin SDD |
+| **Medio** | >3 files acoplados, o writer toca 2+ files no triviales, o research amplia, pero sin cambio de esquema/contrato | **Delegated**: `explore → planner → critic → builder → verifier` clásico |
+| **Alto** | Toca esquema/RLS/auth/contrato público/migración/irreversible/arquitectura, o ambigüedad duradera/impacto >1 semana | **Delegated + `critic`** o **Spec-lite**: `planner` genera spec Given/When/Then ≤650w (ver §2.1) antes de `builder` |
 
-File counts = contexto necesario para la acción actual, no threshold SDD. Tests/builds/review pueden usar workers frescos sin crear SDD. Estados públicos: Working → Checking → Ready → Needs your decision (solo preguntar si cambia scope/destructivo/permiso).
+**Ejemplos por clase:**
+
+- **Bajo**: fix de tipado, cambio cosmético, renombrar un helper local, ajustar un test.
+- **Medio**: refactor acotado a 4-6 files acoplados sin cambiar contratos; nueva feature interna sobre patrones existentes.
+- **Alto**: nueva tabla/columna, cambio de RLS o de contrato de API/DB, migración, auth, borrado/irreversible, nuevo patrón arquitectónico.
+
+Umbral unificado (coherente con `AGENT-PIPELINE.md`): `direct` = riesgo bajo (≤3 files); cualquier cambio de riesgo medio/alto → `delegated`/`spec-lite` (>3 files acoplados o 2+ writes no triviales). Tests/builds/review pueden usar workers frescos sin crear SDD. Estados públicos: Working → Checking → Ready → Needs your decision (solo preguntar si cambia scope/destructivo/permiso).
 
 ### 2.1 SDD-lite (integrado por defecto en `routine`)
 
@@ -99,16 +105,16 @@ Para tareas triviales (fix de tipado, cambio cosmético) puedes saltarte `critic
 - **Máximo un nivel de profundidad desde ti**: los subagentes hoja no invocan otros subagentes salvo casos justificados (`subagent_depth: 2` permite que `planner` delegue en `explore`). Eres tú quien orquesta el flujo principal.
 - `explore` es de solo lectura; úsalo para investigación antes de planear.
 
-### Estructura obligatoria de cada prompt delegado
+### Estructura obligatoria de cada prompt delegado (DELTAS, no estado completo)
 
-Cada prompt que envíes por `task` debe ser **autocontenido** (el subagente no tiene tu contexto) e incluir:
+Cada prompt que envíes por `task` debe ser **autocontenido en lo esencial** (el subagente no tiene tu contexto), pero pásale **DELTAS, no el estado completo**. **NO reinyectes `PROJECT_STATE.md` entero ni el histórico**: cada hoja LEE la memoria que necesita (`planner`/`critic` ya lo hacen vía `memory-index.mjs`/lectura directa). Incluye:
 
-1. **Contexto** — lo que el subagente necesita saber para arrancar (estado, decisión de diseño, archivos ya implicados, datos que ya tienes).
+1. **Delta de contexto** — `tarea` + `archivos implicados` + la decisión de `§2` tocada (identificada por **`topic`**, p. ej. `architecture/stack-md-grep`) + **id de plan/spec** (p. ej. `sdd/<name>/spec`). Si la hoja necesita más contexto, que lo lea de la memoria; tú solo señalas dónde está.
 2. **Objetivo** — una línea clara de qué debe lograr.
 3. **Alcance / restricciones** — qué puede y qué no puede tocar (p. ej. respetar `AGENTS.md` y `PROJECT_STATE.md §2`, no editar migraciones publicadas, no commitear).
 4. **Formato de retorno** — exactamente qué debe devolver y cómo (resumen, plan, archivos tocados, comandos ejecutados + resultado, recomendación).
 
-Nunca envíes un prompt que asuma que el subagente "recuerda" la conversación: provee todo el contexto en el propio prompt.
+Nunca envíes un prompt que asuma que el subagente "recuerda" la conversación: provee el delta en el propio prompt. El objetivo es **eliminar la duplicación ×5-6** del estado completo y el "teléfono descompuesto": el estado canónico vive en la memoria, no en el prompt.
 
 ## 4. Skills
 

@@ -127,6 +127,26 @@ if (index) {
   } catch { add('index','ℹ️','índice corrupto (regenerable)', UPGRADE_FIX); }
 } else add('index','ℹ️','sin índice (search usa fallback md+grep)', UPGRADE_FIX);
 
+// 10 review_after vencido / stale[] (Capa B informativa: ℹ️, nunca ❌ ni bloqueante)
+// P4.4: consume el `review_after` de §2 (y el `stale[]` del manifest si existe)
+// como señal de revisión pendiente, no como error. No afecta el exit code.
+{
+  const today = new Date().toISOString().slice(0,10);
+  const expired = [];
+  if (existsSync(ps)) {
+    for (const l of sectionText(readFileSync(ps,'utf8'),2).split('\n').filter(x=>x.trim().startsWith('- '))) {
+      const ra = (l.match(/review_after:\s*(\d{4}-\d{2}-\d{2})/i)||[])[1];
+      const topic = (l.match(/topic:\s*([a-z0-9\/\-]+)/i)||[])[1];
+      if (ra && ra < today) expired.push(topic || ra);
+    }
+  }
+  let manifestStale = [];
+  if (manifest) { try { const m = JSON.parse(readFileSync(manifest,'utf8')); if (Array.isArray(m.stale)) manifestStale = m.stale; } catch {} }
+  const topics = [...new Set([...expired, ...manifestStale])];
+  if (topics.length) add('review_after','ℹ️',`${topics.length} decisión(es) con review_after vencido: ${topics.join(', ')}`,'/review o /review --mark <topic>');
+  else add('review_after','✅','sin decisiones vencidas');
+}
+
 // ── Capa C: adopción stack (solo informativo, sin fix) ───────────────────
 const agents = join(ROOT,'AGENTS.md');
 let sentinel = false;

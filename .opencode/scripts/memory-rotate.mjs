@@ -47,6 +47,9 @@
  *    insertada tras la fila separadora (manipulación de strings, sin sed -i);
  *    idempotente; si §4 no aparece, avisa y sigue.
  *  - Lock: adquiere memory-lock al inicio y SIEMPRE lo libera en finally.
+ *  - Cache: tras escribir (rotate/migrate-markers) llama `invalidateCaches()`
+ *    (registro neutro de memory-stats) para que un host in-process no sirva
+ *    entradas stale de memory-index (evita ciclo memory-rotate→memory-index).
  *
  * Uso:
  *   node .opencode/scripts/memory-rotate.mjs rotate [--dry-run] [--max N] [--json] [--root <dir>]
@@ -62,7 +65,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync, rmSync 
 import { join, resolve, dirname, basename } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { mondayOf, contentLines, entriesRegion, ENTRIES_START, ENTRIES_END } from './memory-stats.mjs';
+import { mondayOf, contentLines, entriesRegion, ENTRIES_START, ENTRIES_END, invalidateCaches } from './memory-stats.mjs';
 import { acquireLock, releaseLock } from './memory-lock.mjs';
 
 const DEFAULT_ROOT = resolve(join(import.meta.dirname, '..', '..'));
@@ -369,6 +372,10 @@ export function rotate({ root = DEFAULT_ROOT, dryRun = false, max = DEFAULT_MAX 
     else if (r.tableMissing) result.warnings.push('PROJECT_STATE §4 sin tabla (fila separadora no encontrada); índice no actualizado.');
     else if (r.updated.length && !dryRun) writeAtomic(statePath, r.text);
   }
+  // F4/MINOR: invalida memorias in-process tras las escrituras de esta corrida
+  // (SUMMARY/CHANGELOG/PROJECT_STATE) para que un host que reutilice
+  // memory-index no sirva entradas stale (mismo tamaño/mtime sin refrescar).
+  if (!dryRun && (result.summaryWritten || result.stateUpdated.length || result.changelog.some((c) => c.appended))) invalidateCaches();
   return result;
 }
 
@@ -402,7 +409,7 @@ export function migrateMarkers({ root = DEFAULT_ROOT, dryRun = false } = {}) {
   const inner = entriesBody.length ? ['', ...entriesBody, ''] : [''];
   const newText = [...head, ENTRIES_START, ...inner, ENTRIES_END, '', ...tail].join('\n');
   result.changed = newText !== text;
-  if (result.changed && !dryRun) { writeAtomic(summaryPath, newText); result.summaryWritten = true; }
+  if (result.changed && !dryRun) { writeAtomic(summaryPath, newText); result.summaryWritten = true; invalidateCaches(); }
   return result;
 }
 

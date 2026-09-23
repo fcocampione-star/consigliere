@@ -20,7 +20,7 @@
 ## Agent pipeline (Consigliere 2.0 (Advisor Harness) — routing orgánico + SDD-lite)
 
 - Custom agents live in `.opencode/agents/`; commands in `.opencode/commands/`.
-- `advisor` is the additional **primary** agent (Tab) que coordina: siempre lee `PROJECT_STATE.md` primero, luego aplica **routing orgánico**: `direct` (1-3 files) vs `delegated` (4+ files / 2+ writes) vs `spec-lite` (ambigüedad duradera → spec ≤650w Given/When/Then).
+- `advisor` is the additional **primary** agent (Tab) que coordina: siempre lee `PROJECT_STATE.md` primero, luego aplica **routing orgánico** por **clase de riesgo**: esquema/auth/contrato/migración/irreversible/arquitectura → `delegated`/`spec-lite`; riesgo bajo → `direct`; el **conteo de files es solo desempate** (`spec-lite` ante ambigüedad duradera → spec ≤650w Given/When/Then).
 - **Desambiguación**: `bin advisor` (CLI) ≠ `agent advisor` (Tab local primario); `Orchestrator` = harness GLOBAL distinto.
 - **One level of depth** (advisor delega); leaf agents `task: deny` (except `planner→explore` depth 2).
 - **Models**: per-agent `model:` en `opencode.json` (placeholders `{{MODEL_*}}` → cheap=verifier/summarizer/explore, strong=builder/planner/critic).

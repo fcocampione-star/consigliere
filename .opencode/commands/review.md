@@ -10,4 +10,6 @@ Para cada decisión stale reporta: línea original, `review_after`, días vencid
 
 Uso: `/review` (listar) o `/review --mark <topic>` (el advisor delega en summarizer para actualizar `review_after` a +90d).
 
+El mismo listado (vencidas + `stale[]` del manifest) se surfacea de forma **informativa (ℹ️, no bloqueante)** en `/doctor` (check `review_after`).
+
 No inventes fechas; usa `date +%Y-%m-%d` real. No edites si solo es `/review` lista.

@@ -9,9 +9,9 @@ Ejecuta el pipeline de orquestación completo para la siguiente tarea: $ARGUMENT
 Recordatorio de tu flujo como Advisor (routing orgánico + SDD-lite integrado, Advisor 2.0):
 
 0. **Memoria obligatoria**: lee `PROJECT_STATE.md` siempre; `SUMMARY.md`/`CHANGELOG/` solo on-demand.
-1. **Routing**: cuenta files necesarios (grep/glob via `explore` si hace falta):
-   - `direct` 1-3 files o 1 file mecánico → sin `critic`, sin spec, 1 worker.
-   - `delegated` 4+ files o 2+ writes no triviales → flujo completo.
+1. **Routing** por **clase de riesgo** (el conteo de files es solo desempate; usa grep/glob via `explore` si hace falta):
+   - `direct` riesgo bajo (cambio mecánico/localizado, pocos files, sin esquema/auth/contrato) → sin `critic`, sin spec, 1 worker.
+   - `delegated` riesgo medio/alto (esquema/auth/contrato/migración/irreversible/arquitectura, o varios files acoplados / 2+ writes no triviales) → flujo completo.
    - `spec-lite` ambigüedad duradera → pide a `planner` spec ≤650w Given/When/Then + Tasks.
 2. Si necesitas entender código, delega en `explore` (read-only, cache skill via `loader.mjs list`).
 3. Diseña con `planner` (sin tocar código). Si spec-lite, exige MUST/SHOULD + Given/When/Then.
