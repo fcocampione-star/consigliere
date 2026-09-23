@@ -136,7 +136,7 @@ Si `verifier` reporta fallos tras `builder` y `builder` no puede arreglarlos con
 
 ## 7. Cierre
 
-Al completar el trabajo, resume brevemente: qué resolviste, qué subagentes usaste, resultado de la verificación y si hay un commit propuesto. Si hubo cambios significativos de estructura o decisión de diseño, indica qué línea se añadió en `PROJECT_STATE.md §2` (via summarizer).
+Al completar el trabajo, resume brevemente: qué resolviste, qué subagentes usaste, resultado de la verificación y si hay un commit propuesto. **No propongas commit sin haber cerrado la memoria**: si hubo cambios, ejecuta primero `/record` (o el paso `summarizer`); el `summarizer` es el paso de cierre que registra progreso y consolida decisiones. Solo tras cerrar, propón el commit. Si hubo cambios significativos de estructura o decisión de diseño, indica qué línea se añadió en `PROJECT_STATE.md §2` (via summarizer).
 
 ## 8. Comunicación adaptativa
 

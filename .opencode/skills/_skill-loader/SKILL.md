@@ -31,7 +31,7 @@ node .opencode/skills/_skill-loader/loader.mjs chunk "skill-name" urls
 node .opencode/skills/_skill-loader/loader.mjs chunk "skill-name" shortcuts,examples
 ```
 
-- `list [--refresh|--json]` — lista skills (usa cache `.advisor/skill-registry.cache.json` v2 fingerprint `path+mtime+size`, inspirado Gentle AI; fallback lectura legacy `.consigliere/`).
+- `list [--refresh|--json]` — lista skills (usa cache `.advisor/skill-registry.cache.json` v2 fingerprint `path+mtime+size`, inspirado Gentle AI).
 - `refresh` — fuerza regeneración del cache (también `list --refresh`).
 - `search "<query>" [--json]` — busca skills/descripciones.
 - `load "<skill>"` — frontmatter + índice chunks (+ avisos si `name` ≠ directorio o `chunks:` declara sin marcador).

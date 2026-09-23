@@ -23,8 +23,8 @@
 - **One level of depth** (advisor delega); leaf agents `task: deny` (except `planner→explore` depth 2).
 - **Models**: per-agent `model:` en `opencode.json` (placeholders `{{MODEL_*}}` → cheap=verifier/summarizer/explore, strong=builder/planner/critic).
 - **Builder safety**: bash harden `*: allow`, `deny` irreparable + `ask` sensibles (`**/.env*`, `**/*.pem`, `**/*.key`, `**/secrets/*`, `~/.ssh/*`, `git commit/amend/push`).
-- **Commits proposed, never automatic** (`git commit/push/amend → ask`).
-- Quick commands: `/discover [foco]`, `/routine <tarea> [--parallel --skip-verify --skip-critic]`, `/record <contexto>` (5 campos + topic), `/review`, `/modo <educador|practicante|copiloto|auto>`.
+- **Commits proposed, never automatic** (`git commit/push/amend → ask`) y **solo tras cerrar memoria**: si hubo cambios, primero `/record` (paso `summarizer`) — el summarizer es el cierre; nunca propongas commit con la memoria sin registrar.
+- Quick commands: `/discover [foco]`, `/routine <tarea> [--parallel --skip-verify --skip-critic]`, `/record <contexto>` (6 campos + topic), `/review`, `/modo <educador|practicante|copiloto|auto>`.
 - **Comunicación adaptativa**: Advisor detecta nivel por señales (educador→copiloto), nunca pregunta nivel; reglas anti-molestia en `advisor.md §8`.
 
 ## Stack

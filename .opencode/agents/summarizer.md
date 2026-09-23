@@ -45,7 +45,7 @@ Eres el documentador. Mantienes 3 capas: `PROJECT_STATE.md` (siempre), `SUMMARY.
 1. **Sin listas de archivos largas** en SUMMARY.md (usa `git log`).
 2. **PROJECT_STATE.md <100 líneas**, §2 <80; `SUMMARY.md <150`.
 3. **Topic upsert**: cada entrada lleva `topic: family/kebab` (2 niveles, ej `architecture/auth`, `sdd/login/spec`, `pattern/loader-cache`). Si el topic ya existe en SUMMARY, **actualiza** la entrada en lugar de duplicar (dedup hash title+topic window, como Engram `duplicate_count`).
-4. **Session summary 5 campos**: `Goal/Discoveries/Accomplished/Next/Files`.
+4. **Session summary 6 campos**: `Goal/Discoveries/Accomplished/Next/Files/Verificación`.
 5. **Review_after**: decisiones en PROJECT_STATE §2 llevan `review_after: YYYY-MM-DD` (+90d por defecto). `/review` lista stale.
 
 ## Locking (anti-concurrencia)
@@ -55,7 +55,7 @@ El lock canónico lo gestiona `memory-lock.mjs` (no crees el lock a mano ni haga
 2. Tras escribir: `node .opencode/scripts/memory-lock.mjs release --token <token>`.
 3. `.memory-lock` en `.gitignore`.
 
-## Para agregar una entrada nueva (con topic + 5 campos)
+## Para agregar una entrada nueva (con topic + 6 campos)
 
 Lee `SUMMARY.md` y `PROJECT_STATE.md`. Si existe entrada con mismo `topic:` + título similar (≤7 días), **upsert** (actualiza cuerpo y fecha). Si no, inserta al principio (tras header):
 
@@ -72,7 +72,7 @@ review_after: YYYY-MM-DD  <!-- solo si es decisión, +90d -->
 **Verificación:** <comandos y resultado>
 ```
 
-Compat: si el usuario usa formato viejo `**Qué:**/**Verificación:**`, acéptalo y migra a 5 campos.
+Compat: si el usuario usa formato viejo `**Qué:**/**Verificación:**`, acéptalo y migra a 6 campos.
 
 ## Rotación semanal
 
@@ -101,7 +101,7 @@ Cuando se consolide patrón reutilizable, añade fila en `PROJECT_STATE.md §5`:
 
 ## Búsqueda progresiva (md+grep)
 
-No cargues todo CHANGELOG. Usa `node .opencode/scripts/memory-index.mjs search "query"` → ids → `timeline <id>` → `get <id>` (sin SQLite, grep+perl).
+No cargues todo CHANGELOG. Usa `node .opencode/scripts/memory-index.mjs search "query"` → ids → `timeline <id>` → `get <id>` (sin SQLite, md+grep).
 
 ## Emergencias
 

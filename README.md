@@ -39,7 +39,7 @@ Ese es el día a día. Si tu carpeta **no está vacía**, el mismo comando abre 
 │   │   ├── routine.md             # /routine → explore→plan/spec→critic→build→verify→record
 │   │   ├── modo.md                # /modo → fijar modo de comunicación (educador/practicante/copiloto/auto)
 │   │   ├── doctor.md              # /doctor → diagnóstico harness + memoria
-│   │   ├── record.md              # /record → persistir progreso (5 campos)
+│   │   ├── record.md              # /record → persistir progreso (6 campos)
 │   │   ├── review.md              # /review → decisiones stale (review_after)
 │   │   ├── rotate-memory.md       # rotación semanal manual
 │   │   └── compact-state.md       # compactar PROJECT_STATE.md
@@ -168,7 +168,7 @@ node consigliere/init.mjs --dir /ruta/proyecto --force
 - `/discover [foco]` — audita stack real vs declarado + skills presentes/faltantes.
 - `/routine <tarea> [--parallel --skip-verify --skip-critic]` — enruta la tarea por sí solo: pocos archivos → directo; muchos → delega en subagentes (plan → revisión → implementación → verificación → registro). Para los detalles técnicos, ver *Notas de diseño v2.0*.
 - `/doctor` — diagnóstico: `opencode.json`, memoria `<100/<150`, hook, lock huérfano, skills.
-- `/record <contexto>` — persiste con formato 5 campos `Goal/Discoveries/Accomplished/Next/Files` (compat `Qué/Verificación`).
+- `/record <contexto>` — persiste con formato 6 campos `Goal/Discoveries/Accomplished/Next/Files/Verificación` (compat `Qué/Verificación`).
 - `/review` — lista decisiones stale (`review_after` +90d).
 - `/rotate-memory` — rotación semanal manual.
 - `/compact-state` — compacta `PROJECT_STATE.md` §2 (dedup + archive).
@@ -183,10 +183,10 @@ node consigliere/init.mjs --dir /ruta/proyecto --force
 | 2 | `CHANGELOG/YYYY-MM-DD.md` | rare | historial semanal (lunes) + `DECISIONS-ARCHIVE.md` |
 
 - **Topic upsert**: `topic: architecture/auth-model` 2 niveles; mismo topic → upsert no duplicado.
-- **Búsqueda progresiva (sin SQLite)**: `node .opencode/scripts/memory-index.mjs search "query"` → IDs, `timeline <id>`, `get <id>` (grep+perl; `sqlite3` solo si está instalado).
+- **Búsqueda progresiva (sin SQLite)**: `node .opencode/scripts/memory-index.mjs search "query"` → IDs, `timeline <id>`, `get <id>` (md+grep; `sqlite3` solo si está instalado).
 - **Rotación**: canónica en `/record` vía el motor Node `.opencode/scripts/memory-rotate.mjs` (dispara por lunes o `contentLines` > 150, con dedup + §4). El hook `post-commit` es un **backup opcional/gated** (`ADVISOR_ROTATE_HOOK=1`, desactivado por defecto). Sin `flock`: el lock lo gestiona `memory-lock.mjs`.
 - **Sync local**: `node .opencode/scripts/memory-sync.mjs export` → `.advisor/chunks/<monday>.json` (git-tracked), `import` restaura en clone.
-- **Session summary**: 5 campos `Goal/Discoveries/Accomplished/Next Steps/Files`.
+- **Session summary**: 6 campos `Goal/Discoveries/Accomplished/Next/Files/Verificación`.
 - **Stale**: `/review` lista `needs_review` si `review_after` pasado.
 
 ## Skills

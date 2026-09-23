@@ -22,7 +22,7 @@ metadata:
 | npm advisor-harness | https://www.npmjs.com/package/advisor-harness | https://github.com/fcocampione-star/consigliere#readme | https://github.com/fcocampione-star/consigliere | v2.0.0 via npx advisor-harness@latest |
 | Git SCM | https://git-scm.com/doc | https://git-scm.com/docs/git-init | https://github.com/git/git | git/tar backups keep 5 |
 | Bash 4+ / PowerShell 5.1+ | https://www.gnu.org/software/bash/manual/ | https://learn.microsoft.com/en-us/powershell/ | https://git.savannah.gnu.org/cgit/bash.git | init.sh / init.ps1 |
-| grep + perl (memory-index) | https://www.gnu.org/software/grep/manual/ | https://perldoc.perl.org/perlre | — | md+grep sin SQLite fallback |
+| md+grep (memory-index, regex Node) | https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_expressions | https://nodejs.org/api/ | — | sin SQLite, fallback sqlite3 opcional |
 
 <!-- /CHUNK -->
 
@@ -67,7 +67,7 @@ webfetch "https://www.gnu.org/software/bash/manual/" --format markdown
 | `/discover` | `node .opencode/scripts/doctor.mjs` + skill audit | Audita stack real vs declarado |
 | `/routine` | routing orgánico direct/delegated + spec-lite ≤650w | Flujo explore→plan→critic→build→verify→record |
 | `/doctor` | `node .opencode/scripts/doctor.mjs --json` | Diagnóstico por capas (A proyecto / B regenerable / C adopción) |
-| `/record` | 5 campos Goal/Discoveries/Accomplished/Next/Files + topic | Persistir memoria |
+| `/record` | 6 campos Goal/Discoveries/Accomplished/Next/Files/Verificación + topic | Persistir memoria |
 | `/review` | stale review_after +90d | Listar decisiones caducadas |
 | `memory/search` | `node .opencode/scripts/memory-index.mjs search "query"` | Búsqueda md+grep |
 | `skill/load` | skill `_skill-loader` — `chunk "<skill>" urls,patterns` | Carga chunks bajo demanda |

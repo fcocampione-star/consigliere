@@ -25,15 +25,15 @@
 - **One level of depth** (advisor delega); leaf agents `task: deny` (except `planner→explore` depth 2).
 - **Models**: per-agent `model:` en `opencode.json` (placeholders `{{MODEL_*}}` → cheap=verifier/summarizer/explore, strong=builder/planner/critic).
 - **Builder safety**: bash harden `*: allow`, `deny` irreparable + `ask` sensibles (`**/.env*`, `**/*.pem`, `**/*.key`, `**/secrets/*`, `~/.ssh/*`, `git commit/amend/push`).
-- **Commits proposed, never automatic** (`git commit/push/amend → ask`).
-- Quick commands: `/discover [foco]`, `/routine <tarea> [--parallel --skip-verify --skip-critic]` (routing+spec-lite integrado), `/doctor`, `/record <contexto>` (5 campos + topic), `/review`, `/rotate-memory`, `/compact-state`, `/modo <educador|practicante|copiloto|auto>`.
+- **Commits proposed, never automatic** (`git commit/push/amend → ask`) y **solo tras cerrar memoria**: si hubo cambios, primero `/record` (paso `summarizer`) — el summarizer es el cierre; nunca propongas commit con la memoria sin registrar.
+- Quick commands: `/discover [foco]`, `/routine <tarea> [--parallel --skip-verify --skip-critic]` (routing+spec-lite integrado), `/doctor`, `/record <contexto>` (6 campos + topic), `/review`, `/rotate-memory`, `/compact-state`, `/modo <educador|practicante|copiloto|auto>`.
 - **Comunicación adaptativa**: Advisor detecta nivel por señales (educador→copiloto), nunca pregunta nivel; reglas anti-molestia en `advisor.md §8`.
 
 ## Stack
 
 | Layer | Choice |
 |-------|--------|
-| DB | N/A — Markdown + grep (PROJECT_STATE.md / SUMMARY.md / CHANGELOG/YYYY-MM-DD.md + memory-index.mjs grep+perl, cache .advisor/skill-registry.cache.json; sqlite3 solo fallback) |
+| DB | N/A — Markdown + grep (PROJECT_STATE.md / SUMMARY.md / CHANGELOG/YYYY-MM-DD.md + memory-index.mjs md+grep, cache .advisor/skill-registry.cache.json; sqlite3 solo fallback) |
 | Backend | Node.js >=18 ESM (init.mjs) + Bash 4+ / PowerShell 5.1+ + git/tar — harness CLI (scripts .opencode/scripts/*.mjs, loader.mjs) |
 | Frontend | N/A — harness CLI sin UI (genera .opencode/ para opencode TUI; instalador para proyecto vacío) |
 | Auth | N/A — local sin auth; bash harden opencode.json (*:allow, deny rm/dd/mkfs, ask **/.env*/**/*.pem/**/.key/**/secrets/*/~/.ssh/* + git push) |

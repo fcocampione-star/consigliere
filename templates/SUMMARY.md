@@ -11,7 +11,7 @@
 
 <!-- ADVISOR:ENTRIES:END -->
 
-> Cuando registres progreso (via `/record` o `summarizer`), añade entradas al inicio, tras este bloque (formato 2.0 con topic + 5 campos, compat viejo `Qué/Verificación`):
+> Cuando registres progreso (via `/record` o `summarizer`), añade entradas al inicio, tras este bloque (formato 2.0 con topic + 6 campos, compat viejo `Qué/Verificación`):
 
 ```markdown
 ## YYYY-MM-DD — <Título corto>
@@ -21,6 +21,7 @@ topic: <family/kebab>  <!-- ej architecture/auth, sdd/login/spec -->
 **Discoveries:** <hallazgos>
 **Accomplished:** <qué se hizo y decisiones>
 **Next:** <siguientes pasos>
+**Files:** `git log --oneline -5` (no listas manuales)
 **Verificación:** <comandos y resultado>
 ```
 

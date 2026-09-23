@@ -19,7 +19,7 @@ Recordatorio de tu flujo como Advisor (routing orgánico + SDD-lite integrado, A
 5. Implementa con `builder` (respeta bash harden: deny irreparable + ask sensibles `.env/*.pem`).
 6. Verifica con `verifier` (typecheck→lint→tests barato primero); si falla, itera builder↔verifier con `git stash` rollback (max 3).
 7. No commitees: propone commit al final.
-8. Registra con `summarizer` (topic upsert + session summary 5 campos `Goal/Discoveries/Accomplished/Next/Files`, no listas archivos).
+8. Registra con `summarizer` (topic upsert + session summary 6 campos `Goal/Discoveries/Accomplished/Next/Files/Verificación`, no listas archivos).
 
 Flags:
 - `--parallel` — exploración/planificación en paralelo si independiente.

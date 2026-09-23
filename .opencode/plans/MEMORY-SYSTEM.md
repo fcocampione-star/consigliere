@@ -14,7 +14,7 @@
 
 - **Carga selectiva**: solo STATE siempre. SUMMARY on-demand. CHANGELOG raramente. Eficiente en tokens.
 - **Sin listas de archivos**: fuente `git log`.
-- **Entradas 5 campos + topic upsert**: `Goal/Discoveries/Accomplished/Next/Files` + `topic: family/kebab` (2 niveles). Mismo topic en 7d → **upsert** no duplicar (dedup hash title+topic).
+- **Entradas 6 campos + topic upsert**: `Goal/Discoveries/Accomplished/Next/Files/Verificación` + `topic: family/kebab` (2 niveles). Mismo topic en 7d → **upsert** no duplicar (dedup hash title+topic).
 - **Búsqueda progresiva (md+grep)**: `search → timeline → get` via `memory-index.mjs` (sin SQLite).
 - **Un solo escritor**: `summarizer` es el único que escribe memoria.
 - **Review_after**: decisiones llevan `review_after: YYYY-MM-DD` (+90d). `/review` lista stale (`needs_review`).
@@ -30,9 +30,10 @@ review_after: YYYY-MM-DD  <!-- solo si decisión -->
 **Discoveries:** <hallazgos>
 **Accomplished:** <qué se hizo y decisiones>
 **Next:** <siguientes pasos>
+**Files:** `git log --oneline -5` (no listas manuales)
 **Verificación:** <comandos y resultado>
 ```
-Compat: viejo `**Qué:**/**Verificación:**` se migra a 5 campos.
+Compat: viejo `**Qué:**/**Verificación:**` se migra a 6 campos.
 
 ## Rotación semanal
 
@@ -74,12 +75,12 @@ Compat: viejo `**Qué:**/**Verificación:**` se migra a 5 campos.
 
 - `.advisor/skill-registry.cache.json` fingerprint `path+mtime+size` (versión 2), generado por `loader.mjs` en `list`/`search`, `refresh --force` invalida (v1 queda inválida y se regenera).
 
-## Estado dual-dir (rename Advisor, sin symlink)
+## Estado vivo .advisor (sin fallback legacy)
 
-- **Vivo**: `.advisor/` (backups/chunks/cache). **Legacy**: `.consigliere/` pre-rename, fallback **solo lectura**.
-- **Precedencia**: se lee `.advisor/` primero; si falta y existe legacy, se lee legacy. Se **escribe siempre** en `.advisor/`.
-- **Migración**: `--upgrade` (scope `all`/`memoria`) copia legacy → vivo + `.advisor/.migrated`. Prohibido symlink (compat Windows).
-- `memory-sync.mjs`: `export` escribe `.advisor/chunks/`; `import`/`status` leen vivo + legacy.
+- **Vivo**: `.advisor/` (backups/chunks/cache). Plantilla limpia, sin `.consigliere/`.
+- **Precedencia**: se lee y escribe **siempre** en `.advisor/`.
+- **Migración histórica**: `--upgrade` (scope `all`/`memoria`) migró legacy → vivo + `.advisor/.migrated` (prohibido symlink, compat Windows).
+- `memory-sync.mjs`: `export` escribe `.advisor/chunks/`; `import`/`status` leen `.advisor/`.
 
 ## Patrones §5
 
@@ -87,12 +88,12 @@ Compat: viejo `**Qué:**/**Verificación:**` se migra a 5 campos.
 
 ## Comandos
 
-- `/doctor` — health check (doctor.mjs) + `/review` stale + `/record` 5 campos + topic
+- `/doctor` — health check (doctor.mjs) + `/review` stale + `/record` 6 campos + topic
 
 ## Archivos 2.0
 
 - `PROJECT_STATE.md` — CAPA 0, con `review_after` + `topic:`
-- `SUMMARY.md` — CAPA 1, con `topic:` + 5 campos
+- `SUMMARY.md` — CAPA 1, con `topic:` + 6 campos
 - `CHANGELOG/` — CAPA 2 + `DECISIONS-ARCHIVE.md`
 - `.memory-lock`, `.advisor/skill-registry.cache.json`, `.advisor/chunks/`, `.advisor/backups/`
 - `hooks/post-commit-memory-rotate.sh` + `scripts/memory-index.mjs|memory-sync.mjs|doctor.mjs`
