@@ -8,13 +8,18 @@
  * memory-rotate.mjs `--root` / memory-lock.mjs `ADVISOR_LOCK_ROOT`). Para no ejecutar
  * nada contra ESTE repo, el módulo se importa desde un ESPEJO byte-idéntico de los
  * scripts en un tmpdir: la misma expresión `dirname/../..` resuelve al sandbox, y el
- * primer test comprueba la identidad byte a byte de la copia.
+ * primer test comprueba la identidad byte a byte de la copia. Beneficio lateral: el
+ * lock canónico que toman `exportChunks`/`importChunks` (memory-lock.mjs, cuya raíz es
+ * la del propio script) cae también en el sandbox, así que se puede simular un lock
+ * ajeno sin tocar el `.memory-lock` del repo. `main()` no se exporta: el contrato de
+ * exit codes se prueba con `cli()` (spawnSync sobre el espejo).
  */
 import { mkdirSync, readFileSync, writeFileSync, copyFileSync, readdirSync, existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
-import { suite, test, assert, eq, neq, match, includes, tmpdir, cleanup, runAll } from './harness.mjs';
+import { suite, test, assert, eq, neq, match, includes, throws, tmpdir, cleanup, runAll } from './harness.mjs';
 import { makeProject, summaryWithEntries, entry, countLines } from './fixtures.mjs';
 import { ENTRIES_START } from '../.opencode/scripts/memory-stats.mjs';
 
@@ -87,6 +92,24 @@ function addEntry(dir, block) {
   return p;
 }
 const stateOf = (dir) => join(dir, 'PROJECT_STATE.md');
+// Lock ajeno FRESCO (otro pid/host, edad 0) en la raiz del sandbox: acquireLock
+// debe responder busy, que es el estado que evita que dos escritores de memoria se
+// pisen. Es el mismo lock canonico que toma memory-rotate.mjs.
+const lockDirOf = (dir) => join(dir, '.memory-lock');
+function tomarLockAjeno(dir) {
+  const d = lockDirOf(dir);
+  mkdirSync(d, { recursive: true });
+  writeFileSync(join(d, 'owner.json'), JSON.stringify({ pid: 4242424, host: 'otro-host', ts: Date.now(), version: 1, token: 'tok-ajeno' }) + '\n', 'utf8');
+  return d;
+}
+const soltarLockAjeno = (dir) => rmSync(lockDirOf(dir), { recursive: true, force: true });
+// Temporales que deja writeAtomic() si el rename falla (o si el proceso muere).
+const debrisTmp = (dir, rel = '') => (existsSync(join(dir, rel)) ? readdirSync(join(dir, rel)) : []).filter((n) => n.endsWith('.tmp'));
+// Corre el CLI del espejo (main() no se exporta; el código de salida es el contrato).
+const cli = (dir, args) => {
+  const r = spawnSync(process.execPath, [join(dir, '.opencode', 'scripts', 'memory-sync.mjs'), ...args], { encoding: 'utf8' });
+  return { status: r.status, out: r.stdout || '', err: r.stderr || '' };
+};
 // Parchea PROJECT_STATE.md del sandbox; lanza si el patrón no aparece (un parche
 // silencioso haría pasar el test por la razón equivocada).
 const patchState = (dir, from, to) => {
@@ -593,6 +616,112 @@ test('escala: 300 entradas a través de export → import → manifest, con los 
   const li2 = capture(() => sb.mod.buildIndex());
   includes(li2.logs.join('|'), `Index: v1 ${N_ESCALA * 2 + 2} entries`, `el índice ve N SUMMARY + N CHANGELOG + 2 decisiones`);
   eq(jsonFiles(sb.dir).filter((f) => !WEEK_JSON.test(f)), ['state.json'], 'los chunks semanales siguen siendo los mismos');
+});
+
+// ── Lock canónico + escrituras atómicas ─────────────────────────────────────
+suite('memory-sync · lock canónico y escrituras atómicas');
+
+test('exportChunks: toma el lock canónico y lo libera (no deja .memory-lock)', async () => {
+  const sb = await sandbox('lock-export');
+  summaryWithEntries(sb.dir, 3);
+  assert(!existsSync(lockDirOf(sb.dir)), 'partimos sin lock');
+  capture(() => sb.mod.exportChunks());
+  assert(!existsSync(lockDirOf(sb.dir)), 'el lock se libera en el finally: el sandbox queda como estaba');
+  eq(readdirSync(sb.dir).filter((n) => n.startsWith('.memory-lock')), [], 'ni el lock ni dirs stale de takeover quedan en la raíz');
+});
+
+test('exportChunks: con el lock ocupado NO escribe nada y falla con el motivo', async () => {
+  const sb = await sandbox('lock-export-busy');
+  summaryWithEntries(sb.dir, 3);
+  tomarLockAjeno(sb.dir);
+  try {
+    const e = throws(() => sb.mod.exportChunks(), 'exportChunks debe propagar el lock ocupado');
+    match(e.message, /no se pudo adquirir el lock de memoria \(busy, pid 4242424\)/, 'el motivo cita el estado y el pid del holder');
+    eq(e.exitCode, 3, 'exit 3 = lock ocupado (mismo código que memory-rotate)');
+    eq(weeklyFiles(sb.dir), [], 'no se escribió ningún chunk');
+    eq(existsSync(join(sb.dir, '.advisor')), false, 'ni siquiera se creó el directorio de chunks');
+  } finally {
+    soltarLockAjeno(sb.dir);
+  }
+});
+
+test('importChunks: con el lock ocupado NO toca CHANGELOG', async () => {
+  const sb = await sandbox('lock-import-busy');
+  summaryWithEntries(sb.dir, 3);
+  capture(() => sb.mod.exportChunks());
+  tomarLockAjeno(sb.dir);
+  try {
+    const e = throws(() => sb.mod.importChunks(), 'importChunks debe propagar el lock ocupado');
+    match(e.message, /memory-sync import/, 'el mensaje identifica la ruta');
+    eq(e.exitCode, 3, 'exit 3');
+    eq(countAllHeadings(sb.dir), 0, 'ningún CHANGELOG escrito');
+  } finally {
+    soltarLockAjeno(sb.dir);
+  }
+});
+
+test('el lock se vuelve a tomar bien tras un rechazo (no queda tomado a medias)', async () => {
+  const sb = await sandbox('lock-recuperado');
+  summaryWithEntries(sb.dir, 2);
+  tomarLockAjeno(sb.dir);
+  throws(() => sb.mod.exportChunks(), 'rechazo por lock ajeno');
+  soltarLockAjeno(sb.dir);
+  const { logs } = capture(() => sb.mod.exportChunks());
+  match(logs.join('|'), /Export: 2 bloques nuevos/, 'con el lock libre el export funciona');
+  assert(!existsSync(lockDirOf(sb.dir)), 'y vuelve a liberar el suyo');
+});
+
+test('CLI: con el lock ocupado, export sale con 3 y no escribe (falla claro, no corrompe)', async () => {
+  const sb = await sandbox('cli-lock-busy');
+  summaryWithEntries(sb.dir, 3);
+  tomarLockAjeno(sb.dir);
+  try {
+    const r = cli(sb.dir, ['export']);
+    eq(r.status, 3, 'exit 3 = lock ocupado');
+    match(r.err, /no se pudo adquirir el lock de memoria/, 'stderr explica el motivo');
+    match(r.err, /no se escribió nada/, 'y que no se escribió nada');
+    eq(weeklyFiles(sb.dir), [], 'cero chunks escritos');
+    eq(existsSync(join(sb.dir, '.advisor', 'memory-manifest.json')), false, 'tampoco manifest ni índice');
+  } finally {
+    soltarLockAjeno(sb.dir);
+  }
+});
+
+test('CLI: sin lock, export sale con 0 y deja el árbol coherente', async () => {
+  const sb = await sandbox('cli-lock-ok');
+  summaryWithEntries(sb.dir, 3);
+  const r = cli(sb.dir, ['export']);
+  eq(r.status, 0, 'exit 0');
+  match(r.out, /Export: 3 bloques nuevos/, 'los chunks salen');
+  match(r.out, /Manifest: \d+ líneas/, 'y el manifest');
+  match(r.out, /Index: v1 \d+ entries/, 'y el índice');
+  eq(debrisTmp(sb.dir, '.advisor').length, 0, 'sin temporales en .advisor');
+  eq(debrisTmp(sb.dir, '.advisor', 'chunks').length, 0, 'ni en chunks/');
+});
+
+test('escrituras atómicas: export/import/manifest no dejan ningún temporal .tmp', async () => {
+  const sb = await sandbox('atomic-sin-debris');
+  summaryWithEntries(sb.dir, 7);
+  addEntry(sb.dir, entry(OTRA_SEMANA, 'Entrada de la semana nueva', 'cuerpo nuevo.'));
+  capture(() => sb.mod.exportChunks());
+  capture(() => sb.mod.importChunks());
+  capture(() => sb.mod.buildManifest());
+  capture(() => sb.mod.buildIndex());
+  eq(debrisTmp(sb.dir, '.advisor'), [], 'nada en .advisor');
+  eq(debrisTmp(sb.dir, '.advisor', 'chunks'), [], 'nada en chunks/');
+  eq(debrisTmp(sb.dir, 'CHANGELOG'), [], 'nada en CHANGELOG/');
+  // Y el contenido es el esperado (el rename no pierde ni un byte).
+  eq(countAllHeadings(sb.dir), 8, 'las 8 entradas llegaron al CHANGELOG');
+  eq(countLines(join(sb.dir, '.advisor', 'memory-manifest.json')), 13, 'manifest de 13 líneas');
+});
+
+test('escritura atómica: si el rename falla, el error sube y el temporal se borra', async () => {
+  const sb = await sandbox('atomic-fallo');
+  // Destino que no admite rename: un DIRECTORIO con el nombre del manifest.
+  mkdirSync(join(sb.dir, '.advisor', 'memory-manifest.json'), { recursive: true });
+  const e = throws(() => sb.mod.buildManifest(), 'el rename sobre un directorio falla');
+  match(e.code, /EISDIR|EPERM|ENOTEMPTY|EACCES|EBUSY/, 'código del sistema de ficheros propagado');
+  eq(debrisTmp(sb.dir, '.advisor'), [], 'el temporal se borra: no queda debris tras el fallo');
 });
 
 await runAll();

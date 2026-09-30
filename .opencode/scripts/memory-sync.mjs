@@ -6,18 +6,36 @@
  * para evitar stale-on-clone) + memory-index.json (fingerprint completo,
  * git-ignored, regenerable). Fingerprint y parsers se reutilizan desde
  * memory-index.mjs (única fuente de verdad).
+ *
+ * Escrituras (contrato de seguridad de datos):
+ *  - LOCK canónico: las dos rutas que mutan el CORPUS de memoria (`export` →
+ *    .advisor/chunks/ e `import` → CHANGELOG/) toman `memory-lock.mjs`, el
+ *    MISMO lock (mismo mkdir atómico, mismo token de owner, mismo release por
+ *    token) que toma memory-rotate.mjs. No hay un segundo mecanismo de bloqueo.
+ *    Se libera SIEMPRE en `finally`. Si el lock está tomado, no se escribe nada
+ *    y el comando falla con exit 3 (como memory-rotate) en vez de corromper.
+ *  - Escrituras ATÓMICAS: todo fichero escrito pasa por temp+rename en el mismo
+ *    directorio. Sin esto, dos escritores concurrentes podían perder datos: en
+ *    POSIX uno escribía sobre un inode ya sustituido por el otro, y en Windows
+ *    el rename del segundo fallaba con EPERM/EBUSY.
+ *  - El manifest y el índice (.advisor/) son artefactos DERIVADOS y git-ignored:
+ *    se regeneran solos, por eso se escriben atómicos pero fuera del lock.
+ *
  * Uso:
  *   node memory-sync.mjs export [--force]  # chunks + manifest + index (--all = alias)
  *   node memory-sync.mjs import          # importa chunks a CHANGELOG (idempotente)
  *   node memory-sync.mjs status
  *   node memory-sync.mjs buildManifest   # solo manifest
  *   node memory-sync.mjs buildIndex      # solo índice
+ *   Exit: 0 ok · 1 uso inválido/error · 3 lock de memoria ocupado.
  */
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, renameSync, rmSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import { join, dirname, basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { allEntries, fingerprint, isFresh, writeIndex, slugId, INDEX_VERSION, invalidateEntriesCache } from './memory-index.mjs';
 import { mondayOf, entriesRegion, sectionText } from './memory-stats.mjs';
+import { acquireLock, releaseLock } from './memory-lock.mjs';
 // Dedup/normalización compartidos con el motor: una sola fuente de verdad para
 // identificar entradas (`fecha--título normalizado`, case-insensitive y
 // separador-agnóstico `— - : | ,`), tanto en `seen` (intra-run) como en el
@@ -39,7 +57,48 @@ const MANIFEST_VERSION = 1;
 // cerca del cambio de semana ambos pueden nombrar distinto archivo semanal —
 // export/import leen todos los chunks existentes, así que no se pierde contenido.
 
+// Exit 3 = lock de memoria ocupado (mismo código que memory-rotate.mjs, para que
+// quien lo reintente sepa que debe esperar y no que la memoria esté corrupta).
+const LOCK_BUSY_EXIT = 3;
+
+// Escritura atómica temp+rename en el MISMO directorio (mismo criterio que
+// memory-rotate.mjs). El temporal lleva pid+random para que dos escritores no se
+// pisen el nombre; si el rename falla, el temporal se borra y el error sube.
+function writeAtomic(file, content) {
+  const tmp = join(dirname(file), `.${basename(file)}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`);
+  try {
+    writeFileSync(tmp, content, 'utf8');
+    renameSync(tmp, file);
+  } catch (e) {
+    try { rmSync(tmp, { force: true }); } catch { /* best-effort */ }
+    throw e;
+  }
+}
+
+// Envuelve el trabajo que MUTA el corpus en el lock canónico (memory-lock.mjs),
+// igual que hace memory-rotate.rotate/migrateMarkers: acquire con token propio,
+// trabajo, release POR TOKEN en `finally` (nunca `owner` a ciegas, nunca sin
+// liberar). `etiqueta` identifica la ruta en el mensaje de error.
+function withMemoryLock(etiqueta, fn) {
+  const lock = acquireLock();
+  if (!lock.acquired) {
+    const err = new Error(`memory-sync ${etiqueta}: no se pudo adquirir el lock de memoria (${lock.reason}${lock.owner ? `, pid ${lock.owner.pid}` : ''}); no se escribió nada, reintenta cuando se libere.`);
+    err.exitCode = LOCK_BUSY_EXIT;
+    throw err;
+  }
+  try {
+    return fn();
+  } finally {
+    const rel = releaseLock({ token: lock.token });
+    if (!rel.released) console.error(`memory-sync ${etiqueta}: no se pudo liberar el lock de memoria (${rel.reason || rel.error || 'desconocido'})`);
+  }
+}
+
 function exportChunks(force=false) {
+  return withMemoryLock('export', () => exportChunksBajoLock(force));
+}
+
+function exportChunksBajoLock(force=false) {
   mkdirSync(CHUNKS_DIR, { recursive: true });
   // FIX-2: invalida el memo de allEntries (memory-index) para que el proceso
   // anfitrión no sirva entradas stale tras una escritura de esta ruta.
@@ -72,17 +131,21 @@ function exportChunks(force=false) {
         entries.push(id);
       }
     }
-    for (const [file, g] of byFile) writeFileSync(file, JSON.stringify(g.arr,null,2),'utf8');
+    for (const [file, g] of byFile) writeAtomic(file, JSON.stringify(g.arr,null,2));
   }
   if (existsSync(STATE)) {
     const file = join(CHUNKS_DIR, `state.json`);
     const body = readFileSync(STATE,'utf8');
-    writeFileSync(file, JSON.stringify({ exportedAt: new Date().toISOString(), body }, null, 2), 'utf8');
+    writeAtomic(file, JSON.stringify({ exportedAt: new Date().toISOString(), body }, null, 2));
   }
   console.log(`Export: ${entries.length} bloques ${force?'forzados':'nuevos'} → ${CHUNKS_DIR}${force?' (--force)':''}`);
 }
 
 function importChunks() {
+  return withMemoryLock('import', () => importChunksBajoLock());
+}
+
+function importChunksBajoLock() {
   // Lee vivo; escribe solo CHANGELOG/. IDEMPOTENTE: dedup por identificador
   // robusto `fecha + título normalizado` (mismo criterio que memory-rotate.mjs,
   // vía hasEntry/normalize) y UNA sola escritura por archivo destino (evita el
@@ -135,7 +198,7 @@ function importChunks() {
     if (toAppend.length) {
       const content = appendToChangelog(before, group.monday, toAppend.join('\n\n'));
       mkdirSync(join(ROOT, 'CHANGELOG'), { recursive: true });
-      writeFileSync(changelog, content, 'utf8');
+      writeAtomic(changelog, content);
       written++;
     }
   }
@@ -181,7 +244,7 @@ function buildManifest() {
   lines.push('  ],');
   lines.push(`  "stale": [${stale.map(t => JSON.stringify(t)).join(', ')}]`);
   lines.push('}');
-  writeFileSync(MANIFEST_FILE, lines.join('\n') + '\n', 'utf8');
+  writeAtomic(MANIFEST_FILE, lines.join('\n') + '\n');
   console.log(`Manifest: ${lines.length} líneas → ${MANIFEST_FILE}`);
 }
 
@@ -228,12 +291,19 @@ function status() {
 function main() {
   const cmd = process.argv[2];
   const force = process.argv.includes('--force') || process.argv.includes('--all'); // --all = alias legacy de --force
-  if (cmd==='export') { exportChunks(force); buildManifest(); buildIndex(); }
-  else if (cmd==='import') importChunks();
-  else if (cmd==='buildManifest') buildManifest();
-  else if (cmd==='buildIndex') buildIndex();
-  else if (cmd==='status' || !cmd) status();
-  else { console.log('Uso: node memory-sync.mjs export [--force|--all] | import | status | buildManifest | buildIndex'); process.exit(1); }
+  try {
+    if (cmd==='export') { exportChunks(force); buildManifest(); buildIndex(); }
+    else if (cmd==='import') importChunks();
+    else if (cmd==='buildManifest') buildManifest();
+    else if (cmd==='buildIndex') buildIndex();
+    else if (cmd==='status' || !cmd) status();
+    else { console.log('Uso: node memory-sync.mjs export [--force|--all] | import | status | buildManifest | buildIndex'); process.exit(1); }
+  } catch (e) {
+    // Exit 3 = lock ocupado (export/import); 1 = cualquier otro fallo. El mensaje
+    // es el que lanza withMemoryLock: no se escribió nada.
+    console.error(e.message);
+    process.exit(e.exitCode || 1);
+  }
 }
 
 let isMain = false;

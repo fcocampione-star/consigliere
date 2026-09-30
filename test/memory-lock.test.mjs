@@ -8,8 +8,12 @@
  *    `.memory-lock` real del repo no se toca nunca.
  *  - `acquireLock` / `releaseLock` / `lockStatus` / `dirAgeMs` / `isStale` /
  *    `listStaleDirs` / `gcStaleDirs` / `takeoverStale`.
- *  - Umbral stale: `ADVISOR_LOCK_STALE_MS` (default, cero, basura, negativos).
+ *  - Umbral stale: `ADVISOR_LOCK_STALE_MS` (solo entero >= MIN_STALE_MS; basura,
+ *    negativos, cero y notaciones ambiguas caen al default CON aviso) y
+ *    `ADVISOR_LOCK_ROOT` (un valor de solo espacios se trata como ausente).
  *  - Release por token: parametro y variable de entorno `ADVISOR_LOCK_TOKEN`.
+ *  - Release sin dueño legible (owner.json ausente o corrupto): se NIEGA salvo
+ *    `--force`.
  *  - Takeover de un lock stale: exito, restauracion del owner fresco, restauracion
  *    fallida (`restoreFailed`) y carrera perdida.
  *
@@ -31,10 +35,12 @@ import {
 } from 'node:fs';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { suite, test, assert, eq, neq, match, includes, throws, tmpdir, cleanup, runAll } from './harness.mjs';
 
 const MODULE = '../.opencode/scripts/memory-lock.mjs';
+const MODULE_ABS = fileURLToPath(new URL(MODULE, import.meta.url)); // para los tests de CLI
 const LOCK = '.memory-lock';
 const STALE_PREFIX = `${LOCK}.stale.`;
 const HORA = 3600000;
@@ -78,6 +84,28 @@ async function conLock(prefix, opciones = {}) {
   const root = sandbox(prefix);
   const mod = await cargarLock({ ...opciones, root });
   return { root, mod, lockDir: join(root, LOCK) };
+}
+
+// Igual que conLock, pero captura el stderr de la CARGA del modulo: los avisos de
+// env invalido se emiten al evaluarse el modulo (una vez por instancia), asi que el
+// espia tiene que estar puesto ANTES del `import`.
+async function conLockCapturandoStderr(prefix, opciones = {}) {
+  const lineas = [];
+  const real = console.error;
+  console.error = (...args) => { lineas.push(args.map(String).join(' ')); };
+  try {
+    return { ...(await conLock(prefix, opciones)), stderr: lineas };
+  } finally {
+    console.error = real;
+  }
+}
+
+// Corre el CLI del lock contra un sandbox (ADVISOR_LOCK_ROOT lo aísla del repo).
+function cli(root, args) {
+  return spawnSync(process.execPath, [MODULE_ABS, ...args], {
+    encoding: 'utf8',
+    env: { ...process.env, ADVISOR_LOCK_ROOT: root, ADVISOR_LOCK_STALE_MS: '' },
+  });
 }
 
 function crearLock(root, owner) {
@@ -153,31 +181,78 @@ test('umbral por defecto: 300000 ms cuando no hay env', async () => {
   const mod = await cargarLock({ root: sandbox('advisor-lock-umbral') });
   eq(mod.DEFAULT_STALE_MS, 300000, 'DEFAULT_STALE_MS exportado');
   eq(mod.LOCK_STALE_MS, 300000, 'sin env se usa el default');
+  eq(mod.MIN_STALE_MS, 1000, 'MIN_STALE_MS exportado: suelo de 1 s (por debajo el lock se roba solo)');
 });
 
-test('ADVISOR_LOCK_STALE_MS numerico se respeta (incluido 0)', async () => {
+test('ADVISOR_LOCK_STALE_MS: se respeta un entero >= MIN_STALE_MS', async () => {
   const mod1 = await cargarLock({ root: sandbox('advisor-lock-umbral'), staleMs: '1000' });
-  eq(mod1.LOCK_STALE_MS, 1000, '1000 ms');
-  const mod0 = await cargarLock({ root: sandbox('advisor-lock-umbral'), staleMs: '0' });
-  eq(mod0.LOCK_STALE_MS, 0, 'cero es un umbral valido, no cae al default');
-  const modExp = await cargarLock({ root: sandbox('advisor-lock-umbral'), staleMs: '1e3' });
-  eq(modExp.LOCK_STALE_MS, 1000, 'notacion exponencial numerica');
+  eq(mod1.LOCK_STALE_MS, 1000, '1000 ms (justo el suelo)');
+  const mod2 = await cargarLock({ root: sandbox('advisor-lock-umbral'), staleMs: '45000' });
+  eq(mod2.LOCK_STALE_MS, 45000, '45000 ms');
+  const modEspacios = await cargarLock({ root: sandbox('advisor-lock-umbral'), staleMs: ' 2000 ' });
+  eq(modEspacios.LOCK_STALE_MS, 2000, 'espacios alrededor de un entero valido se recortan');
   const modVacio = await cargarLock({ root: sandbox('advisor-lock-umbral'), staleMs: '' });
-  eq(modVacio.LOCK_STALE_MS, 300000, 'env vacio -> default');
+  eq(modVacio.LOCK_STALE_MS, 300000, 'env vacio -> default (sin override)');
 });
 
-test('valores no numericos o negativos caen al umbral por defecto', async () => {
-  for (const bruto of ['abc', '50abc', '-1', 'Infinity', 'NaN', '1,5']) {
-    const mod = await cargarLock({ root: sandbox('advisor-lock-umbral'), staleMs: bruto });
-    eq(mod.LOCK_STALE_MS, 300000, `env=${JSON.stringify(bruto)} -> default`);
+test('ADVISOR_LOCK_STALE_MS: 0 ya NO se acepta (desactivaba la exclusion mutua en silencio)', async () => {
+  // Antes: Number('0') = 0 >= 0 -> umbral 0 -> cualquier lock es stale al instante
+  // y cada acquire se apropiaba del del otro, sin un solo aviso.
+  const { mod, stderr } = await conLockCapturandoStderr('advisor-lock-umbral', { staleMs: '0' });
+  eq(mod.LOCK_STALE_MS, 300000, '0 cae al umbral por defecto');
+  eq(stderr.length, 1, 'y avisa por stderr en vez de fallar en silencio');
+  match(stderr[0], /ADVISOR_LOCK_STALE_MS inválido \("0"\)/, 'el aviso cita el valor recibido');
+  match(stderr[0], /300000 ms/, 'y dice que umbral se aplica');
+  try {
+    eq(mod.acquireLock().acquired, true, 'primer acquire');
+    eq(mod.acquireLock().acquired, false, 'el segundo NO se apropia del lock ajeno (mutua exclusion viva)');
+  } finally {
+    mod.releaseLock({ force: true });
+    cleanup([mod.lockPath()]);
   }
 });
 
-test('caracterizacion: un env de solo espacios se interpreta como 0', async () => {
-  // Number('  ') === 0 y 0 >= 0, asi que el umbral queda en 0 (cualquier lock es
-  // "stale"), no en el default. Quien lo configure deberia pasar un numero.
-  const mod = await cargarLock({ root: sandbox('advisor-lock-umbral'), staleMs: '  ' });
-  eq(mod.LOCK_STALE_MS, 0, 'solo espacios -> 0 ms');
+test('notaciones ambiguas del umbral (1e3, 0x10) caen al default con aviso', async () => {
+  for (const bruto of ['1e3', '0x10', ' 999 ', '007', '1.0']) {
+    const { mod, stderr } = await conLockCapturandoStderr('advisor-lock-umbral', { staleMs: bruto });
+    eq(mod.LOCK_STALE_MS, 300000, `env=${JSON.stringify(bruto)} -> default (no entero plano >= minimo)`);
+    eq(stderr.length, 1, `env=${JSON.stringify(bruto)} -> un aviso`);
+  }
+});
+
+test('valores no numericos o negativos caen al umbral por defecto (con aviso)', async () => {
+  for (const bruto of ['abc', '50abc', '-1', 'Infinity', 'NaN', '1,5']) {
+    const { mod, stderr } = await conLockCapturandoStderr('advisor-lock-umbral', { staleMs: bruto });
+    eq(mod.LOCK_STALE_MS, 300000, `env=${JSON.stringify(bruto)} -> default`);
+    eq(stderr.length, 1, `env=${JSON.stringify(bruto)} -> un aviso por stderr`);
+    match(stderr[0], /ADVISOR_LOCK_STALE_MS inválido/, 'el aviso nombra la variable');
+  }
+});
+
+test('ADVISOR_LOCK_STALE_MS de solo espacios: antes 0, ahora default + aviso', async () => {
+  // Number('  ') === 0 y 0 >= 0, así que el umbral quedaba en 0 (cualquier lock es
+  // "stale") sin avisar: la exclusion mutua quedaba desactivada por un env typo.
+  const { root, mod, lockDir, stderr } = await conLockCapturandoStderr('advisor-lock-espacios', { staleMs: '  ' });
+  try {
+    eq(mod.LOCK_STALE_MS, 300000, 'solo espacios ya no colapsa a 0: cae al umbral por defecto');
+    eq(stderr.length, 1, 'y avisa por stderr en vez de fallar en silencio');
+    match(stderr[0], /inválido \(" {2}"\)/, 'el aviso cita el valor recibido, espacios incluidos');
+    // Efecto practico: un lock recien tomado NO es stale y el segundo acquire busy.
+    eq(mod.acquireLock().acquired, true, 'primer acquire');
+    assert(!mod.isStale(), 'el lock propio no es stale con un umbral sano');
+    eq(mod.acquireLock().acquired, false, 'el segundo acquire no roba el lock');
+    assert(existsSync(lockDir), 'el lock sigue en su sitio');
+    cleanup([root]);
+  } finally {
+    cleanup([root]);
+  }
+});
+
+test('ADVISOR_LOCK_ROOT de solo espacios se trata como ausente (no como el cwd)', async () => {
+  // Mismo tipo de fallo que un umbral en 0: resolve('  ') es el cwd, asi que el lock
+  // caeria en un directorio arbitrario en vez de en la raiz del script.
+  const mod = await cargarLock({ root: '  ' });
+  eq(mod.lockPath(), join(REPO_RAIZ, LOCK), 'solo espacios -> raiz del propio script (como "")');
 });
 
 // ── acquire / release ───────────────────────────────────────────────────────
@@ -339,23 +414,49 @@ test('release --force libera un lock ajeno (razon forced)', async () => {
   }
 });
 
-test('owner.json corrupto: libera best-effort y reporta corrupt-owner', async () => {
+test('owner.json corrupto: sin --force se NIEGA (no se puede comprobar token ni pid)', async () => {
   const { root, mod, lockDir } = await conLock('advisor-lock-corrupto');
   try {
     crearLock(root, '{esto no es json');
-    eq(mod.releaseLock(), { released: true, reason: 'corrupt-owner' }, 'no bloquea la limpieza');
-    assert(!existsSync(lockDir), 'dir borrado igualmente');
+    eq(mod.releaseLock(), { released: false, reason: 'corrupt-owner', owner: null }, 'cualquier llamante NO puede liberar un lock sin dueño legible');
+    assert(existsSync(lockDir), 'el lock sigue en pie');
+    eq(readFileSync(join(lockDir, 'owner.json'), 'utf8'), '{esto no es json', 'owner.json intacto');
+    // La unica ruta documentada: --force.
+    eq(mod.releaseLock({ force: true }), { released: true, reason: 'corrupt-owner' }, 'con --force sí lo libera');
+    assert(!existsSync(lockDir), 'dir borrado');
   } finally {
     cleanup([root]);
   }
 });
 
-test('sin owner.json: libera best-effort y reporta no-owner-file', async () => {
+test('sin owner.json: sin --force se NIEGA, con --force libera (no-owner-file)', async () => {
   const { root, mod, lockDir } = await conLock('advisor-lock-sin-owner');
   try {
     crearLock(root, undefined);
-    eq(mod.releaseLock(), { released: true, reason: 'no-owner-file' }, 'no bloquea la limpieza');
-    assert(!existsSync(lockDir), 'dir borrado igualmente');
+    eq(mod.releaseLock(), { released: false, reason: 'no-owner-file', owner: null }, 'no se libera a ciegas');
+    assert(existsSync(lockDir), 'el lock sigue en pie');
+    eq(mod.releaseLock({ token: 'cualquier-token' }), { released: false, reason: 'no-owner-file', owner: null }, 'tampoco un token inventado: no hay contra quien compararlo');
+    assert(existsSync(lockDir), 'sigue en pie');
+    eq(mod.releaseLock({ force: true }), { released: true, reason: 'no-owner-file' }, 'con --force sí lo libera');
+    assert(!existsSync(lockDir), 'dir borrado');
+  } finally {
+    cleanup([root]);
+  }
+});
+
+test('CLI release: lock sin dueño legible -> exit 1 con mensaje accionable, y --force lo libera', async () => {
+  const root = sandbox('advisor-lock-cli-ownerless');
+  try {
+    crearLock(root, undefined);
+    const re = cli(root, ['release']);
+    eq(re.status, 1, 'exit 1 (mismo codigo que cualquier release denegado)');
+    match(re.stderr, /release refused: no-owner-file/, 'motivo truthful');
+    match(re.stderr, /--force/, 'el mensaje dice que hacer');
+    assert(existsSync(join(root, LOCK)), 'el lock sigue en pie tras la negativa');
+    const ok = cli(root, ['release', '--force']);
+    eq(ok.status, 0, 'con --force, exit 0');
+    eq(ok.stdout.trim(), 'lock released (no-owner-file)', 'mensaje de salida truthful');
+    assert(!existsSync(join(root, LOCK)), 'dir borrado');
   } finally {
     cleanup([root]);
   }

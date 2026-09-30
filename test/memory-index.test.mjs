@@ -9,13 +9,17 @@
  * tmpdir: el módulo se importa desde la copia, así que `join(dirname,'..','..')`
  * resuelve al sandbox y NUNCA se escribe en este repo (ver AGENTS.md §anti-lock y
  * el reporte de gaps: memory-index.mjs no expone override de root).
+ * `main()` NO se exporta, así que el flujo documentado search → timeline → get
+ * (incluido `get` volcando el CUERPO de la entrada y el ranking único de `search`)
+ * se prueba con `cli()`: spawnSync del script del espejo.
  */
 import { mkdirSync, readFileSync, writeFileSync, copyFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 
-import { suite, test, assert, eq, neq, match, throws, tmpdir, cleanup, runAll } from './harness.mjs';
+import { suite, test, assert, eq, neq, match, includes, throws, tmpdir, cleanup, runAll } from './harness.mjs';
 import { makeProject, summaryWithEntries, entry } from './fixtures.mjs';
 import { ENTRIES_START, ENTRIES_END, entriesRegion } from '../.opencode/scripts/memory-stats.mjs';
 import { parseEntries, slugId, score, isFresh, fingerprint, INDEX_VERSION } from '../.opencode/scripts/memory-index.mjs';
@@ -413,6 +417,152 @@ test('loadIndex: fresh tras writeIndex y stale en cuanto cambia una fuente', asy
   writeFileSync(p, `${readFileSync(p, 'utf8')}\n<!-- línea extra -->\n`);
   eq(sb.mod.isFresh(data), false, 'cambia el tamaño de SUMMARY.md → stale');
   eq(sb.mod.loadIndex().fresh, false, 'loadIndex() lo detecta como stale');
+});
+
+// ── CLI (search → timeline → get) sobre el espejo ───────────────────────────
+suite('memory-index · CLI del espejo (search/timeline/get)');
+
+// Corre el CLI contra el espejo del sandbox: `main()` no se exporta, y es la ruta
+// que documentan AGENTS.md / README.md / PROJECT_STATE.md §5.
+function cli(sb, args) {
+  const r = spawnSync(process.execPath, [join(sb.dir, '.opencode', 'scripts', 'memory-index.mjs'), ...args], { encoding: 'utf8' });
+  return { status: r.status, out: r.stdout || '', err: r.stderr || '' };
+}
+
+const lineIds = (out) => out.split('\n').filter((l) => l.startsWith('- ')).map((l) => (/^- (.*?) \[/.exec(l) || [])[1]);
+
+test('get: imprime el CUERPO de la entrada, no solo su heading (flujo search → timeline → get)', async () => {
+  const sb = await sandbox('get-cuerpo');
+  summaryWithEntries(sb.dir, 3);
+  const s = cli(sb, ['search', 'entrada fixture 2']);
+  eq(s.status, 0, 'search sale 0');
+  const id = lineIds(s.out)[0];
+  eq(id, '2026-09-05--entrada fixture 2', 'el id canonico que devuelve search');
+  const t = cli(sb, ['timeline', id]);
+  eq(t.status, 0, 'timeline sale 0');
+  const g = cli(sb, ['get', id]);
+  eq(g.status, 0, 'get sale 0');
+  includes(g.out, '## 2026-09-05 - Entrada fixture 2', 'el heading de la entrada');
+  includes(g.out, 'topic: test/fixture', 'el topic');
+  includes(g.out, '**Goal:** Cuerpo de la entrada 2.', 'el cuerpo de la entrada');
+  includes(g.out, '**Verificación:** pendiente.', 'y hasta el ultimo campo del bloque');
+  assert(!g.out.includes('## 2026-09-04'), 'solo ese bloque: no se cuela la entrada siguiente');
+  assert(!g.out.includes('Entrada fixture 1'), 'ni la anterior');
+});
+
+test('get: el cuerpo sale completo tambien para una entrada ya archivada en CHANGELOG', async () => {
+  const sb = await sandbox('get-changelog');
+  summaryWithEntries(sb.dir, 2);
+  writeFileSync(join(sb.dir, 'CHANGELOG', '2026-08-31.md'), `# Changelog 2026-08-31\n\n> Historial semanal archivado desde SUMMARY.md.\n\n${entry('2026-08-25', 'Entrada archivada', 'cuerpo archivado.')}\n`, 'utf8');
+  const g = cli(sb, ['get', '2026-08-25--entrada archivada']);
+  eq(g.status, 0, 'get sale 0');
+  includes(g.out, '## 2026-08-25 - Entrada archivada', 'el heading del CHANGELOG');
+  includes(g.out, '**Goal:** cuerpo archivado.', 'y el cuerpo, que antes nunca se volcaba');
+});
+
+test('get: §2 de PROJECT_STATE conserva su cabecera y su volcado (sin tocar ese caso)', async () => {
+  const sb = await sandbox('get-state');
+  const id = sb.mod.allEntries().find((e) => e.source === 'PROJECT_STATE.md §2').id;
+  const g = cli(sb, ['get', id]);
+  eq(g.status, 0, 'get sale 0');
+  includes(g.out, '# PROJECT_STATE.md §2 — Decisión de fixture A [topic: test/fixture-a] review_after: 2099-12-31', 'la cabecera propia de §2 no cambia');
+  includes(g.out, '- Decisión de fixture B [topic: test/fixture-b]', 'y sigue volcando la sección entera');
+});
+
+test('search: el texto es IDENTICO con índice fresco y sin índice (rank único por score)', async () => {
+  // El orden por score NO coincide con el orden de archivo: la entrada de CHANGELOG
+  // solo casa en la prosa (0.05) y las decisiones de §2 casan en topic + título
+  // (0.4), aunque en disco la del CHANGELOG va ANTES que las de §2.
+  const sb = await sandbox('search-ranking');
+  summaryWithEntries(sb.dir, 3);
+  const viejo = ['## 2026-08-25 - Entrada antigua sin el termino', '', 'topic: test/otro', 'review_after: 2099-12-31', '**Goal:** Esta prosa es la unica que menciona fixture.', ''].join('\n');
+  writeFileSync(join(sb.dir, 'CHANGELOG', '2026-08-31.md'), `# Changelog 2026-08-31\n\n> Historial semanal archivado desde SUMMARY.md.\n\n${viejo}\n`, 'utf8');
+  const sinIndice = cli(sb, ['search', 'fixture']);
+  eq(sinIndice.status, 0, 'sin índice: sale 0');
+  sb.mod.writeIndex(); // índice fresco
+  const conIndice = cli(sb, ['search', 'fixture']);
+  eq(conIndice.status, 0, 'con índice: sale 0');
+  eq(conIndice.err, '', 'con índice fresco no avisa de nada');
+  eq(conIndice.out, sinIndice.out, 'el MISMO texto, byte a byte, en los dos modos');
+  const orden = lineIds(conIndice.out);
+  eq(orden.length, 6, '3 de SUMMARY + 1 de CHANGELOG + 2 decisiones §2');
+  const ultimo = orden[orden.length - 1];
+  assert(ultimo.startsWith('2026-08-25--'), `la entrada de CHANGELOG (score 0.05) sale la ÚLTIMA también sin índice: ${ultimo}`);
+  const antesDeUltimo = orden[orden.length - 2];
+  assert(antesDeUltimo.startsWith('state--'), `las decisiones de §2 (0.4) la preceden: ${antesDeUltimo}`);
+});
+
+test('search: el aviso de índice stale sale UNA vez por corrida (fuente única del mensaje)', async () => {
+  const sb = await sandbox('search-stale');
+  summaryWithEntries(sb.dir, 2);
+  const r = cli(sb, ['search', '--refresh', 'fixture']);
+  eq(r.status, 0, '--refresh sale 0');
+  appendTo(sb.dir, 'SUMMARY.md', '\n<!-- línea extra -->');
+  const stale = cli(sb, ['search', 'fixture']);
+  eq(stale.status, 0, 'con índice stale sale 0');
+  eq((stale.err.match(/desactualizado \(stale\)/g) || []).length, 1, 'exactamente un aviso por stderr');
+  const get = cli(sb, ['get', '2026-09-06--entrada fixture 1']);
+  eq((get.err.match(/desactualizado \(stale\)/g) || []).length, 1, 'get también avisa una sola vez');
+});
+
+function appendTo(dir, rel, extra) {
+  const p = join(dir, rel);
+  writeFileSync(p, readFileSync(p, 'utf8') + extra, 'utf8');
+  return p;
+}
+
+test('allEntries: dos decisiones de §2 con prefijo largo común tienen ids DISTINTOS (hash)', async () => {
+  const sb = await sandbox('state-colision');
+  // Prefijo común más largo que el truncado de 38 chars del id antiguo: sin hash
+  // las dos decisiones producían `state--<mismo-truncado>` y el índice persistía
+  // ids duplicados (justo lo que el comentario de slugId declara que no pasa).
+  const largo = 'Memoria en 3 capas con busqueda md+grep y cache fingerprint de rutas';
+  const lineas = [
+    `- ${largo}, sin SQLite [topic: architecture/stack-md-grep] review_after: 2099-12-31`,
+    `- ${largo}, con SQLite como fallback [topic: architecture/stack-sqlite] review_after: 2099-12-31`,
+  ].join('\n');
+  const p = join(sb.dir, 'PROJECT_STATE.md');
+  const txt = readFileSync(p, 'utf8');
+  const ancla = '- Decisión de fixture B [topic: test/fixture-b] review_after: 2099-12-31\n';
+  assert(txt.includes(ancla), 'el fixture tiene la línea de anclaje de §2');
+  writeFileSync(p, txt.replace(ancla, `${ancla}${lineas}\n`), 'utf8');
+  sb.mod.invalidateEntriesCache();
+  const dec = sb.mod.allEntries().filter((e) => e.source === 'PROJECT_STATE.md §2');
+  eq(dec.length, 4, 'las 2 del fixture + las 2 largas');
+  const largos = dec.slice(-2);
+  const id1 = largos[0].id;
+  const id2 = largos[1].id;
+  eq(id1, slugId('state', `${largo}, sin SQLite [topic: architecture/stack-md-grep] review_after: 2099-12-31`), 'id = slugId(state, texto completo)');
+  match(id1, /^state--memoria-en-3-capas-con-busqued-[0-9a-f]{6}$/, 'prefijo state-- conservado + hash sha1 de 6 (slug recortado a 30)');
+  neq(id1, id2, 'las dos decisiones con prefijo común NO colisionan');
+  neq(id1.slice(0, 38), id2.slice(0, 38) + 'x', 'el prefijo truncado sigue siendo el mismo (el hash es lo que desambigua)');
+  assert(!/[A-Z]/.test(id1), 'el id sale en minúsculas (slugId normaliza el caso)');
+  // Estabilidad entre corridas y tras invalidar el memo.
+  sb.mod.invalidateEntriesCache();
+  eq(sb.mod.allEntries().filter((e) => e.source === 'PROJECT_STATE.md §2').slice(-2).map((e) => e.id), [id1, id2], 'los ids son estables tras releer el árbol');
+  const sb2 = await sandbox('state-colision-2');
+  const p2 = join(sb2.dir, 'PROJECT_STATE.md');
+  const t2 = readFileSync(p2, 'utf8');
+  writeFileSync(p2, t2.replace(ancla, `${ancla}${lineas}\n`), 'utf8');
+  sb2.mod.invalidateEntriesCache();
+  eq(sb2.mod.allEntries().filter((e) => e.source === 'PROJECT_STATE.md §2').slice(-2).map((e) => e.id), [id1, id2], 'y estables entre instancias (dos sandboxes)');
+});
+
+test('writeIndex: los ids de §2 con prefijo común se persisten sin duplicados', async () => {
+  const sb = await sandbox('state-colision-index');
+  const p = join(sb.dir, 'PROJECT_STATE.md');
+  const txt = readFileSync(p, 'utf8');
+  const ancla = '- Decisión de fixture B [topic: test/fixture-b] review_after: 2099-12-31\n';
+  const lineas = [
+    '- Decisiones de memoria con prefijo larguisimo compartido, variante uno [topic: test/largo-1] review_after: 2099-12-31',
+    '- Decisiones de memoria con prefijo larguisimo compartido, variante dos [topic: test/largo-2] review_after: 2099-12-31',
+  ].join('\n');
+  writeFileSync(p, txt.replace(ancla, `${ancla}${lineas}\n`), 'utf8');
+  sb.mod.invalidateEntriesCache();
+  const { value: data } = capture(() => sb.mod.writeIndex());
+  const ids = data.entries.filter((e) => e.source === 'PROJECT_STATE.md §2').map((e) => e.id);
+  eq(ids.length, 4, '4 decisiones en el índice persistido');
+  eq(new Set(ids).size, 4, 'y los 4 ids son únicos: el truncado sin hash habría colisionado');
 });
 
 await runAll();

@@ -17,9 +17,17 @@
  *    stderr y el resultado lleva `restoreFailed:true` (best-effort pero visible).
  *  - Umbral stale default 300000 ms, override con env `ADVISOR_LOCK_STALE_MS`.
  *    `LOCK_STALE_MS` es la ÚNICA fuente del umbral (exportada; doctor la consume).
+ *    El override se parsea ESTRICTAMENTE: solo un entero no negativo por encima de
+ *    `MIN_STALE_MS` (1000 ms). Antes `Number()` aceptaba cualquier cosa que se
+ *    pareciera a un número —`'  '` → 0, `'1e3'` → 1000, `'0x10'` → 16— y 0 (o casi
+ *    0) DESACTIVABA la mutua exclusión en silencio: todo lock se declaraba stale al
+ *    instante y cada acquire robaba el del otro. Valor inválido → aviso por stderr
+ *    y umbral por defecto; env ausente o vacío → umbral por defecto, sin aviso.
  *  - Raíz del lock: la del repo del propio script, con override de env
  *    `ADVISOR_LOCK_ROOT` (TEST-ONLY) que mueve el lock y las rutas que cuelgan
- *    de la raíz (`.memory-lock`, dirs `.memory-lock.stale.*`).
+ *    de la raíz (`.memory-lock`, dirs `.memory-lock.stale.*`). Un valor de solo
+ *    espacios se trata como AUSENTE (igual que ''): `resolve('  ')` es el cwd, y
+ *    el lock caería en un directorio arbitrario en vez de en la raíz del script.
  *  - `release` cross-proceso por TOKEN (uso multi-proceso: acquire y release son
  *    procesos distintos, así que `pid` no basta). Orden de resolución:
  *      1. `--token <t>` (o env `ADVISOR_LOCK_TOKEN`) === `owner.token` → libera
@@ -30,7 +38,11 @@
  *      4. si no → `{released:false, reason:'not-owner'}` (CLI exit 1).
  *    Para liberar en multi-proceso: guarda el token que devuelve `acquire` y
  *    pásalo a `release --token <t>` (o exporta `ADVISOR_LOCK_TOKEN`). `--force`
- *    sigue disponible. `owner.json` ausente/corrupto → libera best-effort y lo reporta.
+ *    sigue disponible. Sin `owner.json` o con `owner.json` corrupto NO se puede
+ *    comprobar ni el token ni el pid+host, así que SOLO `--force` lo libera
+ *    (`reason:'corrupt-owner'` / `'no-owner-file'`); sin `--force` devuelve
+ *    `{released:false, ...}` con esos mismos motivos y el CLI dice qué hacer
+ *    (antes cualquier llamante liberaba ese lock sin comprobación ninguna).
  *  - GC best-effort de dirs `.memory-lock.stale.*` con antigüedad > max(stale*2, 1h),
  *    ejecutado en acquire/release; `status` reporta cuántos hay.
  *  - Pureza cross-platform: solo node:fs / node:path / node:os / node:crypto.
@@ -49,10 +61,16 @@ import { pathToFileURL } from 'node:url';
 // Override de raíz SOLO para tests (fixtures sandbox): sin ADVISOR_LOCK_ROOT el
 // lock queda fijado al repo del propio script, así que probarlo exigiría tocar
 // su `.memory-lock` real. El env se lee UNA vez, aquí, al cargar el módulo.
+// Un valor de solo espacios se trata como ausente: `resolve('  ')` devuelve el
+// cwd, con lo que el lock aterrizaría en un directorio arbitrario en vez de en la
+// raíz del script (el mismo tipo de fallo que un umbral en 0: silencioso y raro).
 function resolveRoot() {
   const raw = process.env.ADVISOR_LOCK_ROOT;
-  if (raw === undefined || raw === '') return join(import.meta.dirname, '..', '..');
-  return resolve(raw);
+  if (raw === undefined || raw.trim() === '') return join(import.meta.dirname, '..', '..');
+  if (raw !== raw.trim()) {
+    console.error(`memory-lock: ADVISOR_LOCK_ROOT con espacios en los bordes se normaliza a ${JSON.stringify(raw.trim())}.`);
+  }
+  return resolve(raw.trim());
 }
 const ROOT = resolveRoot();
 const LOCK_NAME = '.memory-lock';
@@ -63,11 +81,30 @@ const STALE_PREFIX = `${LOCK_NAME}.stale.`;
 const GC_MIN_MS = 3600000; // 1h de suelo para el GC de dirs stale huérfanos
 
 const DEFAULT_STALE_MS = 300000;
+// Suelo del umbral: por debajo de 1 s el lock se declararía stale casi nada más
+// adquirirlo y la mutua exclusión se desactivaría de facto (con 0, cualquier
+// acquire se apropiaba del lock del otro al instante). Un umbral útil tiene que
+// sobrevivir de sobra a una escritura de memoria (rotación/export/import).
+export const MIN_STALE_MS = 1000;
+
+// Parseo ESTRICTO del umbral: solo `^\d+$` (entero no negativo) y por encima del
+// suelo. `Number()` era demasiado permisivo y hacía colapsar valores degenerados:
+//   '  '   → 0   (solo espacios: mutua exclusión desactivada, sin aviso)
+//   '0'    → 0   (desactiva la exclusión)
+//   '1e3'  → 1000, '0x10' → 16, '1.0' → 1 (notaciones que no son un entero plain)
+//   ''     → 0   (env vacío: se trata como ausente, sin aviso)
+//   ' 1000 ' → 1000 (el trim es inocuo: se acepta como 1000)
+//   'Infinity'/'1,5'/'50abc'/'-1' → NaN o negativo (ya caían al default)
+// Se avisa por stderr y se vuelve al default cuando el valor no es válido.
 function resolveStaleMs() {
   const raw = process.env.ADVISOR_LOCK_STALE_MS;
-  if (raw === undefined || raw === '') return DEFAULT_STALE_MS;
-  const n = Number(raw);
-  return Number.isFinite(n) && n >= 0 ? n : DEFAULT_STALE_MS;
+  if (raw === undefined || raw === '') return DEFAULT_STALE_MS; // sin override
+  const trimmed = String(raw).trim();
+  if (!/^\d+$/.test(trimmed) || Number(trimmed) < MIN_STALE_MS) {
+    console.error(`memory-lock: ADVISOR_LOCK_STALE_MS inválido (${JSON.stringify(raw)}); se usa el umbral por defecto ${DEFAULT_STALE_MS} ms (mínimo ${MIN_STALE_MS} ms).`);
+    return DEFAULT_STALE_MS;
+  }
+  return Number(trimmed);
 }
 export const LOCK_STALE_MS = resolveStaleMs();
 const GC_STALE_MS = Math.max(LOCK_STALE_MS * 2, GC_MIN_MS);
@@ -190,8 +227,14 @@ export function releaseLock({ force = false, token = null } = {}) {
   const hasOwnerFile = existsSync(ownerPath);
   const owner = hasOwnerFile ? readOwner() : null;
   if (!hasOwnerFile || owner === null) {
-    // Sin dueño legible: libera best-effort y lo reporta (no bloquea limpieza).
-    return finishRelease({ reason: hasOwnerFile ? 'corrupt-owner' : 'no-owner-file' });
+    // Sin dueño legible NO hay token ni pid+host que comprobar, así que liberar
+    // aquí era un `rm -rf` de cualquiera: cualquier proceso (o el `finally` de otro
+    // escritor) desposeía un lock ajeno o ya liberado a medias. Solo la ruta
+    // documentada `--force` lo hace; sin ella se devuelve `released:false` con el
+    // motivo (el CLI lo traduce a un mensaje accionable y exit 1).
+    const reason = hasOwnerFile ? 'corrupt-owner' : 'no-owner-file';
+    if (!force) return { released: false, reason, owner: null };
+    return finishRelease({ reason });
   }
   const providedToken = token ?? process.env.ADVISOR_LOCK_TOKEN ?? null;
   if (providedToken !== null && owner.token !== undefined && providedToken === owner.token) {
@@ -258,6 +301,11 @@ function main() {
       }
       if (r.reason === 'not-owner') {
         console.error(`release refused: not-owner (holder pid ${r.owner?.pid}, host ${r.owner?.host}) — usa --token <t> o --force`);
+        process.exit(1);
+      }
+      if (r.reason === 'no-owner-file' || r.reason === 'corrupt-owner') {
+        const detalle = r.reason === 'no-owner-file' ? 'no hay owner.json' : 'owner.json ilegible';
+        console.error(`release refused: ${r.reason} (${detalle}; no se puede comprobar token ni pid+host) — usa --force para liberarlo`);
         process.exit(1);
       }
       console.error(`release failed: ${r.error || r.reason}`);

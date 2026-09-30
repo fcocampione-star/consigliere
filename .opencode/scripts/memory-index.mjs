@@ -18,15 +18,29 @@
  * registro neutro de memory-stats, memory-rotate (rotate/migrate-markers), para
  * que el proceso anfitrión no sirva entradas stale. Se mantiene el fingerprint
  * path+mtime+size (decisión P3.1: NO hash de contenido para freshness).
+ * v4 (bugs reales):
+ *  - `get` imprime el CUERPO de la entrada, no solo la línea de heading: la
+ *    búsqueda del bloque pasa a usar el parser de región del propio módulo
+ *    (entriesRegion + parseRegion tolerante, el mismo de parseEntries) en vez de
+ *    un regex con flag `m` cuyo ancla `$` cortaba el match en el primer salto de
+ *    línea (ver entryBody).
+ *  - Los ids de PROJECT_STATE §2 se derivan con `slugId` (hash sha1 del texto
+ *    completo) en vez de truncar la línea: dos decisiones con prefijo común ya no
+ *    colisionan ni se persisten duplicadas en el índice.
+ *  - `search` puntúa y ORDENA SIEMPRE por score (con índice fresco o stale): el
+ *    texto era idéntico en contenido pero distinto en orden según el estado del
+ *    índice persistido. El aviso de índice stale tiene una única fuente
+ *    (liveEntries), no dos copias del mismo mensaje.
+ *  - Toda escritura a disco es atómica (temp + rename en el mismo directorio).
  * Uso:
  *   node memory-index.mjs search "query" [--json] [--refresh]
  *   node memory-index.mjs timeline <id-or-date>  (date YYYY-MM-DD o índice)
  *   node memory-index.mjs get <id-or-date>
  *   node memory-index.mjs list [--json]
  */
-import { readFileSync, existsSync, readdirSync, statSync, mkdirSync, writeFileSync } from 'node:fs';
-import { createHash } from 'node:crypto';
-import { join } from 'node:path';
+import { readFileSync, existsSync, readdirSync, statSync, mkdirSync, writeFileSync, renameSync, rmSync } from 'node:fs';
+import { createHash, randomBytes } from 'node:crypto';
+import { join, dirname, basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { entriesRegion, sectionText, registerCacheInvalidator } from './memory-stats.mjs';
 import { headingToId, parseRegion } from './memory-rotate.mjs';
@@ -111,7 +125,15 @@ function allEntries() {
     const lines = sectionText(c, 2).split('\n').filter(l=>l.trim().startsWith('- '));
     for (const l of lines) {
       const topic = (l.match(/topic:\s*([a-z0-9\/\-]+)/i)||[])[1]||null;
-      out.push({ id: `state--${l.slice(2,40).replace(/[^a-z0-9]+/gi,'-')}`, date: 'state', title: l.slice(2,80).trim(), topic, source: 'PROJECT_STATE.md §2', preview: l.slice(0,160) });
+      // FIX: el id se truncaba a 38 caracteres de la línea SIN hash, así que dos
+      // decisiones con un prefijo largo común («Harness-only sin runtime de app:
+      // Node >=20.11 ESM…») producían el MISMO id y el índice persistía duplicados
+      // (el propio comentario de `slugId` declara que eso no debe pasar). Se enruta
+      // por `slugId`, que añade el hash sha1 del texto COMPLETO: `date` sigue siendo
+      // 'state', así que el prefijo `state--` se conserva. `title` mantiene su
+      // truncado de display histórico (primeros 80 chars); la identidad usa el texto
+      // entero, sin la viñeta «- ».
+      out.push({ id: slugId('state', l.trim().replace(/^-\s+/, '')), date: 'state', title: l.slice(2,80).trim(), topic, source: 'PROJECT_STATE.md §2', preview: l.slice(0,160) });
     }
   }
   _entriesCache = { key, entries: out };
@@ -177,10 +199,25 @@ function loadIndex() {
   } catch { return null; }
 }
 
+// Escritura atómica temp+rename en el MISMO directorio (mismo criterio que
+// memory-rotate.mjs): un lector concurrente nunca ve el fichero a medio escribir y
+// dos escritores no pueden pisarse el rename (EPERM/EBUSY en Windows, escritura
+// sobre un inode ya sustituido en POSIX).
+function writeAtomic(file, content) {
+  const tmp = join(dirname(file), `.${basename(file)}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`);
+  try {
+    writeFileSync(tmp, content, 'utf8');
+    renameSync(tmp, file);
+  } catch (e) {
+    try { rmSync(tmp, { force: true }); } catch { /* best-effort */ }
+    throw e;
+  }
+}
+
 function writeIndex() {
   mkdirSync(join(ROOT, '.advisor'), { recursive: true });
   const data = { version: INDEX_VERSION, generatedAt: new Date().toISOString(), fingerprint: fingerprint(), entries: allEntries() };
-  writeFileSync(INDEX_FILE, JSON.stringify(data, null, 2), 'utf8');
+  writeAtomic(INDEX_FILE, JSON.stringify(data, null, 2));
   return data;
 }
 
@@ -190,11 +227,43 @@ function matches(e, q) {
   return (e.title + ' ' + e.preview + ' ' + (e.topic || '')).toLowerCase().includes(q);
 }
 
-function freshEntries() {
+// Aviso de índice stale. Fuente ÚNICA del mensaje (antes estaba copiado: una vez
+// en `freshEntries` y otra dentro de `search`), de modo que una corrida nunca lo
+// puede imprimir dos veces.
+const STALE_NOTE = '⚠️ memory-index.json desactualizado (stale) — fallback md+grep.';
+
+// Entradas vivas para search/timeline/get: índice persistido si es fresh y, si no,
+// re-parseo md+grep con un único aviso por stderr. `fromIndex` informa de qué modo
+// se sirvió la lista (el ranking ya no depende de él).
+function liveEntries() {
   const loaded = loadIndex();
-  if (loaded && loaded.fresh) return loaded.data.entries;
-  if (loaded) console.error('⚠️ memory-index.json desactualizado (stale) — fallback md+grep.');
-  return allEntries();
+  if (loaded && loaded.fresh) return { entries: loaded.data.entries, fromIndex: true };
+  if (loaded) console.error(STALE_NOTE);
+  return { entries: allEntries(), fromIndex: false };
+}
+
+// Cuerpo íntegro de la entrada `hit` (heading + campos + prosa), localizándolo con
+// el parser de región del propio módulo: `entriesRegion` acota la región de
+// entradas (mismo criterio que parseEntries, fallback whole-file si los marcadores
+// están rotos) y `parseRegion(..., {tolerant:true})` devuelve los bloques con su
+// texto. El id se deriva con la MISMA expresión que parseEntries (`headingToId` del
+// heading, con `slugId` de respaldo), así que la identidad coincide bloque a bloque.
+// Antes `get` usaba un regex `## <fecha>[\s\S]*?(?=\n## …|$)` con flag `m`: en modo
+// multilínea el ancla de fin de línea casa TAMBIÉN en cada salto de línea, así que el
+// match perezoso terminaba en la propia línea del heading y `get` devolvía solo el
+// heading, rompiendo el flujo documentado search → timeline → get.
+function entryBody(hit, text) {
+  let region;
+  try { region = entriesRegion(text).region; }
+  catch { region = text; }
+  const { entries: blocks } = parseRegion(region, { tolerant: true });
+  const id = String(hit.id || '');
+  const byId = blocks.find((b) => (headingToId(b.text.split('\n', 1)[0]) || slugId(b.date, b.title)) === id);
+  if (byId) return byId.text;
+  // Respaldo: el bloque puede haber cambiado de posición/título entre el índice y
+  // el fichero, pero fecha + título siguen localizándolo.
+  const byTitle = blocks.find((b) => b.date === hit.date && b.title === hit.title);
+  return byTitle ? byTitle.text : null;
 }
 
 function main() {
@@ -206,18 +275,16 @@ function main() {
       if (!arg) { console.error('Uso: memory-index.mjs search "query" [--json] [--refresh]'); process.exit(1); }
       if (process.argv.includes('--refresh')) writeIndex();
       const q = arg.toLowerCase();
-      const loaded = loadIndex();
-      let hits;
-      if (loaded && loaded.fresh) {
-        hits = loaded.data.entries
-          .filter(e => matches(e, q))
-          .map(e => ({ ...e, score: score(e, arg) }))
-          .sort((a, b) => b.score - a.score);
-      } else {
-        if (loaded) console.error('⚠️ memory-index.json desactualizado (stale) — fallback md+grep.');
-        hits = allEntries().filter(e => matches(e, q));
-        if (json) hits = hits.map(e => ({ ...e, score: score(e, arg) }));
-      }
+      const { entries } = liveEntries();
+      // Ranking ÚNICO: el score se adjunta y se ordena SIEMPRE, haya índice fresco
+      // o no. Antes solo la rama con índice fresco puntuaba y ordenaba; el fallback
+      // md+grep (y el `--json` de esa rama) devolvía los hits en orden de archivo,
+      // así que la MISMA consulta salía ordenada o sin ordenar según el estado del
+      // índice persistido. El texto ya no depende del modo (solo del contenido).
+      const hits = entries
+        .filter((e) => matches(e, q))
+        .map((e) => ({ ...e, score: score(e, arg) }))
+        .sort((a, b) => b.score - a.score);
       if (json) console.log(JSON.stringify(hits,null,2));
       else {
         if (!hits.length) console.log(`Sin resultados para "${arg}".`);
@@ -228,8 +295,12 @@ function main() {
     case 'timeline':
     case 'get': {
       if (!arg) { console.error(`Uso: memory-index.mjs ${cmd} <id-or-date>`); process.exit(1); }
-      const entries = freshEntries();
-      const hit = entries.find(e=>e.id===arg || e.date===arg || e.title.toLowerCase().includes(arg.toLowerCase()));
+      const { entries } = liveEntries();
+      const want = arg.toLowerCase();
+      // El id se compara también en minúsculas: los ids de PROJECT_STATE §2 ahora
+      // salen de `slugId` (minúsculas) mientras que los antiguos iban con el caso
+      // original, y un id pegado desde una salida previa debe seguir resolviendo.
+      const hit = entries.find(e=>e.id===arg || e.id.toLowerCase()===want || e.date===arg || e.title.toLowerCase().includes(want));
       if (!hit) { console.error(`No encontrado: ${arg}. Prueba: search "query"`); process.exit(1); }
       // for get, dump full file section
       let text='';
@@ -243,10 +314,12 @@ function main() {
           console.log(`# PROJECT_STATE.md §2 — ${hit.title}\n${sec2.trim().slice(0,2000)}`);
           break;
         }
-        // extract block of this entry
-        const re = new RegExp(`##\\s+${hit.date.replace(/-/g,'\\-')}[\\s\\S]*?(?=\\n##\\s+\\d{4}-\\d{2}-\\d{2}|$)`, 'm');
-        const m = text.match(re);
-        console.log(m?m[0].trim(): text.slice(0,2000));
+        // Bloque completo de la entrada (heading + topic/review_after + los campos
+        // de sesión), localizado con el parser de región. Degradación: si la fuente
+        // ya no parsea (marcadores rotos, entrada que salió del índice), se
+        // conserva el volcado de cabecera en vez de no mostrar nada.
+        const body = entryBody(hit, text);
+        console.log(body !== null ? body.trim() : text.slice(0,2000));
       } else {
         console.log(`# ${hit.id} [${hit.source}] topic:${hit.topic||'-'}`);
         console.log(hit.preview);
