@@ -23,10 +23,10 @@
  *  - `--dry-run` no escribe nada (init.mjs:727-732), tampoco crea el destino.
  *  - Destino inexistente: se crea con `mkdirSync(recursive)` (init.mjs:735).
  *  - `--help`/`--version` salen con 0 (init.mjs:601-602, 488-537).
- *  - BUG CARACTERIZADO (no corregido aqui): un flag desconocido solo emite un
- *    `warn` (init.mjs:649-651) y CONTINUA. Sin destino falla por falta de
- *    destino (exit 1 + uso, init.mjs:655), pero CON destino instala igual y
- *    sale con 0. Ver test 'flag desconocido con destino...'.
+ *  - Un flag desconocido es un error de uso: `init.mjs <dir> --flag-inexistente`
+ *    sale con 1 y NO escribe nada (parseo por tabla de flags). Sin destino el
+ *    mismo flag avisa, imprime el uso y sale con 1 por falta de destino.
+ *    Ver test 'flag desconocido CON destino...' y 'flag desconocido SIN destino...'.
  *
  * Sobre placeholders: `renderFile` sustituye por splicing de texto crudo
  * (init.mjs:147-156), asi que un marcador desconocido sobrevive tal cual. El
@@ -388,16 +388,18 @@ test('flag desconocido SIN destino: exit 1 con aviso y uso', () => {
   }
 });
 
-test('flag desconocido CON destino: NO se rechaza (bug caracterizado, init.mjs:649-651)', () => {
+test('flag desconocido CON destino: exit 1 y no escribe nada (rechazo por flag desconocido)', () => {
   const base = tmpdir('advisor-init-flag2');
   const dir = join(base, 'proyecto');
   try {
     const res = instalar([dir, '--flag-inexistente', ...SIN_RED], base);
-    // Comportamiento REAL (no el deseado): solo un warn, sigue instalando.
-    eq(res.status, 0, salida(res, 'BUG: con destino el flag desconocido no aborta'));
-    match(res.out, /Flag desconocido/, salida(res, 'debe al menos avisar del flag desconocido'));
-    assert(esDir(dir), 'el instalador sigue y crea el destino pese al flag desconocido');
-    assertArbolBase(dir);
+    // Comportamiento CORRECTO (tabla de flags): un token `--x` no es un destino,
+    // así que se rechaza el comando entero (exit 1 = uso/validación) y no se
+    // genera nada. Antes solo avisaba e instalaba igual con exit 0.
+    eq(res.status, 1, salida(res, 'flag desconocido con destino debe abortar'));
+    match(res.out, /Flag desconocido/, salida(res, 'debe nombrar el flag desconocido'));
+    assert(!existe(join(dir, 'AGENTS.md')), 'un flag desconocido no debe generar archivos');
+    assert(!esDir(dir), 'un flag desconocido no debe crear el directorio destino');
   } finally {
     cleanup(base);
   }
