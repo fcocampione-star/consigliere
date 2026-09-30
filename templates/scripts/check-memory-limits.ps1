@@ -1,6 +1,11 @@
 ﻿# ADVISOR — Verificación de límites de memoria persistente (Windows PowerShell).
 # Equivalente a check-memory-limits.sh para proyectos en Windows puro.
 #
+# NOTA: el conteo usa `Measure-Object -Line`, que EXCLUYE líneas vacías, así que
+# subcuenta frente al `wc -l` del hermano bash (47 vs 70 líneas en este repo).
+# Los umbrales (100/150/15) y los exit codes son los mismos; la rotación canónica
+# la decide el motor `memory-rotate.mjs` (`contentLines` entre ADVISOR:ENTRIES).
+#
 # Uso:
 #   powershell -File .\scripts\check-memory-limits.ps1
 #   powershell -ExecutionPolicy Bypass -File scripts\check-memory-limits.ps1
@@ -12,6 +17,7 @@ if (-not $projectRoot) { $projectRoot = (Get-Location).Path }
 
 $projectState = Join-Path $projectRoot "PROJECT_STATE.md"
 $summary = Join-Path $projectRoot "SUMMARY.md"
+$manifest = Join-Path $projectRoot ".advisor/memory-manifest.json"
 
 function Write-Ok($msg) { Write-Host "✅ $msg" -ForegroundColor Green }
 function Write-Warn($msg) { Write-Host "⚠️  $msg" -ForegroundColor Yellow }
@@ -47,6 +53,20 @@ if (Test-Path $summary) {
   }
 } else {
   Write-Info "SUMMARY.md no existe aún (se creará al registrar el primer progreso)."
+}
+
+# memory-manifest.json (derivado trackeable: <15 líneas)
+if (Test-Path $manifest) {
+  $lines = (Get-Content $manifest | Measure-Object -Line).Lines
+  if ($lines -ge 15) {
+    Write-Warn "memory-manifest.json tiene $lines líneas (límite: <15)."
+    Write-Info "Regenera con 'node .opencode/scripts/memory-sync.mjs buildManifest'."
+    $errors++
+  } else {
+    Write-Ok "memory-manifest.json tiene $lines líneas (dentro del límite de 15)."
+  }
+} else {
+  Write-Info "memory-manifest.json no existe aún (se genera con 'node .opencode/scripts/memory-sync.mjs buildManifest')."
 }
 
 Write-Host ""

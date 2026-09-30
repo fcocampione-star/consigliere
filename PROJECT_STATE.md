@@ -8,7 +8,7 @@
 
 | Fase | Descripción | Estado |
 |------|-------------|--------|
-| Fase 0 Bootstrap — Harness CLI por proyecto | Harness-only: Node >=18 ESM + Bash 4+ / PowerShell 5.1+ + git/tar; memoria 3 capas md+grep (PROJECT_STATE/SUMMARY/CHANGELOG), routing orgánico y SDD-lite integrados | ✅ Completada |
+| Fase 0 Bootstrap — Harness CLI por proyecto | Harness-only: Node >=20.11 ESM (usa `import.meta.dirname`) + Bash 4+ / PowerShell 5.1+ + git/tar; memoria 3 capas md+grep (PROJECT_STATE/SUMMARY/CHANGELOG), routing orgánico y SDD-lite integrados | ✅ Completada |
 
 > Próximo hito: Fase 1 — validar harness en proyecto demo (init.mjs --upgrade, doctor 20 (variable por condicionales §2/topic/manifest/index), flujo /discover → /routine → /record).
 
@@ -16,7 +16,7 @@
 
 ## 2. Decisiones de diseño (append-only, consolidadas, con review_after)
 
-- Harness-only sin runtime de app: Node >=18 ESM + Bash/PowerShell + git/tar; sin DB/app server, scaffolding por proyecto vía init.mjs/init.sh/init.ps1 [topic: architecture/harness-scope] review_after: 2026-12-03
+- Harness-only sin runtime de app: Node >=20.11 ESM (usa `import.meta.dirname`) + Bash/PowerShell + git/tar; sin DB/app server, scaffolding por proyecto vía init.mjs/init.sh/init.ps1 [topic: architecture/harness-scope] review_after: 2026-12-03
 - Memoria 3 capas md+grep (PROJECT_STATE/SUMMARY/CHANGELOG) con búsqueda md+grep y cache fingerprint; SQLite solo fallback [topic: architecture/stack-md-grep] review_after: 2026-12-03
 - Skill loader con cache fingerprint `.advisor/skill-registry.cache.json` (path+mtime+size) y chunks urls/patterns/shortcuts/examples/commands bajo demanda [topic: dx/skill-loader-cache] review_after: 2026-12-03
 - Copia legacy `consigliere/` anidada ignorada vía `/consigliere/` anclado, no commiteable ni parcheable (append-only) [topic: repo/legacy-ignore] review_after: 2026-12-03

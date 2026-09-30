@@ -94,6 +94,8 @@ const ROOT_ONLY_EXACT = new Set([
   '.opencode/.gitignore',
   '.opencode/scripts/memory-rotate.test.mjs',
   '.opencode/scripts/contract-tests.mjs',
+  '.opencode/scripts/version-check.mjs',
+  'LICENSE',
   'README.md',
   'init.cmd',
   'init.mjs',
@@ -265,6 +267,7 @@ const SCRIPTS_TO_CHECK = [
   '.opencode/scripts/memory-stats.mjs',
   '.opencode/scripts/memory-rotate.mjs',
   '.opencode/scripts/routine-model.mjs',
+  '.opencode/scripts/version-check.mjs',
   '.opencode/skills/_skill-loader/loader.mjs',
 ];
 for (const rel of SCRIPTS_TO_CHECK) {

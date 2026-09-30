@@ -8,6 +8,8 @@
 # cabecera y pie), mientras el motor `memory-rotate.mjs` usa `contentLines`
 # (líneas no vacías entre los marcadores ADVISOR:ENTRIES). La divergencia es
 # intencional: aquí es solo un aviso; la rotación canónica la decide el motor.
+# Ojo: el espejo .ps1 cuenta con `Measure-Object -Line`, que EXCLUYE líneas vacías
+# (subcuenta vs este `wc -l`: 47 vs 70 en este repo). Umbrales y exit codes iguales.
 #
 # Uso:
 #   ./scripts/check-memory-limits.sh          (ejecútalo desde la raíz del proyecto)

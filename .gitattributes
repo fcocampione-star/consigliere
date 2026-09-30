@@ -14,3 +14,10 @@
 /.memory-lock/**  export-ignore
 /.gitignore       export-ignore
 /.gitattributes   export-ignore
+
+# EOL: el harness ejecuta .sh hooks y compara hashes de espejo raíz↔templates
+# en Windows, donde core.autocrlf=true introduciría drift falso y hooks rotos.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf

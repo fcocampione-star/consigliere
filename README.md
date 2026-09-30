@@ -220,7 +220,7 @@ advisor/
 
 | Instalador | Requeridas | Opcionales |
 |---|---|---|
-| `init.mjs` (node) | `node 18+`, `git`, `tar` (requerido para `--upgrade`) | — |
+| `init.mjs` (node) | `node >=20.11` (usa `import.meta.dirname`), `git`, `tar` (requerido para `--upgrade`) | — |
 | `init.sh` | `bash 4+`, `coreutils`, `git`, `tar` (requerido para `--upgrade`) | `node` (autoskills) |
 | `init.ps1` | `PowerShell 5.1+`, `git`, `tar` (requerido para `--upgrade`) | `node` (autoskills) |
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Consigliere 2.0 (Advisor Harness) — Harness de agentes + memoria persistente para opencode.
- * Instalador/generador SOLO por proyecto (Node 18+). Sin instalación global.
+ * Instalador/generador SOLO por proyecto (Node >=20.11). Sin instalación global.
  *
  * Estado vivo en `.advisor/` (sin ramas legacy).
  *
@@ -41,7 +41,15 @@ const PART_MEMORIA = ['PROJECT_STATE.md', 'SUMMARY.md', 'CHANGELOG'];
 const PARTS = ['harness', 'memoria', 'autoskills', 'all'];
 const BACKUP_RE = /^(harness|advisor)-.*\.tgz$/;
 
-if (+process.versions.node.split('.')[0] < 18) { console.error(`❌ Node >=18 requerido. Actual: ${process.versions.node}`); process.exit(1); }
+const MIN_NODE = [20, 11, 0];
+
+function requireNode() {
+  const cur = process.versions.node.split('.').map(Number);
+  const tooOld = MIN_NODE.some((min, i) => (cur[i] || 0) !== min && (cur[i] || 0) < min);
+  if (tooOld) { console.error(`❌ Node >=${MIN_NODE.join('.')} requerido (usa import.meta.dirname). Actual: ${process.versions.node}`); process.exit(1); }
+}
+
+requireNode();
 
 // Colores
 const C = {
@@ -574,8 +582,7 @@ function quickPath(args) {
 }
 
 async function main() {
-  const major = +process.versions.node.split('.')[0];
-  if (major < 18) { console.error(`❌ Node >=18 requerido. Actual: ${process.versions.node}`); process.exit(1); }
+  requireNode();
   const args = process.argv.slice(2);
   const scriptName = basename(fileURLToPath(import.meta.url));
 

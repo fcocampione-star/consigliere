@@ -10,14 +10,14 @@ metadata:
 
 # consigliere — Project Documentation
 
-> Harness CLI por proyecto — Node >=18 ESM + Bash/PowerShell + git/tar, memoria 3 capas md+grep, routing orgánico y SDD-lite.
+> Harness CLI por proyecto — Node >=20.11 ESM (usa `import.meta.dirname`) + Bash/PowerShell + git/tar, memoria 3 capas md+grep, routing orgánico y SDD-lite.
 
 ## 1. Official URLs Table
 
 <!-- CHUNK: urls -->
 | Technology | Official Docs | API Reference | GitHub | Notes |
 |------------|---------------|---------------|--------|-------|
-| Node.js >=18 ESM | https://nodejs.org/docs/latest/api/ | https://nodejs.org/api/esm.html | https://github.com/nodejs/node | ESM native, node --check |
+| Node.js >=20.11 ESM (`import.meta.dirname`) | https://nodejs.org/docs/latest/api/ | https://nodejs.org/api/esm.html | https://github.com/nodejs/node | ESM native, node --check |
 | opencode | https://opencode.ai/docs | https://opencode.ai/docs/cli | https://github.com/sst/opencode | TUI harness, agents/commands |
 | npm advisor-harness | https://www.npmjs.com/package/advisor-harness | https://github.com/fcocampione-star/consigliere#readme | https://github.com/fcocampione-star/consigliere | v2.0.0 via npx advisor-harness@latest |
 | Git SCM | https://git-scm.com/doc | https://git-scm.com/docs/git-init | https://github.com/git/git | git/tar backups keep 5 |

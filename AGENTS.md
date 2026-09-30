@@ -34,7 +34,7 @@
 | Layer | Choice |
 |-------|--------|
 | DB | N/A — Markdown + grep (PROJECT_STATE.md / SUMMARY.md / CHANGELOG/YYYY-MM-DD.md + memory-index.mjs md+grep, cache .advisor/skill-registry.cache.json; sqlite3 solo fallback) |
-| Backend | Node.js >=18 ESM (init.mjs) + Bash 4+ / PowerShell 5.1+ + git/tar — harness CLI (scripts .opencode/scripts/*.mjs, loader.mjs) |
+| Backend | Node.js >=20.11 ESM (usa `import.meta.dirname`) + Bash 4+ / PowerShell 5.1+ + git/tar — harness CLI (scripts .opencode/scripts/*.mjs, loader.mjs) |
 | Frontend | N/A — harness CLI sin UI (genera .opencode/ para opencode TUI; instalador para proyecto vacío) |
 | Auth | N/A — local sin auth; bash harden opencode.json (*:allow, deny rm/dd/mkfs, ask **/.env*/**/*.pem/**/.key/**/secrets/*/~/.ssh/* + git push) |
 | Validation | node --check syntax (npm test = check init.mjs + loader + doctor + memory-index + memory-sync) |
