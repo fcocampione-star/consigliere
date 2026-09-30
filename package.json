@@ -39,7 +39,9 @@
   },
   "homepage": "https://github.com/fcocampione-star/consigliere",
   "scripts": {
-    "test": "node --check init.mjs && node --check templates/.opencode/skills/_skill-loader/loader.mjs && node --check templates/.opencode/scripts/doctor.mjs && node --check templates/.opencode/scripts/memory-index.mjs && node --check templates/.opencode/scripts/memory-sync.mjs && node --check templates/.opencode/scripts/memory-lock.mjs && node --check templates/.opencode/scripts/memory-stats.mjs && node --check templates/.opencode/scripts/memory-rotate.mjs && node .opencode/scripts/memory-rotate.test.mjs && node .opencode/scripts/contract-tests.mjs && echo \"syntax ok v2.0.0\"",
+    "test": "node --check init.mjs && node test/run.mjs && node .opencode/scripts/memory-rotate.test.mjs && node .opencode/scripts/contract-tests.mjs && node .opencode/scripts/version-check.mjs && echo \"harness ok\"",
+    "test:unit": "node test/run.mjs",
+    "test:contract": "node .opencode/scripts/contract-tests.mjs",
     "lint:sh": "bash -n init.sh scripts/check-memory-limits.sh",
     "lint:ps1": "pwsh -NoProfile -Command \"$e=$null; [void][System.Management.Automation.Language.Parser]::ParseFile('init.ps1',[ref]$null,[ref]$e); if($e.Count){$e|%{Write-Error $_}; exit 1}\"",
     "version:check": "node .opencode/scripts/version-check.mjs",
