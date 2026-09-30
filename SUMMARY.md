@@ -7,6 +7,28 @@
 
 <!-- ADVISOR:ENTRIES:START -->
 
+## 2026-09-30 — `lint:sh` cross-platform: el script npm resuelve el intérprete de bash
+
+topic: tools/lint-sh-crossplatform
+review_after: 2027-03-30
+**Goal:** cerrar el pendiente de PATH de `lint:sh` en Windows — el warning ambiental que dejó la Fase 1 no era un problema de entorno tolerable: era un `bash -n` a pelo que moría en cmd.exe aunque el repo estuviera bien.
+**Discoveries:** el bash de Git for Windows vive fuera del PATH de cmd.exe, así que el fallo era ENOENT y no de sintaxis — indistinguible de un `.sh` roto para quien lee el log; y no existía mapa de exit codes: el script npm heredaba el de `bash -n` sin forma de decir "no hay intérprete" (0 ok / 1-2 de bash / 3 sin bash). La CI era el espejo del mismo punto ciego: su bucle `bash -n` solo pasaba porque el runner trae bash en el PATH, así que ni la resolución ni el mapeo de exit codes se ejecutaban en ninguna plataforma. Y al no llevar espejo en `templates/`, el anti-drift exige catalogar el fichero nuevo como `ROOT_ONLY_EXACT` (precedente: `contract-tests.mjs` / `version-check.mjs` / `memory-rotate.test.mjs`).
+**Accomplished:** `lint:sh` pasa a ser un script Node ESM sin deps que resuelve el intérprete en orden `ADVISOR_BASH` → `bash` del PATH → rutas de Git for Windows (solo win32) y sale con exit 3 + mensaje accionable si no aparece ninguno; un override explícito es una orden, no cae al siguiente candidato en silencio. En linux/macos el PATH gana siempre, así que no hay divergencia cross-platform ni cambio de comportamiento respecto a antes. El fichero queda solo en raíz, catalogado en `ROOT_ONLY_EXACT` como "presente solo en raíz a propósito": es tool de dev del repo, no del harness instalado. La CI ejecuta `npm run lint:sh` antes del bucle `bash -n` existente, que sigue cubriendo los 5 `.sh` (no lo sustituye). Decisión durable registrada en §2.
+**Next:** integrar la rama en `main` y dejar correr la CI real de 5 jobs + `pack-smoke`, que sigue siendo lo único sin verificar. Queda un menor knowingly NO arreglado (anotado en §3): `bash scripts/check-memory-limits.sh` en Development commands y los bloques de comandos de `_project-docs/SKILL.md` siguen invocando `bash` a pelo y no funcionan sin bash en el PATH — son comandos para copiar/pegar, no scripts npm, y el paso por el resolutor no aplica.
+**Files:** `git status --porcelain` + `git diff` (el detalle de ficheros está en git, no aquí).
+**Verificación:** PASS — `npm run lint:sh` exit 0 resolviendo `C:\Program Files\Git\bin\bash.exe`; bajo Git Bash simulando el runner de CI también 0; `npm run test:contract` exit 0 (16 checks, +1 por la entrada nueva de `ROOT_ONLY_EXACT`); `doctor --json` exit 0 sin warnings nuevos; `npm test` exit 0 (suite 11/11, rotación 48/48, contrato, `version:check` 2.0.0); ruta negativa con `ADVISOR_BASH` a un path inexistente → exit 3 con el mensaje de arreglo. NO verificado: la CI real en los runners de GitHub Actions.
+
+## 2026-09-30 — Fase 1 completada: validación real en proyecto demo + cierre de la rama
+
+topic: validation/fase-1-demo
+review_after: 2027-03-30
+**Goal:** Ejecutar la Fase 1 pendiente (validar el harness ya instalado en un proyecto demo: `init.mjs`, `--upgrade`, `doctor`) y registrar el veredicto de la verificación completa de la rama `feat/hardening-refactor-ci`.
+**Discoveries:** `--upgrade` sobre destino ya instalado fue un éxito REAL, no un falso: backup `.tgz` de 11 ítems, logs de preservación y el hook existente NO se sobrescribe (se copia a `.advisor/backups/hooks/`); la prueba dura de no-sobrescritura de la memoria del usuario fue un sentinel inyectado en `PROJECT_STATE.md` y `SUMMARY.md` con sha256 IDÉNTICOS antes/después. En el proyecto instalado, `doctor` da 0❌/0⚠️ (5 ℹ️ esperados de recién instalado). Único warning de la sesión: `npm run lint:sh` no es ejecutable en esta máquina porque `bash` no está en el PATH de cmd.exe (existe en `C:\Program Files\Git\bin\bash.exe`); no es defecto de la rama — re-ejecutado con ruta absoluta, `bash -n` sobre `init.sh` y `scripts/check-memory-limits.sh` da OK. Nota menor: la instalación corre `npx autoskills`, que en el demo deja `skills-lock.json` modificado y `.agents/` untracked tras el commit inicial (cosmético).
+**Accomplished:** Fase 1 cerrada (era el pendiente principal). §2 confirmada sin duplicar: runtime/node-floor, installer/node-only, installer/upgrade-split, installer/backup-previo, test/ci-gate y shared-lib ya estaban. Compactada: `repo/legacy-ignore` sale de §2 a `CHANGELOG/DECISIONS-ARCHIVE.md` — superada por el sunset F6 (la copia anidada ya no existe y su regla de ignore salió de `.gitignore`); ese archivo estaba referenciado desde §4/§6 y no existía, así que la referencia colgada pasa a ser real. Pendientes nuevos en §3: CI real en el push y requisito de PATH de bash en Windows.
+**Next:** integrar la rama en `main` con la CI de 5 jobs + `pack-smoke` corriendo de verdad (lo único que la validación local no cubre) y documentar `lint:sh` como requisito de PATH; `DEP0190` (`shell:true` en `init.mjs`) solo se mira si deja de ser preexistente. Revisar §2 en review_after.
+**Files:** `git log --oneline main..HEAD` (14 commits de `feat/hardening-refactor-ci`; el detalle está en git, no aquí).
+**Verificación:** PASS con un warning ambiental — `node --check` 40/40 `.mjs`; `npm test` exit 0 (suite 11/11 ficheros, rotación 48/48, contrato 15/15, `version:check` 2.0.0); `test:unit` 11/11; `test:contract` OK (paridad 40 archivos); `lint:ps1` OK; `version:check` 2.0.0 consistente en 5 ficheros; `check-memory-limits.sh` 81/100 y 56/150; `doctor --json` 19/19 con 0 warnings y 0 errors; `git status --porcelain` limpio. NO verificado: CI (5 jobs) y `pack-smoke` (requieren red/GitHub Actions); el claim "406 tests + 35 checks" no es observable con la granularidad por archivo de la salida; `DEP0190` en `init.mjs:643/651` (`shell:true`) es preexistente, idéntico en `main`.
+
 ## 2026-09-28 — Auditoría + refactor PR-0…PR-7 (instalador, tests, lib, CI)
 
 topic: maintenance/hardening-refactor-ci
@@ -17,17 +39,6 @@ review_after: 2027-03-30
 **Next:** Fase 1 — validar en proyecto demo la puerta nueva (init `--upgrade`, doctor, `/discover` → `/routine` → `/record`) con la rama `feat/hardening-refactor-ci`; rotar SUMMARY al cambiar de semana; revisar §2 en review_after.
 **Files:** `git log --oneline main..HEAD` (rama `feat/hardening-refactor-ci`; el detalle esta en git, no aqui).
 **Verificación:** PASS — `npm test` exit 0: 11/11 ficheros de test (406 tests) + 35 checks de memory-rotate.test.mjs + contract (paridad espejo 40, campos sesión 6, doctor 31, `node --check` 26) + `version:check` 2.0.0. Límites OK: PROJECT_STATE 81/100 y SUMMARY 56/150 (bash y ps1 exit 0); sin rotación (límites bien; el motor solo marcaría la entrada de la semana 2026-09-21).
-
-## 2026-09-23 — Remediación harness de memoria F0–F5
-
-topic: memory/remediation-f0-f5
-review_after: 2026-12-21
-**Goal:** Cerrar 5 fases de remediación del harness de memoria (locking, rotación, sync, routing, anti-drift).
-**Discoveries:** Lock atómico por mkdir sin `flock`/`perl`/`sed`; `mondayOf` UTC único evita divergencias; rotación por lunes de cada entrada hace innecesaria la por-semana; hook post-commit es riesgo de concurrencia → gated off.
-**Accomplished:** F0 commit-ask + stale[] + review_after; F1 lock canónico + helpers stats + motor único + marcadores + shim gated; F2 import idempotente + locking unificado; F3 parser regiones/O(n)/JSON tolerante/ids sin colisión; F4 routing por clase de riesgo + deltas + spec-lite persistida; F5 contract-tests anti-drift. Decisiones §2 actualizadas.
-**Next:** commitear F5 cuando indique; validar demo Fase 1; rotar lunes; revisar en review_after.
-**Files:** `git log --oneline -5` → 63b85ef, 0c95c11, fdb38e7, 47ca385, 34c45ad, 4dd0c28.
-**Verificación:** PASS — npm test 36 checks + contract tests, espejos sincronizados, doctor sin ❌/⚠️ nuevos, límites 65/98/8.
 
 <!-- ADVISOR:ENTRIES:END -->
 
