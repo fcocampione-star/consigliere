@@ -33,6 +33,12 @@ const IS_WIN = platform() === 'win32';
 
 const HOME = homedir();
 const TEMPLATE_DIR = join(HERE, 'templates');
+// Nombre del paquete tal y como lo declara el repo del harness. Lo lee package.json
+// para que un renombrado del paquete no deje el guardián pointing a un nombre muerto.
+const HARNESS_PKG = (() => {
+  try { return JSON.parse(readFileSync(join(HERE, 'package.json'), 'utf8')).name || 'advisor-harness'; }
+  catch { return 'advisor-harness'; }
+})();
 
 // Contrato de códigos de salida: ningún return path sale con un código suelto.
 const EXIT = {
@@ -191,6 +197,33 @@ function preflight({ tar = false } = {}) {
     warn(`No encuentro 'tar': solo se necesita si hay algo que respaldar (--upgrade, --restore, o escribir encima de un destino con harness o memoria), así que aquí la operación sigue sin backup.`);
   }
   if (!hasGit()) warn(`No encuentro 'git': se omiten la inicialización del repo y el hook post-commit.`);
+}
+
+// El harness es su propio consumidor: templates/ se renderiza sobre el repo que
+// lo contiene, y varios ficheros de la raíz divergen de la plantilla A PROPÓSITO
+// (AGENTS.md con el stack real, doctor.mjs con la variante dev, contract-tests,
+// version-check, la suite de test/). Regenerarlos desde templates/ no los actualiza:
+// los pisa con la versión genérica y se pierde trabajo. Detectar el caso y negarse
+// es más barato que un backup que restaura una versión que tampoco quieres.
+function isHarnessSource(target) {
+  if (!existsSync(join(target, 'templates', '.opencode'))) return false;
+  if (!existsSync(join(target, 'init.mjs'))) return false;
+  try {
+    const pkg = JSON.parse(readFileSync(join(target, 'package.json'), 'utf8'));
+    return pkg.name === HARNESS_PKG;
+  } catch { return false; }
+}
+
+function refuseHarnessSource(target) {
+  err(`El destino '${target}' es el propio repo del harness (contiene templates/ y package.json "${HARNESS_PKG}").`);
+  err('Un --upgrade aquí regenera desde templates/ los ficheros que divergen a propósito (AGENTS.md con el stack real, doctor.mjs con la variante dev, contract-tests, version-check, test/) y los pierde.');
+  err('Para instalar en un proyecto de verdad, pasa la ruta del proyecto: node init.mjs <ruta/proyecto>.');
+  if (process.argv.includes('--force')) {
+    warn('--force detectado: continúo sobre el repo del harness. Se hará backup antes de escribir.');
+    return false;
+  }
+  err('Si de verdad quieres regenerarlo, usa --force asumiendo que el backup es tu única red.');
+  die(EXIT.CONFIRMA);
 }
 
 // Estado vivo ---------------------------------------------------------------
@@ -973,6 +1006,8 @@ function installTail(opts) {
   const partTag = scope === 'all' ? '' : ` (--part ${scope})`;
   const conMemoria = scope === 'memoria' || scope === 'all';
   const regeneraConfig = scope === 'harness' || scope === 'all';
+
+  if (scope !== 'autoskills' && isHarnessSource(targetDir)) refuseHarnessSource(targetDir);
 
   let backup = NO_BACKUP;
   if (scope !== 'autoskills') {

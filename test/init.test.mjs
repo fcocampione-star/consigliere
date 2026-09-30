@@ -54,6 +54,14 @@
  *    (scripts/deploy.sh).
  *  - la poda de backups borra por EDAD (timestamp del nombre, parseado), no por
  *    prefijo, y el preflight solo exige tar si hay algo que respaldar.
+ *  - el guardián anti-bucle (init.mjs:208-227): instalar el harness en su PROPIO
+ *    repo (templates/.opencode/ + init.mjs + package.json con el nombre del
+ *    paquete) se NIEGA con exit 2 sin escribir nada; con --force avisa y sigue (con
+ *    su backup previo). Ojo al montar el fixture: sin marca de harness previo
+ *    (.opencode/ o AGENTS.md) un --upgrade sale con 1 por uso ANTES de llegar al
+ *    guardián (init.mjs:1375), y el nombre del paquete sale del package.json del
+ *    repo, no de una constante. Y al revés: un directorio que solo se le parece
+ *    (mismo esqueleto, otro `name`) se instala normal.
  */
 
 import { spawnSync } from 'node:child_process';
@@ -66,7 +74,11 @@ import {
 } from './harness.mjs';
 
 // Instalador y repo derivados de la ubicacion de ESTE archivo (nunca absolutos).
-const INIT = fileURLToPath(new URL('../init.mjs', import.meta.url));
+// ADVISOR_TEST_INIT solo lo usa la verificacion de no-vacuidad del guardián
+// anti-bucle (una COPIA parcheada de init.mjs en un temporal, para comprobar que
+// el test de rechazo falla cuando la deteccion se rompe). En el resto de corridas
+// es el init.mjs de la raíz, sin indirección.
+const INIT = process.env.ADVISOR_TEST_INIT || fileURLToPath(new URL('../init.mjs', import.meta.url));
 const REPO = fileURLToPath(new URL('../', import.meta.url));
 const PKG = JSON.parse(readFileSync(join(REPO, 'package.json'), 'utf8'));
 
@@ -235,6 +247,29 @@ function tgzDe(members) {
   }
   trozos.push(Buffer.alloc(1024)); // dos bloques de fin
   return gzipSync(Buffer.concat(trozos));
+}
+
+// Fixture que imita la raiz del repo del harness, tal y como la detecta
+// isHarnessSource (init.mjs:208): templates/.opencode/ + init.mjs + un
+// package.json cuyo name sea el del paquete del harness. El nombre sale del
+// package.json de ESTE repo (nunca hardcodeado) para que un renombrado del
+// paquete no deje los tests probando otra cosa.
+// Los interruptores quitan UNA condicion cada uno, que es lo que permite
+// comprobar que el guardián decide por la que falta y no por "hay templates/":
+//  - conInit=false: sin init.mjs (y sin la marca de harness previo, que --upgrade
+//    exige en main(): sin .opencode/ ni AGENTS.md un --upgrade sale con 1 por uso,
+//    ANTES de llegar al guardián).
+//  - conAgents=true: AGENTS.md, la marca mínima de "proyecto con harness previo".
+//    También es lo único que hay que respaldar, así que con --upgrade hace falta
+//    tar: sin él, el preflight corta con 3 antes de que el guardián opine.
+function fixtureHarnessSource(parent, nombre, { conInit = true, conAgents = false, dirName = 'harness-falso' } = {}) {
+  const dir = join(parent, dirName);
+  mkdirSync(join(dir, 'templates', '.opencode'), { recursive: true });
+  escribir(join(dir, 'templates', '.opencode', 'nota.txt'), 'contenido de plantilla, da igual lo que sea\n');
+  if (conInit) escribir(join(dir, 'init.mjs'), '// instalador del fixture, cualquier contenido\n');
+  escribir(join(dir, 'package.json'), `${JSON.stringify({ name: nombre, version: PKG.version }, null, 2)}\n`);
+  if (conAgents) escribir(join(dir, 'AGENTS.md'), '# AGENTS del fixture\n\nDivergencia propia que el render puede pisar sin dano.\n');
+  return dir;
 }
 
 // ── Escaneo de placeholders ─────────────────────────────────────────────────
@@ -825,6 +860,95 @@ test('preflight: contenido ajeno al harness sin tar NO bloquea el install; con h
       eq(conHarness.status, 3, salida(conHarness, 'install sobre un destino CON harness sin tar (DEPENDENCIA)'));
       eq(leer(join(dir, 'AGENTS.md')), 'AGENTS PROPIO\n', 'sin backup no se puede escribir nada: AGENTS.md intacto');
     }
+  } finally {
+    cleanup(base);
+  }
+});
+
+// ── Guardián anti-bucle: el harness NO se instala en su propio repo ──────────
+// El hazard es real y ya se demostró: un --upgrade contra este repo regenera
+// desde templates/ los ficheros que divergen a propósito (AGENTS.md con el stack
+// real, la variante dev de doctor.mjs, contract-tests, version-check, test/) y
+// los sustituye por la versión genérica, además de dejar .advisor/backups/ y una
+// opencode.json de la raíz que el .gitignore deja de ignorar. El guardián
+// (init.mjs:208-227) se niega con 2; con --force avisa y sigue.
+test('instalar el harness en su PROPIO repo: exit 2, se explica y no escribe NADA', () => {
+  const base = tmpdir('advisor-init-guardian');
+  const dir = fixtureHarnessSource(base, PKG.name, { conAgents: true });
+  try {
+    // El fixture trae AGENTS.md, que está en BACKUP_ITEMS: el preflight exige
+    // tar antes de que installTail llegue al guardián. Sin tar, exit 3 y el
+    // guardián no se llega a ejecutar: el caso no probaría nada.
+    if (!TAR) { omitir('tar ausente: un --upgrade sobre un destino con harness previo exige backup previo y el preflight corta con 3 antes del guardián'); return; }
+    const antes = instantanea(dir);
+
+    const res = instalar([dir, '--upgrade', ...SIN_RED], base);
+    eq(res.status, 2, salida(res, '--upgrade contra el repo del harness (CONFIRMA)'));
+    match(res.out, /es el propio repo del harness/, salida(res, 'debe decir que el destino es el repo del harness'));
+    match(res.out, /divergen a prop/, salida(res, 'debe explicar qué se regeneraría y se perdería'));
+    match(res.out, /--force/, salida(res, 'debe señalar --force como la salida con confirmación explícita'));
+    match(res.out, /pasa la ruta del proyecto/, salida(res, 'debe recordar que la ruta que se quiere es la de un proyecto'));
+
+    // NADA escrito: ni .advisor/ (ni sus backups) ni un solo byte cambiado.
+    assert(!esDir(join(dir, '.advisor')), 'un rechazo no debe crear .advisor/ en el repo del harness');
+    eq(backupsDe(dir).length, 0, 'un rechazo no debe dejar ningún backup');
+    eq(listar(dir), Object.keys(antes), `el rechazo no debe crear archivos (aparecieron: ${cola(listar(dir).join(', '))})`);
+    eq(instantanea(dir), antes, 'el rechazo no debe cambiar ni un byte del repo del harness');
+  } finally {
+    cleanup(base);
+  }
+});
+
+test('con --force el guardián AVISA y continúa sobre el repo del harness (con backup previo)', () => {
+  const base = tmpdir('advisor-init-guardian-force');
+  const dir = fixtureHarnessSource(base, PKG.name, { conAgents: true });
+  try {
+    // Con --force el guardián NO se niega, así que el install sí llega al backup
+    // previo (obligatorio) y de ahí al render: sin tar no hay caso que probar.
+    if (!TAR) { omitir('tar ausente: con --force el guardián deja pasar el install, que sí hace backup previo'); return; }
+    assert(!esDir(join(dir, '.advisor')), 'precondición: el fixture empieza sin estado vivo');
+
+    const res = instalar([dir, '--upgrade', '--force', ...SIN_RED], base);
+    eq(res.status, 0, salida(res, '--upgrade --force contra el repo del harness'));
+    match(res.out, /--force detectado/, salida(res, 'con --force debe avisar en vez de negarse'));
+    match(res.out, /repo del harness/, salida(res, 'el aviso debe decir sobre qué está continúando'));
+    assert(esDir(join(dir, '.opencode')), 'con --force el harness debe quedar generado en el fixture');
+    eq(backupsDe(dir).length, 1, `y antes de escribir debe haber hecho su backup (hay ${backupsDe(dir).length})`);
+    // El fixture es desechable, pero lo que el render NO regenera (init.mjs y
+    // package.json no están en templates/) debe seguir siendo lo que pusimos.
+    includes(leer(join(dir, 'init.mjs')), 'cualquier contenido', 'el render no debe tocar el init.mjs del fixture (no existe en templates/)');
+    eq(JSON.parse(leer(join(dir, 'package.json'))).name, PKG.name, 'el render no debe tocar el package.json del fixture (no existe en templates/)');
+  } finally {
+    cleanup(base);
+  }
+});
+
+test('el guardián NO se dispara por un directorio que se le parece (sin su nombre de paquete)', () => {
+  const base = tmpdir('advisor-init-guardian-no');
+  // Un caso por cada condición que el guardián exige, quitando una sola: si
+  // sobre-dispara, estos exits dejan de ser 0.
+  const soloTemplates = fixtureHarnessSource(base, 'otro-paquete', { conInit: false, dirName: 'a-solo-templates' });
+  const casiIgual = fixtureHarnessSource(base, 'otro-paquete', { dirName: 'b-casi-igual' });
+  const conHarness = fixtureHarnessSource(base, 'otro-paquete', { conAgents: true, dirName: 'c-con-harness-previo' });
+  try {
+    // a: templates/.opencode/ pero nada de init.mjs. Nada que respaldar, así que
+    // ni siquiera hace falta tar. Destino no vacío -> hace falta --force.
+    const a = instalar([soloTemplates, '--force', ...SIN_RED], base);
+    eq(a.status, 0, salida(a, 'install forzado en un directorio con templates/ y otro paquete'));
+    assertArbolBase(soloTemplates);
+
+    // b: idéntico al repo del harness (templates/.opencode/ + init.mjs) y solo
+    // cambia el `name` del package.json. Nada que respaldar tampoco.
+    const b = instalar([casiIgual, '--force', ...SIN_RED], base);
+    eq(b.status, 0, salida(b, 'install forzado en un directorio igual al harness salvo el nombre del paquete'));
+    assertArbolBase(casiIgual);
+
+    // c: la MISMA invocación que el rechazo (--upgrade sin --force) pero con otro
+    // `name`: aquí solo se diferencia por el nombre, y tiene que instalar.
+    if (!TAR) { omitir('tar ausente: el caso c trae AGENTS.md (harness previo) y un --upgrade exige backup'); return; }
+    const c = instalar([conHarness, '--upgrade', ...SIN_RED], base);
+    eq(c.status, 0, salida(c, '--upgrade sin --force en un directorio con harness previo y otro nombre de paquete'));
+    assertArbolBase(conHarness);
   } finally {
     cleanup(base);
   }

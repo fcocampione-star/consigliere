@@ -43,6 +43,23 @@ El contrato anti-drift (`.opencode/scripts/contract-tests.mjs`) compara **bytes*
 
 Al tocar cualquier par, copia el fichero entero al otro lado en vez de editar los dos a mano: es la forma barata de que el hash siga coincidiendo.
 
+## Este repo es el ORIGEN, no un consumidor: no lo apuntes con el instalador
+
+Los ficheros de la raíz que **no** son copia de `templates/` (`.opencode/`, `AGENTS.md`, la variante de desarrollo de `doctor.mjs`, `contract-tests.mjs`, `version-check.mjs`, `test/`) divergen de la plantilla **a propósito**, y esa divergencia está catalogada en la allowlist del espejo (`ALLOW_DIVERGENCE` / `ROOT_ONLY_EXACT` de `contract-tests.mjs`). Por eso el instalador **nunca** debe recibir la ruta de este repo: un `--upgrade` contra aquí regenera desde `templates/` lo que no es una copia y lo sustituye por la versión genérica de la plantilla — el `AGENTS.md` con la tabla de stack real, el `doctor.mjs` de desarrollo, el doc del comando `/doctor`, la skill `_project-docs`, el `.gitignore`, `scripts/check-memory-limits.sh`. Además se crea `.advisor/backups/` con el backup previo y una `opencode.json` generada en la raíz, y el `.gitignore` regenerado es el de la plantilla, que **no lleva la línea `/opencode.json`** (esa solo existe en el de la raíz) ni las de `.advisor/memory-manifest.json` y `.advisor/chunks/`: el config local y el estado vivo derivado dejan de estar ignorados y un `git add -A` se los lleva al commit. Los backups sí los ignora la plantilla (`.advisor/backups/`), pero aparecen igualmente en tu working tree.
+
+El instalador se defiende: `isHarnessSource` + `refuseHarnessSource` (`init.mjs`) detectan el caso (destino con `templates/.opencode`, `init.mjs` y un `package.json` cuyo `name` sea el del paquete del harness) y **se niegan con exit 2** sin escribir nada. Con `--force` avisa en voz alta y continúa (el backup previo sigue siendo obligatorio: es la única red). Los dos caminos están cubiertos en `test/init.test.mjs`.
+
+**Para ensayar una instalación, en un temporal y nunca aquí:**
+
+```bash
+node init.mjs /tmp/demo --autoskills 3 --git no              # install limpio (no interactivo)
+node init.mjs /tmp/demo --upgrade --autoskills 3 --git no   # la segunda pasada
+```
+
+(`/tmp/demo` = cualquier ruta vacía fuera del repo; en Windows, `%TEMP%\demo`.) Instala en ese directorio, haz el `--upgrade` contra ese proyecto temporal, y lee el resultado ahí. Si lo que quieres probar es el repo en sí, usa `npm test` y el contrato anti-drift, que es la comprobación de la divergencia.
+
+> Recordatorio de la nota 1 de abajo: la `opencode.json` de la raíz está en `.gitignore` **a propósito** — es la config de desarrollo local, nunca se commitea — y por eso `ci.yml` y `release.yml` la siembran desde `templates/opencode.json` antes de correr la suite.
+
 ## Dos notas de mantenimiento de la CI ( quirks deliberados, no son bugs)
 
 1. **La `opencode.json` de la raíz está en `.gitignore` a propósito** (el patrón anclado `/opencode.json`; la pública es `templates/opencode.json`, que sí se trackea). Es config de desarrollo local, así que un checkout limpio de CI **no la trae**, y sin ella `doctor` marca `opencode.json` en error y `test/doctor.test.mjs` falla. Por eso `ci.yml` y `release.yml` siembran el fichero antes de correr la suite (`[ -f opencode.json ] || cp templates/opencode.json opencode.json`). Es un fichero de trabajo: nunca se commitea.

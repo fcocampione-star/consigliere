@@ -178,6 +178,45 @@ for (const r of tplFiles) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 3b. Placeholders de plantilla: los que el renderizador sustituye al instalar
+// ─────────────────────────────────────────────────────────────────────────────
+// init.mjs sustituye {{VAR}} por sustitución de cadena en cada archivo que
+// renderiza. Si una plantilla DOCUMENTA un placeholder real entre llaves, al
+// instalar deja de documentarlo y pasa a containner el valor del proyecto: la
+// skill _skill-loader decía "solo cambian placeholders {{PROJECT_NAME}}" y en
+// cada proyecto instalado quedaba "solo cambian placeholders consigliere".
+// Una plantilla no puede citar una variable real con llaves literales salvo en
+// los sitios de sustitución de verdad, y esa lista se cataloga aquí con su motivo.
+const TEMPLATE_VARS = [
+  'PROJECT_NAME', 'STACK_DB', 'STACK_BACKEND', 'STACK_FRONTEND', 'STACK_AUTH',
+  'STACK_VALIDATION', 'STACK_DEPLOY', 'DEV_COMMANDS', 'LANG_BACKEND',
+  'MODEL_ADVISOR', 'MODEL_PLANNER', 'MODEL_BUILDER', 'MODEL_VERIFIER',
+  'MODEL_CRITIC', 'MODEL_SUMMARIZER', 'MODEL_EXPLORE',
+];
+const PLACEHOLDER_SITES = {
+  'AGENTS.md': 'stack, comando de validación y modelos del proyecto instalado (10)',
+  'opencode.json': 'los 7 agent.*.model que rellena el instalador',
+  'PROJECT_STATE.md': 'nombre del proyecto en la cabecera de memoria',
+  '.opencode/agents/advisor.md': 'el advisor se presenta como agente del proyecto',
+  '.opencode/skills/_project-docs/SKILL.md': 'descripción y título de la skill de docs del proyecto',
+};
+{
+  const re = new RegExp(`\\{\\{(?:${TEMPLATE_VARS.join('|')})\\}\\}`, 'g');
+  let drift = 0;
+  for (const rel of tplFiles) {
+    const hits = (read(join(TPL, rel)) || '').match(re);
+    if (!hits) continue;
+    if (rel in PLACEHOLDER_SITES) {
+      pass('placeholders', `templates/${rel} — ${PLACEHOLDER_SITES[rel]}`);
+      continue;
+    }
+    fail('placeholders', `templates/${rel} usa ${[...new Set(hits)].join(', ')} sin ser sitio de sustitución: el instalador lo sobrescribirá con el valor del proyecto`);
+    drift++;
+  }
+  if (drift === 0) pass('placeholders', 'ninguna plantilla cita una variable real fuera de sus sitios de sustitución');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // 4. commit-ask: los commits se proponen (ask), nunca automáticos
 // ─────────────────────────────────────────────────────────────────────────────
 const GIT_PATTERNS = ['git commit*', 'git amend*', 'git push*'];
