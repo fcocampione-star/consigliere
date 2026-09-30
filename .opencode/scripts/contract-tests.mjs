@@ -77,6 +77,8 @@ const ALLOW_DIVERGENCE = {
     'raíz es específica del proyecto (consigliere, comandos dev); la plantilla es genérica con placeholders.',
   'AGENTS.md':
     'raíz describe este repo; la plantilla usa placeholders {{STACK_*}}/{{DEV_COMMANDS}} + sentinel ADOPTION-STACK.',
+  'opencode.json':
+    'config dev de la raíz (gitignored) con {{MODEL_*}} resueltos a cadena vacía; la plantilla conserva los placeholders.',
   'PROJECT_STATE.md':
     'memoria viva del proyecto vs plantilla limpia (memoria no se espeja 1:1).',
   'SUMMARY.md':

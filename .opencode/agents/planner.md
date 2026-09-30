@@ -13,7 +13,9 @@ permission:
     "git status*": allow
     "git diff*": allow
     "git log*": allow
-  task: deny
+  task:
+    "*": deny
+    explore: allow
 ---
 
 # Planner

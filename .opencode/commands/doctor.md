@@ -15,6 +15,6 @@ Ejecuta diagnóstico del harness Advisor 2.0. Revisa (read-only, sin editar):
 7. Directorio: `CHANGELOG/`, `.advisor/backups/`, `.advisor/chunks/` existen, `.advisor/skill-registry.cache.json` v2 válido si existe.
 8. Git: `git status` limpio, `git log --oneline -5` (manual, no en `doctor.mjs`).
 
-También ejecuta `node .opencode/scripts/doctor.mjs` si existe para chequeo programático (16-17 checks, variable por condicionales §2/topic/manifest/index).
+También ejecuta `node .opencode/scripts/doctor.mjs` si existe para chequeo programático (20 checks, variable por condicionales §2/topic/manifest/index).
 
 Devuelve tabla: Check | Estado (✅/⚠️/❌) | Detalle | Fix sugerido (no aplicar). No edites nada.

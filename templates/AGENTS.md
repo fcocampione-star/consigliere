@@ -19,12 +19,13 @@
 
 ## Agent pipeline (Consigliere 2.0 (Advisor Harness) — routing orgánico + SDD-lite)
 
+- Custom agents live in `.opencode/agents/`; commands in `.opencode/commands/`.
 - `advisor` is the **primary** agent (Tab) que coordina: siempre lee `PROJECT_STATE.md` primero, luego aplica **routing orgánico** por **clase de riesgo**: esquema/auth/contrato/migración/irreversible/arquitectura → `delegated`/`spec-lite`; riesgo bajo → `direct`; el **conteo de files es solo desempate** (`spec-lite` ante ambigüedad duradera → spec ≤650w Given/When/Then).
 - **One level of depth** (advisor delega); leaf agents `task: deny` (except `planner→explore` depth 2).
 - **Models**: per-agent `model:` en `opencode.json` (placeholders `{{MODEL_*}}` → cheap=verifier/summarizer/explore, strong=builder/planner/critic).
 - **Builder safety**: bash harden `*: allow`, `deny` irreparable + `ask` sensibles (`**/.env*`, `**/*.pem`, `**/*.key`, `**/secrets/*`, `~/.ssh/*`, `git commit/amend/push`).
 - **Commits proposed, never automatic** (`git commit/push/amend → ask`) y **solo tras cerrar memoria**: si hubo cambios, primero `/record` (paso `summarizer`) — el summarizer es el cierre; nunca propongas commit con la memoria sin registrar.
-- Quick commands: `/discover [foco]`, `/routine <tarea> [--parallel --skip-verify --skip-critic]`, `/record <contexto>` (6 campos + topic), `/review`, `/modo <educador|practicante|copiloto|auto>`.
+- Quick commands: `/discover [foco]`, `/routine <tarea> [--parallel --skip-verify --skip-critic]` (routing+spec-lite integrado), `/doctor`, `/record <contexto>` (6 campos + topic), `/review`, `/rotate-memory`, `/compact-state`, `/modo <educador|practicante|copiloto|auto>`.
 - **Comunicación adaptativa**: Advisor detecta nivel por señales (educador→copiloto), nunca pregunta nivel; reglas anti-molestia en `advisor.md §8`.
 
 ## Stack
