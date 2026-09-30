@@ -17,7 +17,7 @@
 ## 2. Decisiones de diseño (append-only, consolidadas, con review_after)
 
 - Harness-only sin runtime de app: Node >=20.11 ESM (usa `import.meta.dirname`) + Bash/PowerShell + git/tar; sin DB/app server, scaffolding por proyecto vía init.mjs/init.sh/init.ps1 [topic: architecture/harness-scope] review_after: 2026-12-03
-- Memoria 3 capas md+grep (PROJECT_STATE/SUMMARY/CHANGELOG) con búsqueda md+grep y cache fingerprint; SQLite solo fallback [topic: architecture/stack-md-grep] review_after: 2026-12-03
+- Memoria 3 capas md+grep (PROJECT_STATE/SUMMARY/CHANGELOG) con búsqueda md+grep y cache fingerprint; sin base de datos ni fallback SQLite [topic: architecture/stack-md-grep] review_after: 2026-12-03
 - Skill loader con cache fingerprint `.advisor/skill-registry.cache.json` (path+mtime+size) y chunks urls/patterns/shortcuts/examples/commands bajo demanda [topic: dx/skill-loader-cache] review_after: 2026-12-03
 
 ---
@@ -48,7 +48,7 @@
 
 | Patrón | Archivo/Ejemplo | Descripción |
 |--------|-----------------|-------------|
-| memory/search | `node .opencode/scripts/memory-index.mjs search "query"` → `timeline <id>` → `get <id>` | Búsqueda md+grep progresiva sin SQLite (fallback sqlite3 opcional) |
+| memory/search | `node .opencode/scripts/memory-index.mjs search "query"` → `timeline <id>` → `get <id>` | Búsqueda md+grep progresiva, cero dependencias (sin DB) |
 | skill/chunk-load | `node .opencode/skills/_skill-loader/loader.mjs chunk "_project-docs" urls,patterns` | Carga solo chunks necesarios para ahorrar tokens |
 
 ---
