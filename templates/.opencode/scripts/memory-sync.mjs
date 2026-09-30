@@ -28,13 +28,18 @@
  *   node memory-sync.mjs buildManifest   # solo manifest
  *   node memory-sync.mjs buildIndex      # solo índice
  *   Exit: 0 ok · 1 uso inválido/error · 3 lock de memoria ocupado.
+ * v5 (adopción de la lib compartida, sin cambio de comportamiento): `isMain`,
+ *  `readText`, `writeAtomic`, `field`, `sectionText`, `listChangelog` y `todayUTC`
+ *  vienen de lib/. Se mantiene el ROOT local (core.REPO_ROOT apunta a
+ *  `.opencode/`) y la lectura cruda del CHANGELOG destino del import, que se
+ *  vuelve a escribir tal cual.
  */
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, statSync, renameSync, rmSync } from 'node:fs';
-import { randomBytes } from 'node:crypto';
-import { join, dirname, basename } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { existsSync, readFileSync, mkdirSync, readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+import { isMain, readText, writeAtomic } from './lib/core.mjs';
+import { field, listChangelog, sectionText, todayUTC } from './lib/md.mjs';
 import { allEntries, fingerprint, isFresh, writeIndex, slugId, INDEX_VERSION, invalidateEntriesCache } from './memory-index.mjs';
-import { mondayOf, entriesRegion, sectionText } from './memory-stats.mjs';
+import { mondayOf, entriesRegion } from './memory-stats.mjs';
 import { acquireLock, releaseLock } from './memory-lock.mjs';
 // Dedup/normalización compartidos con el motor: una sola fuente de verdad para
 // identificar entradas (`fecha--título normalizado`, case-insensitive y
@@ -42,6 +47,8 @@ import { acquireLock, releaseLock } from './memory-lock.mjs';
 // índice de ids del destino (`entryIds`, cross-run O(1) por entrada).
 import { appendToChangelog, normalize, parseEntryHeading, parseRegion, headingToId, entryIds } from './memory-rotate.mjs';
 
+// Raíz del repo = dos niveles por encima de scripts/. NO es core.REPO_ROOT: ese
+// se resuelve desde lib/ y cae en `.opencode/`, un nivel más abajo.
 const ROOT = join(import.meta.dirname, '..', '..');
 const ADVISOR_DIR = join(ROOT, '.advisor'); // escritura siempre aquí
 const CHUNKS_DIR = join(ADVISOR_DIR, 'chunks');
@@ -61,19 +68,9 @@ const MANIFEST_VERSION = 1;
 // quien lo reintente sepa que debe esperar y no que la memoria esté corrupta).
 const LOCK_BUSY_EXIT = 3;
 
-// Escritura atómica temp+rename en el MISMO directorio (mismo criterio que
-// memory-rotate.mjs). El temporal lleva pid+random para que dos escritores no se
-// pisen el nombre; si el rename falla, el temporal se borra y el error sube.
-function writeAtomic(file, content) {
-  const tmp = join(dirname(file), `.${basename(file)}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`);
-  try {
-    writeFileSync(tmp, content, 'utf8');
-    renameSync(tmp, file);
-  } catch (e) {
-    try { rmSync(tmp, { force: true }); } catch { /* best-effort */ }
-    throw e;
-  }
-}
+// Escritura atómica: la de lib/core.mjs (temp de nombre único + rename con
+// reintentos acotados, validando el JSON del temporal antes de renombrar). Antes
+// cada módulo tenía la suya, sin reintentos.
 
 // Envuelve el trabajo que MUTA el corpus en el lock canónico (memory-lock.mjs),
 // igual que hace memory-rotate.rotate/migrateMarkers: acquire con token propio,
@@ -105,7 +102,7 @@ function exportChunksBajoLock(force=false) {
   invalidateEntriesCache();
   const entries=[];
   if (existsSync(SUMMARY)) {
-    const text = readFileSync(SUMMARY,'utf8');
+    const text = readText(SUMMARY);
     // Parseo por REGIÓN (marcadores) + parser tolerante del motor: una sola
     // fuente de verdad, alineada con el índice y con import. Complejidad O(n).
     const { region } = entriesRegion(text);
@@ -114,7 +111,7 @@ function exportChunksBajoLock(force=false) {
     // (antes: re-leer+re-escribir el JSON de la semana por cada bloque → O(n²)).
     const byFile = new Map(); // file → { arr, ids }
     for (const b of blocks) {
-      const date = /^\d{4}-\d{2}-\d{2}$/.test(b.date) ? b.date : new Date().toISOString().slice(0,10);
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(b.date) ? b.date : todayUTC();
       const monday = mondayOf(date);
       const file = join(CHUNKS_DIR, `${monday}.json`);
       if (!byFile.has(file)) {
@@ -135,7 +132,7 @@ function exportChunksBajoLock(force=false) {
   }
   if (existsSync(STATE)) {
     const file = join(CHUNKS_DIR, `state.json`);
-    const body = readFileSync(STATE,'utf8');
+    const body = readText(STATE);
     writeAtomic(file, JSON.stringify({ exportedAt: new Date().toISOString(), body }, null, 2));
   }
   console.log(`Export: ${entries.length} bloques ${force?'forzados':'nuevos'} → ${CHUNKS_DIR}${force?' (--force)':''}`);
@@ -175,6 +172,9 @@ function importChunksBajoLock() {
   const seen = new Set(); // dedup intra-ejecución por id canónico `fecha--título normalizado`
   for (const [destRel, group] of byDest) {
     const changelog = join(ROOT, destRel);
+    // Lectura CRUDA a propósito: `appendToChangelog` devuelve este mismo texto
+    // como prefijo del archivo reescrito, así que normalizarlo aquí (readText)
+    // reescribiría los finales de línea de todo el CHANGELOG ya archivado.
     const before = existsSync(changelog) ? readFileSync(changelog, 'utf8') : '';
     // Dedup cross-run O(1): indexa UNA vez los ids canónicos ya presentes en el
     // destino (entryIds) en vez de escanear el contenido por cada entrada (O(n²)).
@@ -211,8 +211,9 @@ function importChunksBajoLock() {
 
 function stateDecisions() {
   if (!existsSync(STATE)) return [];
-  const c = readFileSync(STATE, 'utf8');
-  // §2 extraída con criterio tolerante (sectionText), sin numeración literal rígida.
+  const c = readText(STATE);
+  // §2 extraída con criterio tolerante (sectionText de lib/md.mjs), sin
+  // numeración literal rígida.
   // FIX-3: `- ` (guion + espacio) evita contar la regla horizontal `---` como decisión.
   return sectionText(c, 2).split('\n').filter(l => l.trim().startsWith('- '));
 }
@@ -225,14 +226,14 @@ function buildManifest() {
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
     .slice(0, 5);
   const decisions = stateDecisions();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayUTC();
   const stale = [];
   for (const l of decisions) {
-    const ra = (l.match(/review_after:\s*(\d{4}-\d{2}-\d{2})/i) || [])[1];
-    const topic = (l.match(/topic:\s*([a-z0-9\/\-]+)/i) || [])[1];
+    const ra = field(l, 'review_after');
+    const topic = field(l, 'topic');
     if (ra && ra < today && topic && !stale.includes(topic)) stale.push(topic);
   }
-  const archivedWeeks = existsSync(CHANGELOG_DIR) ? readdirSync(CHANGELOG_DIR).filter(f => f.endsWith('.md')).length : 0;
+  const archivedWeeks = listChangelog(CHANGELOG_DIR).length;
   // Serialización compacta: 8 líneas fijas + 1 por entrada reciente (≤5) → ≤13 líneas.
   const lines = [];
   lines.push('{');
@@ -297,17 +298,17 @@ function main() {
     else if (cmd==='buildManifest') buildManifest();
     else if (cmd==='buildIndex') buildIndex();
     else if (cmd==='status' || !cmd) status();
+    // El uso inválido sigue por STDOUT (core.exitUsage iría a stderr: observable).
     else { console.log('Uso: node memory-sync.mjs export [--force|--all] | import | status | buildManifest | buildIndex'); process.exit(1); }
   } catch (e) {
     // Exit 3 = lock ocupado (export/import); 1 = cualquier otro fallo. El mensaje
-    // es el que lanza withMemoryLock: no se escribió nada.
+    // es el que lanza withMemoryLock, con su propio prefijo `memory-sync <ruta>`:
+    // core.fail antepondría otro ámbito y cambiaría el texto.
     console.error(e.message);
     process.exit(e.exitCode || 1);
   }
 }
 
-let isMain = false;
-try { isMain = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href; } catch { isMain = false; }
-if (isMain) main();
+if (isMain(import.meta.url, process.argv[1])) main();
 
 export { mondayOf, exportChunks, importChunks, buildManifest, buildIndex };

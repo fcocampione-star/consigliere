@@ -28,6 +28,9 @@ const SCRIPTS_DIR = join(REPO_ROOT, '.opencode', 'scripts');
 // Cierre transitivo de memory-sync.mjs: memory-index + memory-rotate (+ memory-stats
 // y el lock que memory-rotate importa).
 const MIRROR_FILES = ['memory-sync.mjs', 'memory-index.mjs', 'memory-rotate.mjs', 'memory-stats.mjs', 'memory-lock.mjs'];
+// La biblioteca compartida que los scripts de arriba importan: sin copiarla al
+// sandbox, el import del módulo falla con ERR_MODULE_NOT_FOUND.
+const LIB_FILES = ['core.mjs', 'md.mjs', 'cache.mjs'];
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/;
 const WEEK_JSON = /^\d{4}-\d{2}-\d{2}\.json$/;
 const HEAD_LINE = /^## \d{4}-\d{2}-\d{2} /gm;
@@ -42,6 +45,8 @@ async function sandbox(label) {
   const dst = join(dir, '.opencode', 'scripts');
   mkdirSync(dst, { recursive: true });
   for (const f of MIRROR_FILES) copyFileSync(join(SCRIPTS_DIR, f), join(dst, f));
+  mkdirSync(join(dst, 'lib'), { recursive: true });
+  for (const f of LIB_FILES) copyFileSync(join(SCRIPTS_DIR, 'lib', f), join(dst, 'lib', f));
   makeProject(dir);
   const url = (f) => pathToFileURL(join(dst, f)).href;
   return {
@@ -142,6 +147,9 @@ test('sandbox: el espejo es byte-idéntico y buildManifest escribe dentro del sa
   const sb = await sandbox('fidelidad');
   for (const f of MIRROR_FILES) {
     eq(readFileSync(join(sb.dir, '.opencode', 'scripts', f), 'utf8'), readFileSync(join(SCRIPTS_DIR, f), 'utf8'), `${f} sin modificar`);
+  }
+  for (const f of LIB_FILES) {
+    eq(readFileSync(join(sb.dir, '.opencode', 'scripts', 'lib', f), 'utf8'), readFileSync(join(SCRIPTS_DIR, 'lib', f), 'utf8'), `lib/${f} sin modificar`);
   }
   for (const fn of ['exportChunks', 'importChunks', 'buildManifest', 'buildIndex', 'mondayOf']) {
     eq(typeof sb.mod[fn], 'function', `el espejo exporta ${fn}`);

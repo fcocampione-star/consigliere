@@ -1,0 +1,485 @@
+# CI — Consigliere 2.0 (Advisor Harness)
+#
+# Repo sin dependencias y sin lockfile a propósito: aquí NO hay `npm ci`.
+# Lo que se valida es el propio harness (plantillas, espejo raíz↔templates,
+# versión, empaquetado) y los scripts de shell/PowerShell.
+#
+# Este workflow es REUTILIZABLE (`workflow_call`): release.yml lo invoca para
+# no duplicar la definición de CI. Al invocarse desde otro workflow,
+# `github.workflow` pasa a ser el del caller, así que el grupo de concurrencia
+# no colisiona entre la CI de un push y la CI que gatea un release.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+
+# Un run por rama/ref: el nuevo cancela al anterior (ramas con pushes seguidos).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Mínimo para leer el repo. Ningún job de CI escribe nada en GitHub.
+permissions:
+  contents: read
+
+# Nota sobre `setup-node`: no se activa `cache: npm` porque exigiría un lockfile
+# y este repo no tiene ninguno a propósito (cero dependencias). No hay
+# node_modules que instalar ni nada que cachear.
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  # a) Sintaxis + suite completa en 3 SO x 3 versiones de Node
+  # ───────────────────────────────────────────────────────────────────────────
+  syntax-and-tests:
+    name: syntax-and-tests (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Un fallo en un combo no oculta el resto de la matriz.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        node: ['20', '22', '24']
+    defaults:
+      run:
+        # En windows-latest el shell por defecto es PowerShell: bash explícito.
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          # Cache desactivado a propósito (repo sin lockfile ni dependencias).
+          cache: ''
+
+      # `npm test` solo hace `node --check init.mjs` + las pruebas que descubren
+      # su propio árbol. Este paso es INDEPENDIENTE: recorre con `find` todos
+      # los .mjs del repo y los valida uno a uno, de modo que un .mjs nuevo que
+      # nadie incorporates al contrato se ve igual. El recuento se imprime para
+      # que una caída silenciosa del árbol quede a la vista en el log.
+      - name: node --check sobre cada .mjs (recuento visible)
+        run: |
+          set -euo pipefail
+          mapfile -t files < <(find . -name '*.mjs' \
+            -not -path './node_modules/*' \
+            -not -path './.git/*' \
+            -not -path './.advisor/*' | sort)
+          total=${#files[@]}
+          echo "::notice::ficheros .mjs descubiertos: ${total}"
+          if [ "$total" -eq 0 ]; then
+            echo "::error::el find no descubrió ningún .mjs — el árbol está mal"
+            exit 1
+          fi
+          for f in "${files[@]}"; do
+            node --check "$f"
+          done
+          echo "node --check OK en ${total} ficheros .mjs"
+
+      # La opencode.json de la raíz está gitignored a propósito (es config de
+      # desarrollo local), así que un checkout limpio no la trae. Y sin ella
+      # `doctor` marca "opencode.json" en error, lo que hace fallar
+      # test/doctor.test.mjs ("harness sano del repo real"). Se siembra desde la
+      # plantilla — es un fichero de trabajo, nunca se commitea.
+      - name: sembrar la opencode.json de la raíz (config de desarrollo)
+        run: |
+          set -euo pipefail
+          if [ ! -f opencode.json ]; then
+            cp templates/opencode.json opencode.json
+            echo "sembrada opencode.json desde la plantilla (ignorado por git)"
+          else
+            echo "opencode.json ya presente"
+          fi
+
+      - name: npm test (suite completa)
+        run: npm test
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # b) Bash -n + shellcheck + parser de PowerShell (AST real)
+  # ───────────────────────────────────────────────────────────────────────────
+  shell-and-powershell:
+    name: shell-and-powershell (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      # Los cinco .sh del repo. El runner trae bash (Git Bash) en los tres SO.
+      - name: bash -n sobre los 5 scripts
+        run: |
+          set -euo pipefail
+          scripts=(
+            init.sh
+            scripts/check-memory-limits.sh
+            templates/scripts/check-memory-limits.sh
+            .opencode/hooks/post-commit-memory-rotate.sh
+            templates/.opencode/hooks/post-commit-memory-rotate.sh
+          )
+          for s in "${scripts[@]}"; do
+            bash -n "$s"
+            echo "bash -n OK: $s"
+          done
+
+      # shellcheck solo en ubuntu (imagen oficial; se instala si no está).
+      # SC2034 se excluye a propósito: `VERSION` en init.sh existe como fuente
+      # única para version-check.mjs, y SCRIPT_DIR/C_BOLD son vestigios; el
+      # resto de warnings y todos los errors siguen rompiendo el build.
+      - name: shellcheck (umbral warning, solo ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y shellcheck
+          fi
+          shellcheck --version
+          shellcheck -S warning -e SC2034 \
+            init.sh \
+            scripts/check-memory-limits.sh \
+            templates/scripts/check-memory-limits.sh \
+            .opencode/hooks/post-commit-memory-rotate.sh \
+            templates/.opencode/hooks/post-commit-memory-rotate.sh
+
+      # Parse REAL con el AST de PowerShell ([Parser]::ParseFile), no un grep:
+      # un .ps1 con error de sintaxis devuelve tokens de error y sale 1.
+      - name: parser de PowerShell sobre los 3 .ps1 (ubuntu + windows)
+        if: runner.os != 'macOS'
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/ps-parse-check.ps1" <<'PS'
+          $ErrorActionPreference = 'Stop'
+          $files = @(
+            'init.ps1',
+            'scripts/check-memory-limits.ps1',
+            'templates/scripts/check-memory-limits.ps1'
+          )
+          $fail = 0
+          foreach ($f in $files) {
+            if (-not (Test-Path -LiteralPath $f)) { Write-Host "::error::no existe $f"; $fail = 1; continue }
+            $errs = $null
+            $null = [System.Management.Automation.Language.Parser]::ParseFile(
+              (Resolve-Path -LiteralPath $f).Path, [ref]$null, [ref]$errs)
+            if ($errs -and $errs.Count -gt 0) {
+              foreach ($e in $errs) { Write-Host "::error::$f :: $($e.Message)" }
+              $fail = 1
+            } else {
+              Write-Host "parse OK: $f"
+            }
+          }
+          exit $fail
+          PS
+          pwsh -NoProfile -File "$RUNNER_TEMP/ps-parse-check.ps1"
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # c) Límites de memoria (bash en ubuntu, PowerShell en windows) + paridad
+  # ───────────────────────────────────────────────────────────────────────────
+  memory-limits:
+    name: memory-limits (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: scripts/check-memory-limits.sh (ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          bash scripts/check-memory-limits.sh
+
+      - name: scripts/check-memory-limits.ps1 (windows)
+        if: runner.os == 'Windows'
+        run: |
+          set -euo pipefail
+          pwsh -NoProfile -File scripts/check-memory-limits.ps1
+
+      # Paridad entre las dos variantes: los DOS deben comprobar las mismas tres
+      # cosas (PROJECT_STATE.md, SUMMARY.md y el manifest de memoria). La .ps1
+      # llegó a omitir el manifest, y sin esta aserción nadie se enteraría.
+      - name: paridad de needles entre la variante bash y la PowerShell
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          sh_file='scripts/check-memory-limits.sh'
+          ps_file='scripts/check-memory-limits.ps1'
+          needles=('PROJECT_STATE.md' 'SUMMARY.md' 'memory-manifest.json')
+          missing=0
+          for needle in "${needles[@]}"; do
+            for f in "$sh_file" "$ps_file"; do
+              if ! grep -qF "$needle" "$f"; then
+                echo "::error::$f no comprueba '$needle' — paridad rota con su hermano"
+                missing=1
+              fi
+            done
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::la variante bash y la PowerShell no miran las mismas cosas"
+            exit 1
+          fi
+          echo "paridad OK: ${needles[*]}"
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # d) Anti-drift y empaquetado (ubuntu): qué llega realmente al paquete
+  # ───────────────────────────────────────────────────────────────────────────
+  drift-and-packaging:
+    name: drift-and-packaging
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      # El .gitignore lleva tiempo con un patrón `opencode.json` sin anclar que
+      # también alcanzaba templates/opencode.json: el paquete se publicaba sin
+      # la config del harness sin que nada se rompiera visiblemente. Se exige
+      # que la plantilla esté trackeada y NO ignorada, y que la config de dev de
+      # la raíz SÍ esté ignorada (es lo que hace el patrón anclado `/opencode.json`).
+      - name: templates/opencode.json trackeada, no ignorada; raíz ignorada
+        run: |
+          set -euo pipefail
+          git ls-files --error-unmatch templates/opencode.json >/dev/null \
+            || { echo "::error::templates/opencode.json no está trackeada"; exit 1; }
+          if git check-ignore -q templates/opencode.json; then
+            echo "::error::templates/opencode.json está ignorada — el paquete iría sin config"
+            exit 1
+          fi
+          if ! git check-ignore -q opencode.json; then
+            echo "::error::la opencode.json de la raíz debería estar ignorada (patrón anclado)"
+            exit 1
+          fi
+          echo "plantilla trackeada y no ignorada; config de raíz ignorada"
+
+      # Versión única en package.json + los tres instaladores (init.mjs/sh/ps1).
+      - name: version coherente (npm run version:check)
+        run: npm run version:check
+
+      # En el índice de git: el bit de ejecución viaja con el archivo. Un .sh
+      # sin +x funciona en `bash script.sh` pero revienta al ejecutarlo directo.
+      - name: bit de ejecución en todos los .sh trackeados
+        run: |
+          set -euo pipefail
+          bad=0
+          while read -r mode _ _ path; do
+            if [ "$mode" != "100755" ]; then
+              echo "::error::$path está en el índice como $mode (esperaba 100755)"
+              bad=1
+            else
+              echo "100755 OK: $path"
+            fi
+          done < <(git ls-files -s -- '*.sh')
+          if [ "$bad" -ne 0 ]; then
+            echo "::error::hay .sh sin bit de ejecución: git update-index --chmod=+x <archivo>"
+            exit 1
+          fi
+
+      # `git archive` (lo que GitHub usa para el zip de código y lo que el
+      # repo usa como release) depende de los atributos export-ignore. Solo se
+      # toleran las entradas de la lista blanca de abajo; cualquier otra ruta de
+      # desarrollo que se colaría rompe el build.
+      #
+      # `git archive` emite además entradas de DIRECTORIO para carpetas que
+      # export-ignore dejó vacías (`.opencode/`, `CHANGELOG/`, `scripts/`): un
+      # directorio sin ficheros no lleva nada, así que se filtran con `/$`.
+      # `.github/` y `test/` sí tienen contenido y quedan en lista blanca de
+      # forma explícita: son desarrollo puro y tampoco deberían estar en una
+      # release, pero hoy no tienen export-ignore (ver informe / PR pendiente).
+      - name: git archive sin rutas de desarrollo (export-ignore)
+        run: |
+          set -euo pipefail
+          list=$(mktemp)
+          files=$(mktemp)
+          git archive --format=tar HEAD | tar -t > "$list"
+          grep -v '/$' "$list" > "$files"
+          leaks=$(grep -Ev \
+            -e '^(init\.(mjs|sh|ps1|cmd)|package\.json|README\.md|LICENSE)$' \
+            -e '^templates/' \
+            -e '^test/' \
+            "$files" || true)
+          if [ -n "$leaks" ]; then
+            echo "::error::git archive incluye rutas de desarrollo:"
+            echo "$leaks"
+            exit 1
+          fi
+          echo "git archive limpio ($(wc -l < "$files") ficheros, $(wc -l < "$list") entradas con directorios)"
+
+      # El listado se materializa en un fichero antes de grep: con `pipefail`, un
+      # `grep -q` que corta el pipe mata a `tar` con SIGPIPE y el paso fallaría
+      # aunque la aserción sea cierta.
+      - name: templates/opencode.json presente en git archive
+        run: |
+          set -euo pipefail
+          list=$(mktemp)
+          git archive --format=tar HEAD | tar -t > "$list"
+          grep -qx 'templates/opencode.json' "$list" \
+            || { echo "::error::templates/opencode.json no está en git archive"; exit 1; }
+          echo "templates/opencode.json presente en git archive"
+
+      # Contrato anti-drift en su propio paso: paridad espejo raíz↔templates,
+      # catálogos de archivos solo-raíz, placeholders y node --check.
+      - name: contract tests (npm run test:contract)
+        run: npm run test:contract
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # e) Humo del paquete: del tarball a un proyecto generado (3 SO)
+  # ───────────────────────────────────────────────────────────────────────────
+  pack-smoke:
+    name: pack-smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: ''
+
+      - name: npm pack
+        id: pack
+        run: |
+          set -euo pipefail
+          tarball=$(npm pack --silent | tail -n 1)
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+          echo "empaquetado: $tarball"
+
+      # Contenido mínimo imprescindible del paquete. Si algo de esta lista
+      # desaparece del tarball, el harness instalado no arranca.
+      - name: el tarball contiene los ficheros must-have
+        run: |
+          set -euo pipefail
+          tar -tzf "${{ steps.pack.outputs.tarball }}" | sed 's|^package/||' | sort > "$RUNNER_TEMP/packfiles.txt"
+          must_have=(
+            init.mjs
+            init.sh
+            init.ps1
+            init.cmd
+            package.json
+            README.md
+            LICENSE
+            templates/opencode.json
+            templates/AGENTS.md
+            templates/PROJECT_STATE.md
+            templates/skills-lock.json
+            templates/scripts/check-memory-limits.sh
+            templates/.opencode/scripts/doctor.mjs
+            templates/.opencode/scripts/routine-model.mjs
+            templates/.opencode/skills/_skill-loader/loader.mjs
+            templates/.opencode/skills/_skill-loader/SKILL.md
+            templates/.opencode/agents/advisor.md
+            templates/.opencode/scripts/lib/core.mjs
+          )
+          missing=0
+          for f in "${must_have[@]}"; do
+            if grep -qxF "$f" "$RUNNER_TEMP/packfiles.txt"; then
+              echo "presente: $f"
+            else
+              echo "::error::falta en el tarball: $f"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "::error::el paquete está incompleto ($(wc -l < "$RUNNER_TEMP/packfiles.txt") entradas)"
+            exit 1
+          fi
+          echo "must-have OK: ${#must_have[@]} ficheros de $(wc -l < "$RUNNER_TEMP/packfiles.txt") entradas"
+
+      - name: instalar el tarball en un directorio limpio
+        run: |
+          set -euo pipefail
+          dest="$RUNNER_TEMP/advisor-install"
+          rm -rf "$dest"
+          mkdir -p "$dest"
+          echo "dest=$dest" >> "$GITHUB_ENV"
+          npm install "$PWD/${{ steps.pack.outputs.tarball }}" --prefix "$dest" --no-audit --no-fund
+          test -f "$dest/node_modules/advisor-harness/init.mjs"
+
+      # Instalador en modo no interactivo (el camino documentado para CI).
+      # `--git no` evita el `git init`; el primer write sobre un destino vacío
+      # no necesita backup, así que no invoca `tar`.
+      - name: el instalador genera un proyecto (modo no interactivo)
+        run: |
+          set -euo pipefail
+          inst="$dest/node_modules/advisor-harness/init.mjs"
+          target="$dest/target"
+          node "$inst" --dir "$target" --name smoke-app \
+            --stack-db postgresql --stack-backend node/express \
+            --autoskills 3 --git no
+          for f in opencode.json AGENTS.md PROJECT_STATE.md SUMMARY.md \
+                   .opencode/scripts/doctor.mjs \
+                   .opencode/scripts/lib/core.mjs \
+                   .opencode/skills/_skill-loader/loader.mjs \
+                   .opencode/agents/advisor.md; do
+            test -f "$target/$f" || { echo "::error::el proyecto generado no tiene $f"; exit 1; }
+          done
+          echo "árbol generado completo"
+
+      - name: opencode.json generado es JSON válido
+        run: |
+          set -euo pipefail
+          node -e "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'))" "$dest/target/opencode.json"
+          echo "opencode.json generado parsea"
+
+      # Si la sustitución de placeholders falla, el proyecto nace inservible:
+      # opencode no resuelve {{MODEL_*}} ni {{PROJECT_NAME}}.
+      - name: ningún placeholder {{...}} sin resolver en el árbol generado
+        run: |
+          set -euo pipefail
+          left=$(grep -rEoh '\{\{[A-Z_]+\}\}' "$dest/target" --exclude-dir=.git 2>/dev/null | sort -u || true)
+          if [ -n "$left" ]; then
+            echo "::error::placeholders sin resolver en el árbol generado:"
+            echo "$left"
+            exit 1
+          fi
+          echo "sin placeholders sin resolver"
+
+      - name: el doctor instalado se ejecuta y sale 0
+        run: |
+          set -euo pipefail
+          node "$dest/target/.opencode/scripts/doctor.mjs"
+          echo "doctor exit=$?"
+
+      # Idempotencia: la segunda pasada es `--upgrade` (el camino documentado
+      # para actualizar un harness existente). Esta vez SÍ hace backup previo, y
+      # el backup usa `tar` con rutas absolutas estilo `C:\...`: en windows el
+      # shell bash pone el tar de GNU (Git) antes que el bsdtar de System32, y el
+      # de GNU interpreta `C:` como un host remoto. Anteponiendo System32 el
+      # `tar` resuelto es el de Windows, que sí entiende esas rutas.
+      - name: segunda ejecución idempotente (--upgrade)
+        run: |
+          set -euo pipefail
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            export PATH="/c/Windows/System32:$PATH"
+          fi
+          inst="$dest/node_modules/advisor-harness/init.mjs"
+          node "$inst" --dir "$dest/target" --upgrade --autoskills 3 --git no
+          test -f "$dest/target/.opencode/scripts/doctor.mjs"
+          node "$dest/target/.opencode/scripts/doctor.mjs" >/dev/null
+          echo "idempotente: segunda pasada correcta"
+
+      - name: borrar el tarball (nunca se commitea)
+        if: always()
+        run: |
+          set -euo pipefail
+          rm -f "${{ steps.pack.outputs.tarball }}"
+          git status --porcelain

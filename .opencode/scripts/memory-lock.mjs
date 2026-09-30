@@ -46,6 +46,11 @@
  *  - GC best-effort de dirs `.memory-lock.stale.*` con antigüedad > max(stale*2, 1h),
  *    ejecutado en acquire/release; `status` reporta cuántos hay.
  *  - Pureza cross-platform: solo node:fs / node:path / node:os / node:crypto.
+ *  - v5: el entry point lo decide `isMain` de lib/core.mjs (el CLI no se ejecuta al
+ *    importar el módulo, que memory-rotate y memory-sync hacen), y la raíz se sigue
+ *    calculando aquí: es lo único que puede redirigir ADVISOR_LOCK_ROOT.
+ *  - `owner.json` se escribe con writeFileSync porque nace en un directorio recién
+ *    creado por `mkdir` atómico: no hay lector al que pisarle.
  *
  * Uso:
  *   node .opencode/scripts/memory-lock.mjs acquire            (exit 0 adquirido → JSON {acquired,token,owner}; 1 ocupado)
@@ -56,7 +61,7 @@ import { mkdirSync, writeFileSync, readFileSync, rmSync, renameSync, existsSync,
 import { join, resolve } from 'node:path';
 import { hostname } from 'node:os';
 import { randomBytes } from 'node:crypto';
-import { pathToFileURL } from 'node:url';
+import { isMain } from './lib/core.mjs';
 
 // Override de raíz SOLO para tests (fixtures sandbox): sin ADVISOR_LOCK_ROOT el
 // lock queda fijado al repo del propio script, así que probarlo exigiría tocar
@@ -64,6 +69,7 @@ import { pathToFileURL } from 'node:url';
 // Un valor de solo espacios se trata como ausente: `resolve('  ')` devuelve el
 // cwd, con lo que el lock aterrizaría en un directorio arbitrario en vez de en la
 // raíz del script (el mismo tipo de fallo que un umbral en 0: silencioso y raro).
+// El default NO es core.REPO_ROOT: ese se resuelve desde lib/ y cae en `.opencode/`.
 function resolveRoot() {
   const raw = process.env.ADVISOR_LOCK_ROOT;
   if (raw === undefined || raw.trim() === '') return join(import.meta.dirname, '..', '..');
@@ -320,6 +326,9 @@ function main() {
       break;
     }
     default: {
+      // El uso sin comando sigue por STDOUT (core.exitUsage iría a stderr: cambio
+      // observable) y los errores de acquire/release no pasan por core.fail porque
+      // su texto (`lock busy: …`, `release refused: …`) es contrato de la suite.
       console.log(`Uso:
   node .opencode/scripts/memory-lock.mjs acquire                                   (exit 0 adquirido → JSON {acquired,token,owner}; 1 ocupado)
   node .opencode/scripts/memory-lock.mjs release [--token <t>] [--force]          (exit 0 liberado, 1 no-dueño)
@@ -329,8 +338,6 @@ function main() {
   }
 }
 
-let isMain = false;
-try { isMain = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href; } catch { isMain = false; }
-if (isMain) main();
+if (isMain(import.meta.url, process.argv[1])) main();
 
 export { LOCK_NAME, LOCK_DIR, OWNER_FILE, DEFAULT_STALE_MS, takeoverStale };

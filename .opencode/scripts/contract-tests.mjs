@@ -116,7 +116,8 @@ const TEMPLATE_ONLY_EXACT = new Set(['opencode.json']);
 // Lock de memoria y su debris (`.memory-lock`, `.memory-lock.stale.<pid>`): no es
 // contenido versionable y un lock/transitorio de un test no debe contaminar el run.
 const LOCK_DEBRIS = '.memory-lock';
-const SKIP_WALK = new Set(['.git', 'node_modules', '.advisor', '.agents', LOCK_DEBRIS]);
+// `.github/` son workflows de CI: raiz-only por definicion, nunca espejadas a templates/.
+const SKIP_WALK = new Set(['.git', 'node_modules', '.advisor', '.agents', '.github', LOCK_DEBRIS]);
 function walk(base, rel = '', skip = new Set()) {
   const out = [];
   let entries;

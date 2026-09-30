@@ -1,0 +1,142 @@
+# Release — advisor-harness (npm)
+#
+# No duplica la definición de CI: el job `ci` llama al workflow reutilizable
+# ./.github/workflows/ci.yml (`workflow_call` en ese archivo) y `publish` solo
+# arranca si todo lo de CI pasó. Así hay UNA sola definición de los jobs.
+#
+# Disparo: tag `v<version>` (el patrón con el que se publica en npm) o manual
+# con `--dry-run` para verificar sin publicar nada.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: 'Verificar sin publicar ni crear release (solo el job ci + comprobaciones)'
+        type: boolean
+        required: false
+        default: true
+
+# Un release por tag. NO se cancela en curso: cortar un publish a medias deja el
+# tag y npm en un estado que nadie ha verificado.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+# Por defecto, solo lectura. El job `publish` sube sus permisos a lo mínimo que
+# necesita (abajo se explica cuál es cuál).
+permissions:
+  contents: read
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  # Gate: la CI completa (5 jobs, matriz incluida) sobre el MISMO commit.
+  # ───────────────────────────────────────────────────────────────────────────
+  ci:
+    name: ci (gate)
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # Publicación + release de GitHub con el tarball adjunto.
+  # ───────────────────────────────────────────────────────────────────────────
+  publish:
+    name: publish
+    needs: ci
+    # El job SIEMPRE corre: en dry-run ejecuta la verificación (tag + validaciones
+    # + empaquetado) y se salta únicamente los dos pasos con efecto externo
+    # (publicar y crear la release).
+    runs-on: ubuntu-latest
+    permissions:
+      # `contents: write` — crear el GitHub Release (releases: write no hace
+      # falta; el permiso de contents cubre el release del tag).
+      # `id-token: write` — OIDC para que npm firme la provenance del paquete;
+      # sin esto `--provenance` falla. Es lo mínimo para publicar con trazabilidad.
+      contents: write
+      id-token: write
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+          cache: ''
+
+      # Igual que en CI: la opencode.json de la raíz está gitignored y sin ella
+      # `npm test` falla en test/doctor.test.mjs. Fichero de trabajo, no se
+      # commitea.
+      - name: sembrar la opencode.json de la raíz (config de desarrollo)
+        run: |
+          set -euo pipefail
+          [ -f opencode.json ] || cp templates/opencode.json opencode.json
+
+      # El tag es la versión: si divergen, se publica algo distinto de lo que
+      # dice el tag, y eso no se detecta en npm hasta que es tarde. Solo aplica
+      # al disparo por tag: en workflow_dispatch no hay tag que contrastar.
+      - name: el tag coincide con la versión de package.json
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          if [ "${{ github.ref_name }}" != "v$version" ]; then
+            echo "::error::el tag ${{ github.ref_name }} no corresponde a package.json v$version"
+            exit 1
+          fi
+          echo "tag ${{ github.ref_name }} == package.json v$version"
+
+      # Las mismas validaciones que en el paso de release de la CI, por si este
+      # workflow se lanza solo (workflow_dispatch).
+      - name: version coherente
+        run: npm run version:check
+
+      - name: contract tests
+        run: npm run test:contract
+
+      - name: npm test
+        run: npm test
+
+      - name: npm pack
+        id: pack
+        run: |
+          set -euo pipefail
+          tarball=$(npm pack --silent | tail -n 1)
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
+          echo "empaquetado: $tarball"
+
+      # npm publish. El token solo vive en este workflow; CI no lee secretos.
+      # --provenance ata el tarball al workflow y al commit, y exige id-token.
+      # En dry-run (workflow_dispatch con la casilla marcada) este paso no corre.
+      - name: publicar en npm (con provenance)
+        if: github.event_name == 'push' || !inputs.dry-run
+        run: |
+          set -euo pipefail
+          npm publish "${{ steps.pack.outputs.tarball }}" \
+            --provenance \
+            --access public \
+            --registry=https://registry.npmjs.org
+          echo "publicado advisor-harness@${{ github.ref_name }}"
+
+      - name: crear la release de GitHub con el tarball adjunto
+        if: github.event_name == 'push' || !inputs.dry-run
+        env:
+          # El token por defecto de Actions ya viene con permisos de escritura
+          # sobre contents; no hace falta un PAT propio.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release create "${{ github.ref_name }}" \
+            --title "advisor-harness ${{ github.ref_name }}" \
+            --generate-notes \
+            "${{ steps.pack.outputs.tarball }}"
+
+      - name: borrar el tarball
+        if: always()
+        run: rm -f "${{ steps.pack.outputs.tarball }}"

@@ -13,26 +13,21 @@
  *   inválido → throw. No lanza si simplemente faltan los marcadores.
  * - `contentLines(summaryText)`: cuenta líneas no vacías ESTRICTAMENTE entre
  *   `ENTRIES_START` y `ENTRIES_END` (exclusivas). Delega en `entriesRegion`.
- * - `sectionText(text, n)`: cuerpo de la sección `## <n>.` hasta el siguiente
- *   `## <m>.` (tolerante a espaciado; sin depender de un número literal rígido).
+ *
+ * Lo que ya no vive aquí: `sectionText` y la fecha UTC (`todayUTC`) son de
+ * lib/md.mjs, la biblioteca canónica; este módulo los reexporta para no romper
+ * a quien ya los importa desde aquí (doctor.mjs, la suite de memory-stats).
  *
  * Uso:
  *   node .opencode/scripts/memory-stats.mjs monday <YYYY-MM-DD>
  *   node .opencode/scripts/memory-stats.mjs lines [ruta/SUMMARY.md]
  */
-import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { exitUsage, isMain, readText } from './lib/core.mjs';
+import { todayUTC } from './lib/md.mjs';
 
 export const ENTRIES_START = '<!-- ADVISOR:ENTRIES:START -->';
 export const ENTRIES_END = '<!-- ADVISOR:ENTRIES:END -->';
-
-function fmtUTC(d) {
-  const y = d.getUTCFullYear();
-  const mo = String(d.getUTCMonth() + 1).padStart(2, '0');
-  const da = String(d.getUTCDate()).padStart(2, '0');
-  return `${y}-${mo}-${da}`;
-}
 
 export function mondayOf(input) {
   let d;
@@ -49,7 +44,7 @@ export function mondayOf(input) {
   const day = d.getUTCDay(); // 0=domingo .. 6=sábado
   const delta = day === 0 ? 6 : day - 1; // domingo → semana anterior
   d.setUTCDate(d.getUTCDate() - delta);
-  return fmtUTC(d);
+  return todayUTC(d);
 }
 
 function allIndexes(hay, needle) {
@@ -90,17 +85,10 @@ export function contentLines(summaryText) {
   return { count: countNonEmpty(region), marked, advisory };
 }
 
-// Cuerpo de la sección `## <n>.` hasta el siguiente `## <m>.` (o EOF).
-// Tolerante a espaciado entre `##` y el número; devuelve '' si no existe.
-export function sectionText(text, n) {
-  const src = String(text ?? '');
-  const re = new RegExp(`^##[ \\t]+${n}\\.`, 'm');
-  const m = re.exec(src);
-  if (!m) return '';
-  const tail = src.slice(m.index + 1);
-  const next = /^##[ \t]+\d+\./m.exec(tail);
-  return next ? src.slice(m.index, m.index + 1 + next.index) : src.slice(m.index);
-}
+// Cuerpo de la sección `## <n>.` hasta el siguiente `## <m>.` (o EOF), tolerante a
+// espaciado. La implementación es la de lib/md.mjs (una sola en el harness); aquí
+// solo se reexporta para conservar la ruta de import histórica.
+export { sectionText } from './lib/md.mjs';
 
 // Registro neutro de invalidadores de caché in-process (F4/MINOR).
 // memory-index.mjs YA importa memory-rotate.mjs; si memory-rotate importara
@@ -128,17 +116,21 @@ function main() {
   switch (cmd) {
     case 'monday': {
       const arg = process.argv[3];
-      if (!arg) { console.error('Uso: memory-stats.mjs monday <YYYY-MM-DD>'); process.exit(1); }
+      if (!arg) exitUsage('Uso: memory-stats.mjs monday <YYYY-MM-DD>');
       console.log(mondayOf(arg));
       break;
     }
     case 'lines': {
+      // Raíz del repo = dos niveles por encima de scripts/; NO es
+      // core.REPO_ROOT, que desde lib/ resuelve en `.opencode/` (un nivel más).
       const p = process.argv[3] || join(import.meta.dirname, '..', '..', 'SUMMARY.md');
-      const res = contentLines(readFileSync(p, 'utf8'));
+      const res = contentLines(readText(p));
       console.log(JSON.stringify({ file: p, ...res }, null, 2));
       break;
     }
     default: {
+      // El uso sin comando sigue saliendo por STDOUT como siempre: aquí
+      // core.exitUsage escribiría a stderr y cambiaría un stream observable.
       console.log(`Uso:
   node .opencode/scripts/memory-stats.mjs monday <YYYY-MM-DD>
   node .opencode/scripts/memory-stats.mjs lines [ruta/SUMMARY.md]`);
@@ -147,6 +139,4 @@ function main() {
   }
 }
 
-let isMain = false;
-try { isMain = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href; } catch { isMain = false; }
-if (isMain) main();
+if (isMain(import.meta.url, process.argv[1])) main();

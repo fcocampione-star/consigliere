@@ -1,6 +1,14 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs';
+/**
+ * Aplica overrides de modelo por agente a opencode.json (`--model`, `--model-<agente>`).
+ * Sin dependencias. v5: la escritura es la atómica de lib/core.mjs (antes temp+rename
+ * local con nombre fijo) y el entry point se decide con `isMain` (la guarda anterior
+ * solo comparaba un sufijo de nombre y no detectaba nada en Windows). La raíz se
+ * calcula aquí porque core.REPO_ROOT cae en `.opencode/`, no en la raíz del repo.
+ */
+import { readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { isMain, writeAtomic } from './lib/core.mjs';
 
 export const ALLOWED_AGENTS = ['advisor', 'planner', 'builder', 'verifier', 'critic', 'summarizer', 'explore'];
 export const MODEL_RE = /^[A-Za-z0-9._:\/-]{1,80}$/;
@@ -122,14 +130,15 @@ export function mergeAtomically(configPath, effectiveOverrides) {
     config.agent[agent] = { ...prev, model };
   }
   const serialized = JSON.stringify(config, null, 2) + '\n';
-  const tmp = configPath + '.tmp';
-  writeFileSync(tmp, serialized, 'utf8');
-  JSON.parse(readFileSync(tmp, 'utf8'));
-  renameSync(tmp, configPath);
+  // Atómica de lib/core.mjs: temp de nombre único, JSON del temporal VALIDADO antes
+  // de renombrar (si no, el opencode.json anterior queda intacto) y rename con reintentos.
+  writeAtomic(configPath, serialized);
   return config;
 }
 
 function resolveConfigPath() {
+  // Raíz del repo = dos niveles por encima de scripts/; NO es core.REPO_ROOT,
+  // que desde lib/ resuelve en `.opencode/` (un nivel más abajo).
   const ROOT = join(import.meta.dirname, '..', '..');
   const p1 = join(ROOT, 'opencode.json');
   if (existsSync(p1)) return p1;
@@ -175,6 +184,8 @@ function main() {
   }
 }
 
-if (process.argv[1] && import.meta.url.endsWith(process.argv[1].slice(process.argv[1].lastIndexOf('/') + 1)) || process.argv[1]?.endsWith('routine-model.mjs')) {
-  main();
-}
+// Un import de este módulo NO ejecuta el CLI: `isMain` compara la URL del módulo con
+// argv[1] (posix, Windows o shim .cmd/.bat del mismo nombre y carpeta). La guarda
+// anterior era un `endsWith` de nombre, que en Windows no detectaba nada y en posix
+// hacía de cualquier homónimo de otro directorio el entry point.
+if (isMain(import.meta.url, process.argv[1])) main();

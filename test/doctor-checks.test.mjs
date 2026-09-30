@@ -32,6 +32,8 @@ const MAX_BUFFER = 16 * 1024 * 1024;
 // Cierre transitivo de doctor.mjs: memory-index (+ memory-rotate), memory-lock
 // y memory-stats. Cada variante se copia CON SU PROPIO cierre, byte a byte.
 const CLOSURE = ['memory-index.mjs', 'memory-lock.mjs', 'memory-rotate.mjs', 'memory-stats.mjs'];
+// Biblioteca compartida que los scripts del CLOSURE importan desde lib/.
+const LIB_FILES = ['core.mjs', 'md.mjs', 'cache.mjs'];
 
 // Vocabulario de estados (escapes para no depender de la codificacion).
 const S_OK = '\u2705';
@@ -151,6 +153,11 @@ function sandbox(label, variante) {
     if (ESCENARIOS[label].omit?.includes(f)) continue;
     copyFileSync(join(src, f), join(join(dir, '.opencode', 'scripts'), f));
   }
+  // Los scripts del CLOSURE importan la biblioteca compartida de `.opencode/scripts/lib/`,
+  // asi que el sandbox tiene que traerla: sin ella doctor.mjs no arranca.
+  const lib = join(dir, '.opencode', 'scripts', 'lib');
+  mkdirSync(lib, { recursive: true });
+  for (const f of LIB_FILES) copyFileSync(join(src, 'lib', f), join(lib, f));
   return doctor;
 }
 

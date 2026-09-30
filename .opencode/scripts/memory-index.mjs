@@ -32,19 +32,28 @@
  *    índice persistido. El aviso de índice stale tiene una única fuente
  *    (liveEntries), no dos copias del mismo mensaje.
  *  - Toda escritura a disco es atómica (temp + rename en el mismo directorio).
+ * v5 (adopción de la lib compartida, sin cambio de comportamiento): `isMain`,
+ *  `readText`, `writeAtomic`, `field`, `sectionText`, `listChangelog` e `isFresh`
+ *  vienen ya de lib/. No cambian: el ROOT local (core.REPO_ROOT apunta a
+ *  `.opencode/`), el `fingerprint` con `path` RELATIVO (forma del contrato del
+ *  índice) ni el uso sin comando, que sigue por stdout.
  * Uso:
  *   node memory-index.mjs search "query" [--json] [--refresh]
  *   node memory-index.mjs timeline <id-or-date>  (date YYYY-MM-DD o índice)
  *   node memory-index.mjs get <id-or-date>
  *   node memory-index.mjs list [--json]
  */
-import { readFileSync, existsSync, readdirSync, statSync, mkdirSync, writeFileSync, renameSync, rmSync } from 'node:fs';
-import { createHash, randomBytes } from 'node:crypto';
-import { join, dirname, basename } from 'node:path';
-import { pathToFileURL } from 'node:url';
-import { entriesRegion, sectionText, registerCacheInvalidator } from './memory-stats.mjs';
+import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { join } from 'node:path';
+import { exitUsage, isMain, readText, writeAtomic } from './lib/core.mjs';
+import { field, listChangelog, sectionText } from './lib/md.mjs';
+import { isFresh as isFreshFp } from './lib/cache.mjs';
+import { entriesRegion, registerCacheInvalidator } from './memory-stats.mjs';
 import { headingToId, parseRegion } from './memory-rotate.mjs';
 
+// Raíz del repo = dos niveles por encima de scripts/. NO es core.REPO_ROOT: ese se
+// resuelve desde lib/ y cae en `.opencode/`, un nivel más abajo.
 const ROOT = join(import.meta.dirname, '..', '..');
 const SUMMARY = join(ROOT, 'SUMMARY.md');
 const STATE = join(ROOT, 'PROJECT_STATE.md');
@@ -78,8 +87,10 @@ function parseEntries(text, source, { advisory = false } = {}) {
   const entries = [];
   for (const b of blocks) {
     const heading = b.text.split('\n', 1)[0];
-    const topic = (b.text.match(/topic:\s*([a-z0-9\/\-]+)/i)||[])[1]||null;
-    const review_after = (b.text.match(/review_after:\s*(\d{4}-\d{2}-\d{2})/i)||[])[1]||null;
+    // topic/review_after: los regex vivían copiados aquí, en memory-sync y en
+    // doctor.mjs; el extractor canónico es md.field.
+    const topic = field(b.text, 'topic');
+    const review_after = field(b.text, 'review_after');
     entries.push({
       id: headingToId(heading) || slugId(b.date, b.title),
       date: b.date, title: b.title, topic, review_after, source,
@@ -110,21 +121,19 @@ function allEntries() {
   const key = fpKey(fingerprint());
   if (_entriesCache && _entriesCache.key === key) return _entriesCache.entries;
   const out=[];
-  if (existsSync(SUMMARY)) out.push(...parseEntries(readFileSync(SUMMARY,'utf8'), 'SUMMARY.md', { advisory: true }));
-  if (existsSync(CHANGELOG_DIR)) {
-    for (const f of readdirSync(CHANGELOG_DIR)) {
-      if (!f.endsWith('.md')) continue;
-      const p = join(CHANGELOG_DIR, f);
-      try { out.push(...parseEntries(readFileSync(p,'utf8'), `CHANGELOG/${f}`)); } catch {}
-    }
+  if (existsSync(SUMMARY)) out.push(...parseEntries(readText(SUMMARY), 'SUMMARY.md', { advisory: true }));
+  // listChangelog: los `.md` de CHANGELOG/ ordenados (no solo los de fecha, porque
+  // DECISIONS-ARCHIVE.md es memoria viva del mismo directorio y lo consulta /review).
+  for (const f of listChangelog(CHANGELOG_DIR)) {
+    out.push(...parseEntries(readText(join(CHANGELOG_DIR, f)), `CHANGELOG/${f}`));
   }
   if (existsSync(STATE)) {
     // decisions §2 as entries-like (sección extraída de forma tolerante)
-    const c = readFileSync(STATE,'utf8');
+    const c = readText(STATE);
     // FIX-3: `- ` (guion + espacio) evita contar la regla horizontal `---`.
     const lines = sectionText(c, 2).split('\n').filter(l=>l.trim().startsWith('- '));
     for (const l of lines) {
-      const topic = (l.match(/topic:\s*([a-z0-9\/\-]+)/i)||[])[1]||null;
+      const topic = field(l, 'topic');
       // FIX: el id se truncaba a 38 caracteres de la línea SIN hash, así que dos
       // decisiones con un prefijo largo común («Harness-only sin runtime de app:
       // Node >=20.11 ESM…») producían el MISMO id y el índice persistía duplicados
@@ -144,11 +153,7 @@ function sourceFiles() {
   const files = [];
   if (existsSync(STATE)) files.push('PROJECT_STATE.md');
   if (existsSync(SUMMARY)) files.push('SUMMARY.md');
-  if (existsSync(CHANGELOG_DIR)) {
-    for (const f of readdirSync(CHANGELOG_DIR)) {
-      if (f.endsWith('.md')) files.push(`CHANGELOG/${f}`);
-    }
-  }
+  for (const f of listChangelog(CHANGELOG_DIR)) files.push(`CHANGELOG/${f}`);
   return files.sort();
 }
 
@@ -156,6 +161,9 @@ function sourceFiles() {
 // sigue siendo path+mtime+size, NO hash de contenido — hashear todo el corpus
 // encarecería `search`. El hash (sha1) se usa SOLO a nivel de entrada, en
 // `slugId`, para desambiguar ids truncados; nunca para decidir staleness.
+// NOTA: aquí NO se usa cache.fingerprint porque el `path` que se persiste y se
+// compara es RELATIVO al repo (forma del contrato del índice, y lo que consume
+// el memo `fpKey`); stat sí necesita la ruta absoluta de cada fuente.
 function fingerprint() {
   const fp = [];
   for (const rel of sourceFiles()) {
@@ -169,15 +177,12 @@ function fingerprint() {
   return fp.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 }
 
+// La comparación de fingerprints es la de lib/cache.mjs (misma idea en toda la
+// familia memory-index y en el skill loader). La comparación de `version` NO
+// entra ahí: es del envoltorio que persiste el índice, así que sigue aquí.
 function isFresh(cached, currentFp = fingerprint()) {
-  if (!cached || cached.version !== INDEX_VERSION || !Array.isArray(cached.fingerprint)) return false;
-  if (cached.fingerprint.length !== currentFp.length) return false;
-  const map = new Map(cached.fingerprint.map(e => [e.path, e]));
-  for (const c of currentFp) {
-    const e = map.get(c.path);
-    if (!e || e.mtime !== c.mtime || e.size !== c.size) return false;
-  }
-  return true;
+  if (!cached || cached.version !== INDEX_VERSION) return false;
+  return isFreshFp(cached.fingerprint, currentFp);
 }
 
 function score(entry, query, now = Date.now()) {
@@ -197,21 +202,6 @@ function loadIndex() {
     if (data.version !== INDEX_VERSION || !Array.isArray(data.entries)) return null;
     return { data, fresh: isFresh(data), file: f };
   } catch { return null; }
-}
-
-// Escritura atómica temp+rename en el MISMO directorio (mismo criterio que
-// memory-rotate.mjs): un lector concurrente nunca ve el fichero a medio escribir y
-// dos escritores no pueden pisarse el rename (EPERM/EBUSY en Windows, escritura
-// sobre un inode ya sustituido en POSIX).
-function writeAtomic(file, content) {
-  const tmp = join(dirname(file), `.${basename(file)}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`);
-  try {
-    writeFileSync(tmp, content, 'utf8');
-    renameSync(tmp, file);
-  } catch (e) {
-    try { rmSync(tmp, { force: true }); } catch { /* best-effort */ }
-    throw e;
-  }
 }
 
 function writeIndex() {
@@ -272,7 +262,7 @@ function main() {
 
   switch(cmd){
     case 'search': {
-      if (!arg) { console.error('Uso: memory-index.mjs search "query" [--json] [--refresh]'); process.exit(1); }
+      if (!arg) exitUsage('Uso: memory-index.mjs search "query" [--json] [--refresh]');
       if (process.argv.includes('--refresh')) writeIndex();
       const q = arg.toLowerCase();
       const { entries } = liveEntries();
@@ -294,7 +284,7 @@ function main() {
     }
     case 'timeline':
     case 'get': {
-      if (!arg) { console.error(`Uso: memory-index.mjs ${cmd} <id-or-date>`); process.exit(1); }
+      if (!arg) exitUsage(`Uso: memory-index.mjs ${cmd} <id-or-date>`);
       const { entries } = liveEntries();
       const want = arg.toLowerCase();
       // El id se compara también en minúsculas: los ids de PROJECT_STATE §2 ahora
@@ -305,7 +295,7 @@ function main() {
       // for get, dump full file section
       let text='';
       const src = hit.source.includes('SUMMARY')?SUMMARY: hit.source.includes('CHANGELOG')?join(ROOT,hit.source):STATE;
-      try { text=readFileSync(src,'utf8'); } catch {}
+      text=readText(src);
       if (cmd==='get') {
         if (hit.source.startsWith('PROJECT_STATE')) {
           // FIX-4: misma extracción tolerante (sectionText) que doctor.mjs, sin
@@ -337,6 +327,7 @@ function main() {
       break;
     }
     default: {
+      // Sin comando el uso sigue yendo a STDOUT (core.exitUsage iría a stderr).
       console.log(`Uso:
   node .opencode/scripts/memory-index.mjs search "query" [--json] [--refresh]
   node .opencode/scripts/memory-index.mjs timeline <id-or-date>
@@ -347,8 +338,6 @@ function main() {
   }
 }
 
-let isMain = false;
-try { isMain = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href; } catch { isMain = false; }
-if (isMain) main();
+if (isMain(import.meta.url, process.argv[1])) main();
 
 export { allEntries, parseEntries, fingerprint, isFresh, score, loadIndex, writeIndex, slugId, INDEX_VERSION, invalidateEntriesCache };

@@ -26,9 +26,11 @@ import { parseEntries, slugId, score, isFresh, fingerprint, INDEX_VERSION } from
 
 const REPO_ROOT = join(import.meta.dirname, '..');
 const SCRIPTS_DIR = join(REPO_ROOT, '.opencode', 'scripts');
-// Cierre transitivo de memory-index.mjs: sus dos imports locales y el lock que
-// memory-rotate.mjs importa (nunca ejecutado aquí, pero el módulo debe existir).
+// Cierre transitivo de memory-index.mjs: sus imports locales, el lock que
+// memory-rotate.mjs importa (nunca ejecutado aquí, pero el módulo debe existir) y
+// la biblioteca compartida `lib/` que los cuatro importan.
 const MIRROR_FILES = ['memory-index.mjs', 'memory-rotate.mjs', 'memory-stats.mjs', 'memory-lock.mjs'];
+const LIB_FILES = ['core.mjs', 'md.mjs', 'cache.mjs'];
 
 // Los temporales se limpian en el hook de salida: runAll() termina con
 // process.exit(), así que un cleanup posterior a runAll() no se ejecutaría.
@@ -46,6 +48,10 @@ async function sandbox(label) {
   const dst = join(dir, '.opencode', 'scripts');
   mkdirSync(dst, { recursive: true });
   for (const f of MIRROR_FILES) copyFileSync(join(SCRIPTS_DIR, f), join(dst, f));
+  // `lib/` viaja con el espejo: los scripts importan de ahí y sin él el import
+  // del módulo (y el CLI del espejo) falla con ERR_MODULE_NOT_FOUND.
+  mkdirSync(join(dst, 'lib'), { recursive: true });
+  for (const f of LIB_FILES) copyFileSync(join(SCRIPTS_DIR, 'lib', f), join(dst, 'lib', f));
   makeProject(dir);
   return { dir, mod: await import(pathToFileURL(join(dst, 'memory-index.mjs')).href) };
 }
@@ -339,6 +345,9 @@ test('sandbox: los scripts del espejo son byte-idénticos a los del repo', async
   const sb = await sandbox('fidelidad');
   for (const f of MIRROR_FILES) {
     eq(readFileSync(join(sb.dir, '.opencode', 'scripts', f), 'utf8'), readFileSync(join(SCRIPTS_DIR, f), 'utf8'), `${f} sin modificar`);
+  }
+  for (const f of LIB_FILES) {
+    eq(readFileSync(join(sb.dir, '.opencode', 'scripts', 'lib', f), 'utf8'), readFileSync(join(SCRIPTS_DIR, 'lib', f), 'utf8'), `lib/${f} sin modificar`);
   }
   eq(typeof sb.mod.allEntries, 'function', 'el espejo exporta la misma API');
 });

@@ -65,14 +65,22 @@
  * (memory-lock.mjs) vive SIEMPRE en la raíz del repo del propio script (su ROOT
  * es fijo), NO en `--root`; `--root` solo redirige los archivos de memoria
  * (SUMMARY.md / PROJECT_STATE.md / CHANGELOG/), no el lock.
+ * v5 (adopción de la lib compartida, sin cambio de comportamiento): `isMain` y
+ * `readText` vienen de lib/core.mjs, y la escritura atómica ES la de lib/core.mjs
+ * (ver `writeAtomic`). Se mantiene el ROOT local —core.REPO_ROOT resuelve en
+ * `.opencode/`—, la lectura CRUDA del CHANGELOG destino de `archivar` (se reescribe
+ * tal cual) y el uso sin comando por stdout.
  */
-import { existsSync, readFileSync, writeFileSync, mkdirSync, renameSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve, dirname, basename } from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { pathToFileURL } from 'node:url';
+import { isMain, readText, writeAtomic as writeAtomicShared } from './lib/core.mjs';
 import { mondayOf, contentLines, entriesRegion, ENTRIES_START, ENTRIES_END, invalidateCaches } from './memory-stats.mjs';
 import { acquireLock, releaseLock } from './memory-lock.mjs';
 
+// Raíz del repo por defecto = dos niveles por encima de scripts/ (NO
+// core.REPO_ROOT, que desde lib/ cae en `.opencode/`). Es solo el default de
+// `--root`, que existe para las fixtures sandbox de los tests.
 const DEFAULT_ROOT = resolve(join(import.meta.dirname, '..', '..'));
 const CHANGELOG_LINE_LIMIT = 150;
 const DEFAULT_MAX = 20;
@@ -136,12 +144,21 @@ function changelogHeader(monday) {
   return `# Changelog ${monday}\n\n> Historial semanal archivado desde SUMMARY.md. Detalle de diffs: \`git log\`.\n\n`;
 }
 
-// --- Escritura atómica temp+rename ------------------------------------------
-// En Windows el rename puede fallar con EPERM/EBUSY aunque el temp esté escrito:
-// destino bloqueado momentáneamente por un editor, un antivirus o un indexador.
-// Sin reintento, la rotación se aborta DESPUÉS de haber anexado ya en otro
-// archivo (rotación a medias). Por eso el rename se reintenta con backoff corto
-// y acotado, y un fallo definitivo borra el temp: nunca queda debris.
+// --- Escritura atómica -------------------------------------------------------
+// La del harness: lib/core.mjs. Temp de nombre único en el MISMO directorio +
+// `rename` (mismo volumen = atómico), de modo que un lector nunca ve el fichero a
+// medias y un fallo no deja ni temp ni destino corrupto. En Windows el rename
+// falla con EPERM/EBUSY/EACCES aunque el temp esté escrito (destino bloqueado
+// momentáneamente por un editor, un antivirus o un indexador): por eso la
+// compartida reintenta con backoff corto y ACOTADO, y borra el temp si el fallo
+// es definitivo — una rotación fallida nunca deja debris.
+//
+// `attempts` es el nombre histórico de esta firma (tries TOTALES del rename) y se
+// traduce a `retries` de la compartida. `rename` es un SEAM SOLO PARA TESTS (permite
+// simular el bloqueo de Windows sin bloquear un archivo real); core.writeAtomic no
+// admite rename inyectado, así que cuando viene se conserva el bucle acotado de
+// aquí. En producción `rename` no se pasa nunca y el algoritmo real solo existe en
+// lib/core.mjs.
 const RENAME_ATTEMPTS = 5;
 const RENAME_BACKOFF_MS = [10, 25, 50, 100, 200];
 const RENAME_RETRYABLE = new Set(['EPERM', 'EACCES', 'EBUSY', 'EEXIST', 'ENOTEMPTY']);
@@ -156,8 +173,6 @@ function sleepSync(ms) {
 
 // Renombra con reintentos ACOTADOS solo para los códigos transitorios de
 // bloqueo; cualquier otro error (p.ej. ENOENT) se propaga de inmediato.
-// `rename` es inyectable para poder probar el reintento sin bloquear un archivo
-// real de verdad (ver test/memory-rotate-extra.test.mjs).
 function renameWithRetry(from, to, { attempts = RENAME_ATTEMPTS, backoffMs = RENAME_BACKOFF_MS, rename = renameSync } = {}) {
   const tries = Math.max(1, Number(attempts) || 1);
   for (let i = 0; i < tries; i++) {
@@ -174,6 +189,13 @@ function renameWithRetry(from, to, { attempts = RENAME_ATTEMPTS, backoffMs = REN
 // Escritura atómica temp+rename en el mismo directorio: o el destino queda con
 // el contenido nuevo completo, o queda como estaba y sin temp huérfano.
 export function writeAtomic(file, content, opts = {}) {
+  const { attempts, backoffMs, rename, ...compartida } = opts;
+  if (typeof rename !== 'function') {
+    // Camino real: la compartida, con el número de intentos de este módulo.
+    const total = attempts === undefined ? RENAME_ATTEMPTS : Math.max(1, Number(attempts) || 1);
+    return writeAtomicShared(file, content, { ...compartida, retries: total - 1 });
+  }
+  // Camino de test con rename inyectado (ver la nota de RENAME_ATTEMPTS).
   const tmp = join(dirname(file), `.${basename(file)}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`);
   const dropTmp = () => { try { rmSync(tmp, { force: true }); } catch { /* best-effort */ } };
   try {
@@ -183,7 +205,7 @@ export function writeAtomic(file, content, opts = {}) {
     throw e;
   }
   try {
-    renameWithRetry(tmp, file, opts);
+    renameWithRetry(tmp, file, { attempts, backoffMs, rename });
   } catch (e) {
     dropTmp(); // rotación fallida no deja temp detrás
     throw e;
@@ -364,7 +386,7 @@ export function rotate({ root = DEFAULT_ROOT, dryRun = false, max = DEFAULT_MAX 
     summaryLinesBefore: null, summaryLinesAfter: null, summaryWritten: false,
   };
   if (!existsSync(summaryPath)) throw new Error(`No existe SUMMARY.md en ${root}`);
-  const beforeText = normalizeEol(readFileSync(summaryPath, 'utf8'));
+  const beforeText = readText(summaryPath);
   const split = splitRegion(beforeText);
   result.advisory = split.advisory;
   if (split.advisory) result.warnings.push(split.advisory);
@@ -377,6 +399,9 @@ export function rotate({ root = DEFAULT_ROOT, dryRun = false, max = DEFAULT_MAX 
   // el rastro en `result`. Compartido por los dos caminos del drenaje.
   const archivar = (oldest, oldestMonday) => {
     const destFile = join(changelogDir, `${oldestMonday}.md`);
+    // Lectura CRUDA a propósito: `appendToChangelog` la devuelve como prefijo del
+    // CHANGELOG reescrito, así que normalizarla (readText) reescribiría los finales
+    // de línea de todo el archivo ya archivado.
     const existing = existsSync(destFile) ? readFileSync(destFile, 'utf8') : '';
     const dup = hasEntry(existing, oldest);
     if (!dup) {
@@ -496,7 +521,7 @@ export function rotate({ root = DEFAULT_ROOT, dryRun = false, max = DEFAULT_MAX 
   if (!dryRun && afterText !== beforeText) { writeAtomic(summaryPath, afterText); result.summaryWritten = true; }
 
   if (result.moved.length && existsSync(statePath)) {
-    const stateText = normalizeEol(readFileSync(statePath, 'utf8'));
+    const stateText = readText(statePath);
     const mondays = [...new Set(result.moved.map((m) => m.monday))];
     const r = updateStateIndex(stateText, mondays);
     result.stateUpdated = r.updated;
@@ -515,7 +540,7 @@ export function migrateMarkers({ root = DEFAULT_ROOT, dryRun = false } = {}) {
   const summaryPath = join(root, 'SUMMARY.md');
   const result = { command: 'migrate-markers', dryRun, root, changed: false, alreadyMarked: false, summaryWritten: false };
   if (!existsSync(summaryPath)) throw new Error(`No existe SUMMARY.md en ${root}`);
-  const text = normalizeEol(readFileSync(summaryPath, 'utf8'));
+  const text = readText(summaryPath);
   const s = text.indexOf(ENTRIES_START);
   const e = text.indexOf(ENTRIES_END);
   const s2 = s === -1 ? -1 : text.indexOf(ENTRIES_START, s + 1);
@@ -579,6 +604,7 @@ function main() {
   const cmd = process.argv[2];
   const flags = parseArgs(process.argv.slice(3));
   if (cmd !== 'rotate' && cmd !== 'migrate-markers') {
+    // El uso sin comando sigue por STDOUT (core.exitUsage iría a stderr: observable).
     console.log(`Uso:
   node .opencode/scripts/memory-rotate.mjs rotate [--dry-run] [--max N] [--json] [--root <dir>]
   node .opencode/scripts/memory-rotate.mjs migrate-markers [--dry-run] [--json] [--root <dir>]
@@ -601,6 +627,9 @@ function main() {
       : migrateMarkers({ root, dryRun: flags.dryRun });
     report(result, flags.json);
   } catch (e) {
+    // El texto ya es `memory-rotate: <motivo>`, el formato de core.fail, pero NO
+    // se puede usar aquí: fail() hace process.exit() y saltaría el `finally` que
+    // libera el lock de memoria.
     console.error(`memory-rotate: ${e.message}`);
     exitCode = 1;
   } finally {
@@ -610,8 +639,6 @@ function main() {
   process.exit(exitCode);
 }
 
-let isMain = false;
-try { isMain = !!process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href; } catch { isMain = false; }
-if (isMain) main();
+if (isMain(import.meta.url, process.argv[1])) main();
 
 export { splitRegion, parseRegion, renderRegion, updateStateIndex, scanEntryHeads, appendToChangelog, hasEntry, entryIds, headingToId, parseEntryHeading, normalize, CHANGELOG_LINE_LIMIT, DEFAULT_MAX };

@@ -30,6 +30,9 @@ import { suite, test, assert, eq, neq, match, includes, tmpdir, runAll } from '.
 
 const REPO = join(import.meta.dirname, '..');
 const LOADER = join(REPO, '.opencode', 'skills', '_skill-loader', 'loader.mjs');
+// Biblioteca compartida que el loader importa (`.opencode/scripts/lib/`): los
+// sandboxes tienen que copiarla o el import falla antes de ejecutar nada.
+const LIB_FILES = ['core.mjs', 'md.mjs', 'cache.mjs'];
 const MAX_BUFFER = 16 * 1024 * 1024;
 
 // Anclas del repo: skills que existen en `.opencode/skills/` de este repo.
@@ -445,8 +448,14 @@ function makeSandbox() {
   mkdirSync(join(skills, '_skill-loader'), { recursive: true });
   mkdirSync(join(skills, SB_SKILL), { recursive: true });
   copyFileSync(LOADER, join(skills, '_skill-loader', 'loader.mjs'));
+  // El loader importa la biblioteca compartida del harness (`.opencode/scripts/lib/`)
+  // a través del árbol del proyecto, así que el sandbox tiene que traerla también:
+  // sin ella, el import falla antes de ejecutar ningún comando.
+  const lib = join(dir, '.opencode', 'scripts', 'lib');
+  mkdirSync(lib, { recursive: true });
+  for (const f of LIB_FILES) copyFileSync(join(REPO, '.opencode', 'scripts', 'lib', f), join(lib, f));
   // BOM UTF-8 + CRLF: el par que rompia el parseo de front-matter.
-  writeFileSync(join(skills, SB_SKILL, 'SKILL.md'), '\uFEFF' + SB_BODY.replace(/\n/g, '\r\n'), 'utf8');
+  writeFileSync(join(skills, SB_SKILL, 'SKILL.md'), '﻿' + SB_BODY.replace(/\n/g, '\r\n'), 'utf8');
   return { dir, loader: join(skills, '_skill-loader', 'loader.mjs'), cache: join(dir, '.advisor', 'skill-registry.cache.json') };
 }
 
