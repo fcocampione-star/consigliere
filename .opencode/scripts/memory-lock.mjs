@@ -17,6 +17,9 @@
  *    stderr y el resultado lleva `restoreFailed:true` (best-effort pero visible).
  *  - Umbral stale default 300000 ms, override con env `ADVISOR_LOCK_STALE_MS`.
  *    `LOCK_STALE_MS` es la ÚNICA fuente del umbral (exportada; doctor la consume).
+ *  - Raíz del lock: la del repo del propio script, con override de env
+ *    `ADVISOR_LOCK_ROOT` (TEST-ONLY) que mueve el lock y las rutas que cuelgan
+ *    de la raíz (`.memory-lock`, dirs `.memory-lock.stale.*`).
  *  - `release` cross-proceso por TOKEN (uso multi-proceso: acquire y release son
  *    procesos distintos, así que `pid` no basta). Orden de resolución:
  *      1. `--token <t>` (o env `ADVISOR_LOCK_TOKEN`) === `owner.token` → libera
@@ -38,12 +41,20 @@
  *   node .opencode/scripts/memory-lock.mjs status             (exit 0; imprime estado/owner)
  */
 import { mkdirSync, writeFileSync, readFileSync, rmSync, renameSync, existsSync, statSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { hostname } from 'node:os';
 import { randomBytes } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 
-const ROOT = join(import.meta.dirname, '..', '..');
+// Override de raíz SOLO para tests (fixtures sandbox): sin ADVISOR_LOCK_ROOT el
+// lock queda fijado al repo del propio script, así que probarlo exigiría tocar
+// su `.memory-lock` real. El env se lee UNA vez, aquí, al cargar el módulo.
+function resolveRoot() {
+  const raw = process.env.ADVISOR_LOCK_ROOT;
+  if (raw === undefined || raw === '') return join(import.meta.dirname, '..', '..');
+  return resolve(raw);
+}
+const ROOT = resolveRoot();
 const LOCK_NAME = '.memory-lock';
 const LOCK_DIR = join(ROOT, LOCK_NAME);
 const OWNER_FILE = 'owner.json';

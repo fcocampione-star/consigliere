@@ -12,12 +12,10 @@
  * Uso: node .opencode/scripts/memory-rotate.test.mjs
  */
 import { readFileSync, mkdirSync, writeFileSync, rmSync, existsSync, readdirSync, statSync } from 'node:fs';
-import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 const ENGINE = new URL('./memory-rotate.mjs', import.meta.url);
-const MIRROR = new URL('../../templates/.opencode/scripts/memory-rotate.mjs', import.meta.url);
 const { rotate, migrateMarkers, parseRegion, hasEntry, scanEntryHeads } = await import(ENGINE.href);
 const { acquireLock, releaseLock, listStaleDirs } = await import(new URL('./memory-lock.mjs', import.meta.url).href);
 
@@ -220,16 +218,6 @@ try {
   console.log('FAIL excepción no controlada :: ' + e.message);
 } finally {
   rmSync(BASE, { recursive: true, force: true });
-}
-
-// ---------- Espejo raíz <-> templates idéntico ----------
-try {
-  const h = (u) => createHash('sha256').update(readFileSync(u)).digest('hex');
-  const a = h(ENGINE);
-  const b = h(MIRROR);
-  check('espejo raíz↔templates: SHA256 idéntico', a === b, a + ' vs ' + b);
-} catch (e) {
-  check('espejo raíz↔templates: SHA256 idéntico', false, e.message);
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

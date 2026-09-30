@@ -103,17 +103,26 @@ const ROOT_ONLY_EXACT = new Set([
   'init.sh',
   'package.json',
 ]);
-const ROOT_ONLY_PREFIXES = ['CHANGELOG/'];
+const ROOT_ONLY_PREFIXES = [
+  // `CHANGELOG/` = memoria viva ya archivada (capa 2), nunca se espeja.
+  'CHANGELOG/',
+  // `test/` = suite de tests del repo (harness, fixtures, agregador): desarrollo
+  // puro, no se instala por proyecto ni forma parte del harness publicable.
+  'test/',
+];
 // Archivos presente solo en templates/ y no espejados a propósito:
 const TEMPLATE_ONLY_EXACT = new Set(['opencode.json']);
 
-const SKIP_WALK = new Set(['.git', 'node_modules', '.advisor', '.agents']);
+// Lock de memoria y su debris (`.memory-lock`, `.memory-lock.stale.<pid>`): no es
+// contenido versionable y un lock/transitorio de un test no debe contaminar el run.
+const LOCK_DEBRIS = '.memory-lock';
+const SKIP_WALK = new Set(['.git', 'node_modules', '.advisor', '.agents', LOCK_DEBRIS]);
 function walk(base, rel = '', skip = new Set()) {
   const out = [];
   let entries;
   try { entries = readdirSync(join(base, rel), { withFileTypes: true }); } catch { return out; }
   for (const e of entries) {
-    if (skip.has(e.name)) continue;
+    if (skip.has(e.name) || e.name.startsWith(LOCK_DEBRIS)) continue;
     const r = rel ? `${rel}/${e.name}` : e.name;
     if (e.isDirectory()) out.push(...walk(base, r, skip));
     else out.push(r);
@@ -125,11 +134,18 @@ const tplFiles = walk(TPL).sort();
 const rootSet = new Set(rootFiles);
 const tplSet = new Set(tplFiles);
 
+// Lectura + hash tolerante a fallos: un archivo ilegible (permisos, dir con el
+// mismo nombre) debe REPORTAR un fallo del contrato, no reventar con un stack.
+const shaOrNull = (p) => { try { return sha(p); } catch { return null; } };
+
 let mirrorChecked = 0;
 for (const r of rootFiles) {
   if (!tplSet.has(r)) continue;
   mirrorChecked++;
-  if (sha(join(ROOT, r)) === sha(join(TPL, r))) continue;
+  const a = shaOrNull(join(ROOT, r));
+  const b = shaOrNull(join(TPL, r));
+  if (a === null || b === null) { fail('paridad espejo', `${r}: ilegible (raíz: ${a === null ? 'error' : 'ok'}, templates: ${b === null ? 'error' : 'ok'})`); continue; }
+  if (a === b) continue;
   if (r in ALLOW_DIVERGENCE) continue;
   fail('paridad espejo', `${r} difiere de templates/${r} y no está en la allowlist`);
 }
@@ -138,7 +154,9 @@ pass('paridad espejo', `${mirrorChecked} archivos espejo verificados`);
 for (const r of rootFiles) {
   if (tplSet.has(r)) continue;
   if (ROOT_ONLY_EXACT.has(r) || ROOT_ONLY_PREFIXES.some((p) => r.startsWith(p))) continue;
-  warn('espejo', `archivo solo-raíz no catalogado: ${r} (¿debe espejarse?)`);
+  // Un archivo solo-raíz NO catalogado es drift silencioso (nadie lo espeja y
+  // nadie lo declaró excepción): falla el contrato, no solo avisa.
+  fail('espejo', `archivo solo-raíz no catalogado: ${r} (¿debe espejarse?)`);
 }
 for (const r of tplFiles) {
   if (rootSet.has(r)) continue;
@@ -259,21 +277,24 @@ try {
   }
 } catch (e) { fail('doctor', e.message); }
 
+// Lista DERIVADA del walk (no una lista fija): todo `.mjs` bajo `.opencode/` en
+// la raíz y bajo `templates/.opencode/`, más los `.mjs` de raíz que quedan fuera
+// de `.opencode/` (init.mjs). Así un script nuevo se valida sin tocar este test.
+// Allowlist: vacía hoy — quien no pase `--check` se arregla, no se exime.
 const SCRIPTS_TO_CHECK = [
-  '.opencode/scripts/doctor.mjs',
-  '.opencode/scripts/memory-index.mjs',
-  '.opencode/scripts/memory-sync.mjs',
-  '.opencode/scripts/memory-lock.mjs',
-  '.opencode/scripts/memory-stats.mjs',
-  '.opencode/scripts/memory-rotate.mjs',
-  '.opencode/scripts/routine-model.mjs',
-  '.opencode/scripts/version-check.mjs',
-  '.opencode/skills/_skill-loader/loader.mjs',
+  ...rootFiles.filter((r) => r.startsWith('.opencode/') && r.endsWith('.mjs')),
+  ...tplFiles.filter((r) => r.startsWith('.opencode/') && r.endsWith('.mjs')).map((r) => `templates/${r}`),
+  'init.mjs',
 ];
 for (const rel of SCRIPTS_TO_CHECK) {
-  if (!existsSync(join(ROOT, rel))) { fail('node --check', `falta ${rel}`); continue; }
-  const res = spawnSync(process.execPath, ['--check', join(ROOT, rel)], { encoding: 'utf8' });
-  if (res.status !== 0) fail('node --check', `${rel}: ${(res.stderr || '').trim().split('\n')[0]}`);
+  try {
+    if (!existsSync(join(ROOT, rel))) { fail('node --check', `falta ${rel}`); continue; }
+    const res = spawnSync(process.execPath, ['--check', join(ROOT, rel)], { encoding: 'utf8' });
+    if (res.error) { fail('node --check', `${rel}: ${res.error.message}`); continue; }
+    if (res.status !== 0) fail('node --check', `${rel}: ${(res.stderr || '').trim().split('\n')[0]}`);
+  } catch (e) {
+    fail('node --check', `${rel}: ${e.message}`);
+  }
 }
 pass('node --check', `${SCRIPTS_TO_CHECK.length} scripts`);
 
