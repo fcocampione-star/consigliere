@@ -20,8 +20,8 @@
  *   4 fallo de backup/restauración · 5 fallo parcial
  */
 
-import { existsSync, mkdirSync, cpSync, readdirSync, readFileSync, writeFileSync, chmodSync, unlinkSync, rmSync, statSync, copyFileSync } from 'node:fs';
-import { join, dirname, basename, resolve, isAbsolute } from 'node:path';
+import { existsSync, mkdirSync, cpSync, readdirSync, readFileSync, writeFileSync, chmodSync, unlinkSync, rmSync, rmdirSync, statSync, realpathSync, copyFileSync, mkdtempSync } from 'node:fs';
+import { join, dirname, basename, resolve, isAbsolute, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir, platform, tmpdir } from 'node:os';
 import { createInterface } from 'node:readline';
@@ -44,17 +44,35 @@ const EXIT = {
   PARCIAL: 5,     // se escribió algo y un paso posterior falló
 };
 
-// Estado: solo vivo. Const ÚNICA de backup/preservados
-// (paridad con init.sh/init.ps1: BACKUP_ITEMS/PRESERVED idénticos).
+// Estado: solo vivo. Const ÚNICA de qué se respalda, qué se preserva y qué se
+// regenera: install, --quick, asistente y --upgrade leen de aquí.
 const STATE_DIR = '.advisor';
-const BACKUP_ITEMS = ['.opencode', 'AGENTS.md', 'PROJECT_STATE.md', 'SUMMARY.md', 'CHANGELOG', STATE_DIR, 'opencode.json', '.gitignore', 'skills-lock.json', 'scripts'];
-const PRESERVED = ['PROJECT_STATE.md', 'SUMMARY.md', 'opencode.json', 'AGENTS.md', '.gitignore'];
+// Lo único que el harness pone dentro de `scripts/`: el directorio es del
+// usuario, así que se nombra archivo por archivo en backup y desinstalación.
+const HARNESS_SCRIPTS = ['scripts/check-memory-limits.sh', 'scripts/check-memory-limits.ps1'];
+// Qué se guarda por si algo sale mal. `.opencode` entra como directorio a
+// propósito (el render lo toca entero y el usuario puede haber añadido ahí sus
+// agentes: en un backup es mejor de más que de menos). `scripts/` NO entra como
+// directorio: solo se pisan los dos archivos de arriba.
+const BACKUP_ITEMS = [
+  '.opencode', 'AGENTS.md', 'PROJECT_STATE.md', 'SUMMARY.md', 'CHANGELOG', STATE_DIR,
+  'opencode.json', '.gitignore', 'skills-lock.json', ...HARNESS_SCRIPTS,
+];
+// Datos del usuario: nunca se regeneran. Tras el render se restauran del backup.
+const PRESERVE_DATA = ['PROJECT_STATE.md', 'SUMMARY.md', 'CHANGELOG'];
+// Config del harness: sí se REGENERAN (de eso sirve un upgrade; si no, cualquier
+// cambio futuro en la plantilla sería un no-op silencioso). La excepción es
+// `agent.<nombre>.model` de opencode.json, que se funde aparte (mergeAgentModels).
+const REGENERATED = ['AGENTS.md', 'opencode.json', '.gitignore'];
 // Subsets por --part (allowlist de primer nivel del render; null = árbol completo).
 const PART_HARNESS = ['.opencode', 'scripts', 'AGENTS.md', 'opencode.json', '.gitignore', 'skills-lock.json'];
 const PART_MEMORIA = ['PROJECT_STATE.md', 'SUMMARY.md', 'CHANGELOG'];
 const PARTS = ['harness', 'memoria', 'autoskills', 'all'];
 const BACKUP_RE = /^(harness|advisor)-.*\.tgz$/;
 const NO_BACKUP = Object.freeze({ file: '', items: [] });
+// Dato del usuario que la plantilla también trae (vacío): se crea desde la
+// plantilla solo si NO existe. Nunca se pisa ni se borra al instalar.
+const NO_SOBRESCRIBIR = new Set(['skills-lock.json']);
 
 const MIN_NODE = [20, 11, 0];
 
@@ -146,11 +164,11 @@ function preflight({ tar = false } = {}) {
   }
   if (!hasTar()) {
     if (tar) {
-      err(`Falta 'tar' y esta operación lo necesita (--upgrade / --restore / --uninstall memoria).`);
+      err(`Falta 'tar' y esta operación lo necesita (--upgrade / --restore / --uninstall memoria / escribir sobre un destino con contenido).`);
       err('Instala un tar funcional (GNU tar o bsdtar) y repite; sin él no hay backup ni restore.');
       die(EXIT.DEPENDENCIA);
     }
-    warn(`No encuentro 'tar': --upgrade, --restore y el backup previo de memoria no estarán disponibles aquí.`);
+    warn(`No encuentro 'tar': el backup previo es obligatorio antes de escribir sobre un destino con contenido, así que --upgrade, --restore y la reinstalación sobre un proyecto existente no estarán disponibles aquí.`);
   }
   if (!hasGit()) warn(`No encuentro 'git': se omiten la inicialización del repo y el hook post-commit.`);
 }
@@ -170,12 +188,15 @@ function ensureStateDirs(target, dry) {
 }
 
 // Backup / restore ----------------------------------------------------------
+// Se llama en TODA vía de escritura (install, --quick, asistente, --upgrade) y
+// SIEMPRE antes del render. `present` vacío = NO_BACKUP: un destino sin nada del
+// harness ni datos previos no tiene nada que perder y se sigue sin tar.
 function doBackup(target, items, dry) {
   const present = items.filter((item) => existsSync(join(target, item)));
-  if (present.length === 0) { info('Sin harness previo que respaldar (directorio vacío/inexistente)'); return { file: '', items: [] }; }
+  if (present.length === 0) { info('Sin harness ni datos previos que respaldar (nada de lo que se va a escribir ya existe)'); return { file: '', items: [] }; }
   if (dry) {
     info(`[dry-run] backup -> ${STATE_DIR}/backups/advisor-<ts>.tgz (keep 5): ${present.join(', ')}`);
-    const preview = PRESERVED.filter((p) => present.includes(p));
+    const preview = PRESERVE_DATA.filter((p) => present.includes(p));
     if (preview.length > 0) info(`[dry-run] restore -> ${preview.join(', ')}`);
     return { file: '[dry-run]', items: present };
   }
@@ -204,13 +225,114 @@ function pruneBackups(backupDir) {
   } catch {}
 }
 
-// true = preservado (o nada que preservar), false = el tar falló.
+// Extracción validada de un .tgz ---------------------------------------------
+// Un .tgz es entrada NO confiable: BACKUP_RE acota el nombre del archivo, pero
+// no sus miembros. Antes de tocar el destino se valida siempre, en tres pasos:
+//   1. `tar -t` lista los miembros: se rechaza el archivo si alguno es una ruta
+//      absoluta (posix o Windows) o trae un segmento '..'.
+//   2. Se extrae en un temporal NUEVO dentro del área de backup del destino.
+//   3. Se recorre lo extraído: un enlace simbólico que resuelva fuera del
+//      temporal invalida el archivo entero.
+// Solo después mueve el contenido `moveValidated`. tar se usa para producir y
+// expandir (el de Windows es bsdtar: sin flags GNU); validar es 100% Node.
+// Devuelve el temporal ya validado, o null si el archivo se rechaza.
+function listArchive(archive) {
+  const r = spawnSync('tar', ['-tzf', archive], { encoding: 'utf8', windowsHide: true });
+  if (r.error || r.status !== 0) {
+    return { ok: false, motivo: `tar ${r.error ? (r.error.code || r.error.message) : `salió con código ${r.status}`}` };
+  }
+  return { ok: true, names: String(r.stdout || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean) };
+}
+
+// Un miembro es inseguro si es absoluto o si sube de nivel ('../x', 'a/../../x').
+function memberUnsafe(name) {
+  const n = name.replace(/\\/g, '/');
+  if (n.startsWith('/') || /^[A-Za-z]:/.test(n)) return true;
+  return n.split('/').includes('..');
+}
+
+function insideDir(base, p) {
+  return p === base || p.startsWith(base + sep);
+}
+
+// Entradas del árbol extraído que se resuelven fuera del temporal.
+function escapesIn(root) {
+  const base = realpathSync(root);
+  const bad = [];
+  const walk = (dir) => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, e.name);
+      if (e.isSymbolicLink()) {
+        let real;
+        try { real = realpathSync(p); } catch { bad.push(p); continue; }
+        if (!insideDir(base, real)) bad.push(p);
+        continue;
+      }
+      if (e.isDirectory()) walk(p);
+    }
+  };
+  walk(root);
+  return bad;
+}
+
+function extractValidated(archive, target) {
+  const listing = listArchive(archive);
+  if (!listing.ok) { err(`No se pudo leer el contenido de '${basename(archive)}' (${listing.motivo}).`); return null; }
+  const unsafe = listing.names.filter(memberUnsafe);
+  if (unsafe.length) {
+    err(`Backup rechazado: ${unsafe.length} miembro(s) apuntan fuera del destino (p. ej. ${unsafe.slice(0, 3).join(', ')}).`);
+    err("Un .tgz con rutas absolutas o '../' no se restaura nunca: no se ha escrito nada.");
+    return null;
+  }
+  let tmp = null;
+  let motivo = null;
+  try {
+    mkdirSync(join(target, STATE_DIR, 'backups'), { recursive: true });
+    tmp = mkdtempSync(join(target, STATE_DIR, 'backups', '.extract-'));
+    const r = spawnSync('tar', ['-xzf', archive, '-C', tmp], { encoding: 'utf8', windowsHide: true });
+    if (r.error || r.status !== 0) motivo = `tar ${r.error ? (r.error.code || r.error.message) : `salió con código ${r.status}`}`;
+    else {
+      const bad = escapesIn(tmp);
+      if (bad.length) motivo = `${bad.length} enlace(s) simbólico(s) fuera del temporal (p. ej. ${bad.slice(0, 3).map((b) => basename(b)).join(', ')})`;
+    }
+  } catch (e) { motivo = e.message; }
+  if (motivo) {
+    err(`No se restaura '${basename(archive)}': ${motivo}.`);
+    if (tmp) { try { rmSync(tmp, { recursive: true, force: true }); } catch {} }
+    return null;
+  }
+  return tmp;
+}
+
+// Mueve lo YA validado a su sitio. `only` acota qué entradas de primer nivel se
+// mueven; el resto del temporal se va con él (el que llama lo borra siempre).
+function moveValidated(tmp, target, only = null) {
+  const names = readdirSync(tmp).filter((n) => !only || only.includes(n)).sort();
+  for (const name of names) {
+    const dst = join(target, name);
+    mkdirSync(dirname(dst), { recursive: true });
+    cpSync(join(tmp, name), dst, { recursive: true, force: true });
+  }
+  return names;
+}
+
+// true = memoria preservada (o nada que preservar), false = el .tgz no valió.
 function restorePreserved(target, backupFile, backupItems) {
-  const restored = PRESERVED.filter((f) => backupItems.includes(f));
+  const restored = PRESERVE_DATA.filter((f) => backupItems.includes(f));
   if (!restored.length || !backupFile) return true;
-  const r = spawnSync('tar', ['-xzf', backupFile, '-C', target, ...restored], { stdio: 'ignore' });
-  if (r.error || r.status !== 0) { warn(`Restauración de memoria/config falló (backup disponible en ${backupFile})`); return false; }
-  ok(`Memoria/config preservadas: ${restored.join(', ')}`);
+  const tmp = extractValidated(backupFile, target);
+  if (!tmp) { warn(`Memoria NO restaurada (el backup sigue intacto en ${backupFile})`); return false; }
+  let movidas = [];
+  try {
+    movidas = moveValidated(tmp, target, restored);
+  } catch (e) {
+    warn(`Memoria NO restaurada (${e.message}; el backup sigue intacto en ${backupFile})`);
+    return false;
+  } finally {
+    try { rmSync(tmp, { recursive: true, force: true }); } catch {}
+  }
+  ok(`Memoria preservada (nunca se regenera): ${movidas.join(', ')}`);
+  if (movidas.length < restored.length) warn(`Del backup solo volvió ${movidas.length ? movidas.join(', ') : 'nada'} de ${restored.join(', ')}.`);
   return true;
 }
 
@@ -253,17 +375,25 @@ function renderFile(src, dst, vars) {
 }
 
 // Un único renderizador. `allow` filtra SOLO el primer nivel (así --part
-// harness/memoria incluye el .opencode/ entero, como siempre).
-function renderTree(srcDir, dstDir, vars, allow = null) {
+// harness/memoria incluye el .opencode/ entero, como siempre). `relBase` lleva
+// la ruta relativa del archivo para poder aplicar NO_SOBRESCRIBIR.
+function renderTree(srcDir, dstDir, vars, allow = null, relBase = '') {
   const entries = readdirSync(srcDir, { withFileTypes: true });
   for (const e of entries) {
     if (allow && !allow.includes(e.name)) continue;
+    const rel = relBase ? `${relBase}/${e.name}` : e.name;
     const src = join(srcDir, e.name);
     const dst = join(dstDir, e.name);
     if (e.isDirectory()) {
       mkdirSync(dst, { recursive: true });
-      renderTree(src, dst, vars);
+      renderTree(src, dst, vars, null, rel);
     } else if (e.isFile()) {
+      // Dato del usuario que la plantilla también trae (vacío): solo se crea si
+      // no existe. Pisarlo dejaría al proyecto sin los pins de autoskills.
+      if (NO_SOBRESCRIBIR.has(rel) && existsSync(dst)) {
+        info(`${rel}: ya existe en el proyecto y es dato tuyo — no se sobrescribe.`);
+        continue;
+      }
       const isTemplate = /\.(md|json|mjs|sh|ps1)$/.test(e.name);
       if (isTemplate) renderFile(src, dst, vars);
       else cpSync(src, dst);
@@ -277,6 +407,55 @@ function partAllowlist(part) {
 
 function renderSelected(srcDir, dstDir, vars, part) {
   renderTree(srcDir, dstDir, vars, partAllowlist(part));
+}
+
+// Fusión de `agent.<nombre>.model` -------------------------------------------
+// opencode.json es config del harness (se REGENERA) pero el modelo de cada agente
+// es elección del usuario. Se lee el archivo previo ANTES del render y se funde
+// en el nuevo con parse/stringify de JSON (nunca splicing de texto). Reglas:
+// solo claves de agente que existen en ambos, solo el campo `model`, y nunca se
+// inventa un agente. Si la plantilla ya trae valor para ese agente (lo rellenó
+// el asistente en esta misma corrida) manda la plantilla.
+function readAgentModels(file) {
+  if (!existsSync(file)) return { ok: false, motivo: 'no había opencode.json previo' };
+  let cfg;
+  try { cfg = JSON.parse(readFileSync(file, 'utf8')); } catch (e) { return { ok: false, motivo: `el opencode.json previo no es JSON válido (${e.message})` }; }
+  if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg) || !cfg.agent || typeof cfg.agent !== 'object') {
+    return { ok: false, motivo: 'el opencode.json previo no tiene mapa agent' };
+  }
+  const models = [];
+  for (const [nombre, def] of Object.entries(cfg.agent)) {
+    if (def && typeof def === 'object' && typeof def.model === 'string' && def.model !== '') models.push([nombre, def.model]);
+  }
+  return { ok: true, models };
+}
+
+function mergeAgentModels(prev, file) {
+  if (!prev.ok) {
+    info(`Sin fusión de modelos: ${prev.motivo}. Se deja el opencode.json recién generado tal cual.`);
+    return;
+  }
+  let nuevo;
+  try { nuevo = JSON.parse(readFileSync(file, 'utf8')); } catch { return; } // no debería pasar: lo acaba de escribir el render
+  const carried = [];
+  let skipped = 0;
+  for (const [nombre, model] of prev.models) {
+    const def = nuevo.agent && nuevo.agent[nombre];
+    if (!def || typeof def !== 'object') { skipped++; continue; }
+    if (def.model) { skipped++; continue; }
+    def.model = model;
+    carried.push(`${nombre}=${model}`);
+  }
+  if (!carried.length) {
+    if (skipped) info(`0 modelos fundidos: los ${skipped} que traía tu opencode.json no tienen hueco en la plantilla (agente ausente o modelo propio).`);
+    return;
+  }
+  try { writeFileSync(file, `${JSON.stringify(nuevo, null, 2)}\n`, 'utf8'); } catch (e) {
+    warn(`No se pudieron fundir los modelos en opencode.json (${e.message}).`);
+    return;
+  }
+  ok(`Modelos conservados de tu opencode.json: ${carried.join(', ')}`);
+  if (skipped) info(`${skipped} modelo(s) sin fundir (agente que no trae la plantilla o que ya traía valor propio).`);
 }
 
 // Git helpers
@@ -413,6 +592,7 @@ function finish(projectName, targetDir) {
 // pasos de una instalación que no ocurrió.
 function dryRunSummary({ projectName, targetDir, scope, upgrade, backup }) {
   const items = (backup && backup.items) || [];
+  const conMemoria = scope === 'memoria' || scope === 'all';
   if (scope !== 'autoskills') info(`[dry-run] would render ${TEMPLATE_DIR} -> ${targetDir} --part ${scope} (project: ${projectName})`);
   info('[dry-run] no se escribió nada en disco');
   console.log(`\n${C.yellow}═══════════════════════════════════════════════════════════════════${C.reset}`);
@@ -420,11 +600,12 @@ function dryRunSummary({ projectName, targetDir, scope, upgrade, backup }) {
   console.log(`${C.bold}Pasos simulados:${C.reset}`);
   if (scope === 'autoskills') console.log('  - sin render (--part autoskills: solo autoskills)');
   else console.log(`  - render de plantillas -> ${targetDir} (--part ${scope})`);
-  console.log(`  - CHANGELOG/ + ${STATE_DIR}/{,backups,chunks}`);
+  console.log(`  - ${STATE_DIR}/{,backups,chunks}${conMemoria ? ' + CHANGELOG/' : ''}`);
   if (items.length) {
-    console.log(`  - backup de ${items.length} ítems -> ${STATE_DIR}/backups/ (keep 5)`);
-    const keep = items.filter((f) => PRESERVED.includes(f));
-    if (keep.length) console.log(`  - restauración de memoria/config preservada: ${keep.join(', ')}`);
+    const keep = items.filter((f) => PRESERVE_DATA.includes(f));
+    console.log(`  - backup de ${items.length} ítems -> ${STATE_DIR}/backups/ (keep 5, obligatorio antes de escribir)`);
+    console.log(`  - restaurado del backup: ${keep.length ? keep.join(', ') : '(nada: el destino no tenía memoria previa)'}`);
+    if (scope === 'harness' || scope === 'all') console.log(`  - regenerado desde la plantilla: ${REGENERATED.join(', ')} (modelos por agente fundidos con los tuyos)`);
   }
   if (upgrade) info(`Simulación de upgrade (--part ${scope}): el backup real se haría antes de escribir.`);
   console.log(`${C.dim}Repite el comando sin --dry-run para escribir de verdad.${C.reset}\n`);
@@ -460,18 +641,98 @@ function statusCmd(targetDir, projectName) {
 }
 
 // --uninstall (seguro: confirmación sin --force; memoria con backup previo) ---
-const UNINSTALL_LISTS = {
-  harness: PART_HARNESS,
-  memoria: [...PART_MEMORIA, STATE_DIR],
-  autoskills: ['.agents'],
-};
+// Rutas EXACTAS siempre. Donde el harness mete un directorio, se expande contra
+// la plantilla: `scripts/` son dos archivos (el directorio es del usuario) y
+// `.opencode/` solo se vacía de lo que trae el harness — un agent o un plugin
+// propio que tengas ahí impide el borrado del directorio.
+function templateFilesUnder(relDir) {
+  const out = [];
+  const walk = (dir, rel) => {
+    let entries;
+    try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) walk(join(dir, e.name), r);
+      else if (e.isFile()) out.push(r);
+    }
+  };
+  walk(join(TEMPLATE_DIR, relDir), relDir); // la raíz también forma parte de la ruta
+  return out;
+}
+
+function uninstallPlan(part) {
+  if (part === 'autoskills') return { items: ['.agents'], prune: [] };
+  if (part === 'memoria') return { items: ['PROJECT_STATE.md', 'SUMMARY.md', 'CHANGELOG', STATE_DIR], prune: [] };
+  return {
+    items: [...templateFilesUnder('.opencode'), ...HARNESS_SCRIPTS, 'AGENTS.md', 'opencode.json', '.gitignore', 'skills-lock.json'],
+    prune: ['.opencode'],
+  };
+}
+
+function planFor(part) {
+  if (part !== 'all') return uninstallPlan(part);
+  const parts = ['harness', 'memoria', 'autoskills'].map(uninstallPlan);
+  return { items: [...new Set(parts.flatMap((p) => p.items))], prune: [...new Set(parts.flatMap((p) => p.prune))] };
+}
+
+// Una ruta por archivo no se lee en un prompt: el alcance se agrupa por
+// directorio (`.opencode/` -> ".opencode/ (29 rutas del harness)").
+function scopeSummary(items) {
+  const groups = new Map();
+  for (const it of items) {
+    const top = it.includes('/') ? it.split('/')[0] : it;
+    if (!groups.has(top)) groups.set(top, []);
+    groups.get(top).push(it);
+  }
+  return [...groups]
+    .map(([top, list]) => (list.length === 1 && !list[0].includes('/') ? top : `${top}/ (${list.length} rutas del harness)`))
+    .join(', ');
+}
+
+// Retira solo los directorios que hayan quedado VACÍOS, de abajo arriba: así
+// cualquier cosa propia del usuario dentro de ellos los deja en pie.
+function pruneEmptyDirs(root) {
+  if (!existsSync(root)) return;
+  const dirs = [];
+  const walk = (dir) => {
+    let entries;
+    try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) if (e.isDirectory()) walk(join(dir, e.name));
+    dirs.push(dir);
+  };
+  walk(root);
+  let n = 0;
+  for (const d of dirs) {
+    try { if (readdirSync(d).length === 0) { rmdirSync(d); n++; } } catch {}
+  }
+  if (n) info(`Retirados ${n} directorios del harness que quedaron vacíos bajo '${basename(root)}/' (lo que no esté vacío se conserva).`);
+}
+
+// Copia externa de la memoria: la interna moriría con .advisor/. Contiene notas
+// del proyecto, así que va con permisos de solo-owner (0700 el directorio, 0600
+// el archivo) y se imprime la ruta exacta para que la borre el usuario.
+function externalMemoryCopy(memBackup) {
+  const dir = join(tmpdir(), `advisor-memoria-${new Date().toISOString().replace(/[:.]/g, '-')}`);
+  try {
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    if (!IS_WIN) { try { chmodSync(dir, 0o700); } catch {} }
+    const dest = join(dir, 'memoria.tgz');
+    copyFileSync(memBackup, dest);
+    if (!IS_WIN) { try { chmodSync(dest, 0o600); } catch {} }
+    return dest;
+  } catch (e) {
+    err(`No se pudo hacer la copia externa de la memoria (${e.message}): no se borra nada.`);
+    die(EXIT.BACKUP);
+  }
+  return null;
+}
 
 async function uninstallCmd(targetDir, projectName, part, dry, force) {
-  const list = part === 'all' ? [...new Set(Object.values(UNINSTALL_LISTS).flat())] : UNINSTALL_LISTS[part];
-  const present = list.filter((item) => existsSync(join(targetDir, item)));
+  const plan = planFor(part);
+  const present = plan.items.filter((item) => existsSync(join(targetDir, item)));
   step(`Desinstalar '${projectName}' --part ${part}`);
   if (!present.length) { info('Nada que desinstalar (sin archivos del harness).'); return; }
-  info(`Alcance: ${present.join(', ')}`);
+  info(`Alcance: ${scopeSummary(present)}`);
   if (dry) { info('[dry-run] no se borró nada en disco'); return; }
   if (!force) {
     // Sin TTY no hay quien confirme: se dice en vez de fingir un "Cancelado" con exit 0.
@@ -485,18 +746,18 @@ async function uninstallCmd(targetDir, projectName, part, dry, force) {
   if (part === 'memoria' || part === 'all') {
     // Memoria: backup previo OBLIGATORIO (doBackup aborta con exit 4 si falla).
     // Se copia FUERA del target: el backup interno se borraría con .advisor/.
-    const memPresent = UNINSTALL_LISTS.memoria.filter((item) => existsSync(join(targetDir, item)));
+    const memPresent = planFor('memoria').items.filter((item) => existsSync(join(targetDir, item)));
     if (memPresent.length) {
       step('Backup previo obligatorio de memoria');
       const { file: memBackup } = doBackup(targetDir, memPresent, false);
       if (memBackup) {
-        const ext = join(tmpdir(), `advisor-memoria-${Date.now()}.tgz`);
-        copyFileSync(memBackup, ext);
-        ok(`Copia seguridad externa (sobrevive al borrado): ${ext}`);
+        const ext = externalMemoryCopy(memBackup);
+        ok(`Copia de seguridad externa de la memoria (sobrevive al borrado de ${STATE_DIR}/): ${ext}`);
+        info(`Contiene notas de tu proyecto: bórrala cuando ya no la necesites — rm -rf "${dirname(ext)}"`);
       }
     }
   }
-  // Borrado explícito por lista (nunca rm -rf amplio, nunca .git).
+  // Borrado explícito por ruta exacta (nunca rm -rf amplio, nunca .git).
   let n = 0;
   for (const item of present) {
     try {
@@ -504,6 +765,7 @@ async function uninstallCmd(targetDir, projectName, part, dry, force) {
       n++;
     } catch (e) { warn(`No se pudo borrar ${item}: ${e.message}`); }
   }
+  for (const d of plan.prune) pruneEmptyDirs(join(targetDir, d));
   if (n < present.length) {
     err(`Desinstalación parcial: ${n}/${present.length} ítems borrados de '${targetDir}'.`);
     die(EXIT.PARCIAL);
@@ -521,11 +783,20 @@ function restoreCmd(targetDir, projectName, from, dry) {
     err(`Backup no válido: '${basename(bf)}' (se aceptan advisor-<ts>.tgz y harness-<ts>.tgz).`);
     die(EXIT.USO);
   }
-  if (dry) { info(`[dry-run] tar -xzf ${bf} -C ${targetDir} (no se escribió nada)`); return; }
+  if (dry) { info(`[dry-run] restaurar ${bf} -> ${targetDir} (los miembros se validan antes de mover nada; no se escribió nada)`); return; }
   mkdirSync(targetDir, { recursive: true });
-  const r = spawnSync('tar', ['-xzf', bf, '-C', targetDir], { stdio: 'inherit' });
-  if (r.error || r.status !== 0) { err(`Restauración falló (${spawnWhy(r)}; backup intacto en ${bf})`); die(EXIT.BACKUP); }
-  ok(`Restaurado desde ${bf}`);
+  // Nada se mueve de un .tgz con rutas absolutas, '../' o enlaces hacia fuera.
+  const tmp = extractValidated(bf, targetDir);
+  if (!tmp) {
+    err(`Restauración rechazada: no se ha escrito nada fuera de '${targetDir}' y el backup sigue intacto en ${bf}.`);
+    die(EXIT.BACKUP);
+  }
+  let movidas = [];
+  let fallo = null;
+  try { movidas = moveValidated(tmp, targetDir); } catch (e) { fallo = e; }
+  try { rmSync(tmp, { recursive: true, force: true }); } catch {}
+  if (fallo) { err(`Restauración falló al mover el contenido ya validado (${fallo.message}; backup intacto en ${bf})`); die(EXIT.BACKUP); }
+  ok(`Restaurado desde ${bf} (${movidas.length} entradas: ${movidas.join(', ')})`);
 }
 
 // Interactivo
@@ -627,7 +898,7 @@ async function interactiveCreate() {
 
   installTail({
     projectName, targetDir, scope: 'all', dry: false, force: false, doGit: DO_GIT,
-    autoChoice: AUTO_CHOICE, upgrade: false, backup: NO_BACKUP,
+    autoChoice: AUTO_CHOICE, upgrade: false,
     STACK_DB, STACK_BACKEND, STACK_FRONTEND, STACK_AUTH, STACK_VALIDATION, STACK_DEPLOY,
     LANG_BACKEND: langBackend(STACK_BACKEND), ...models,
   });
@@ -635,31 +906,54 @@ async function interactiveCreate() {
 
 // Única secuencia de escritura. Install, upgrade, interactivo y --quick entran
 // por aquí: las diferencias son opciones explícitas, no ramas que se puedan
-// desincronizar. La restauración de memoria/config se intenta siempre (en un
-// install nuevo el backup viene vacío y es un no-op), así la asimetría
+// desincronizar. El backup previo ocurre SIEMPRE antes de la primera escritura
+// (NO_BACKUP escapa cuando el destino no tiene nada que perder) y la
+// restauración de la memoria se intenta siempre, así la asimetría
 // install/upgrade no puede reaparecer.
 function installTail(opts) {
-  const { projectName, targetDir, scope, dry, force, doGit, autoChoice, upgrade, backup } = opts;
+  const { projectName, targetDir, scope, dry, force, doGit, autoChoice, upgrade } = opts;
   const verb = upgrade ? 'actualizado' : 'generado';
   const partTag = scope === 'all' ? '' : ` (--part ${scope})`;
+  const conMemoria = scope === 'memoria' || scope === 'all';
+  const regeneraConfig = scope === 'harness' || scope === 'all';
 
+  let backup = NO_BACKUP;
+  if (scope !== 'autoskills') {
+    // Obligatorio: si el backup falla, no se ha escrito nada y se sale con 4.
+    try {
+      backup = doBackup(targetDir, BACKUP_ITEMS, dry);
+    } catch (e) {
+      err(`Backup falló (${e.message}): no se ha escrito nada en '${targetDir}'.`);
+      die(EXIT.BACKUP);
+    }
+  }
   if (dry) { dryRunSummary({ projectName, targetDir, scope, upgrade, backup }); return; }
 
   step(`${upgrade ? 'Actualizando' : 'Generando'} proyecto '${projectName}'${partTag}`);
+  // Los modelos por agente se leen ANTES del render: después el archivo es nuevo.
+  const prevModels = regeneraConfig ? readAgentModels(join(targetDir, 'opencode.json')) : null;
   try {
     mkdirSync(targetDir, { recursive: true });
     if (scope === 'autoskills') info('--part autoskills: solo autoskills, sin render');
     else renderSelected(TEMPLATE_DIR, targetDir, buildVars(opts), scope);
-    mkdirSync(join(targetDir, 'CHANGELOG'), { recursive: true });
+    // CHANGELOG/ es memoria: un --part harness no debe dejarlo colgando vacío.
+    if (conMemoria) mkdirSync(join(targetDir, 'CHANGELOG'), { recursive: true });
     ensureStateDirs(targetDir, false);
   } catch (e) {
     err(`Escritura del harness incompleta en '${targetDir}': ${e.message}`);
     err(`Árbol a medias: revísalo o restaura con --restore --from <${STATE_DIR}/backups/*.tgz>.`);
     die(EXIT.PARCIAL);
   }
+  if (regeneraConfig) mergeAgentModels(prevModels, join(targetDir, 'opencode.json'));
   if (!restorePreserved(targetDir, backup.file, backup.items)) {
-    err(`Memoria/config NO restauradas tras ${verb} el harness en '${targetDir}'.`);
+    err(`Memoria NO restaurada tras ${verb} el harness en '${targetDir}'.`);
     die(EXIT.PARCIAL);
+  }
+  if (scope !== 'autoskills') {
+    // Informe explícito: qué se restauró del backup y qué salió de la plantilla.
+    const datos = PRESERVE_DATA.filter((f) => backup.items.includes(f));
+    info(`Preservado (restaurado del backup, nunca se regenera): ${datos.length ? datos.join(', ') : '(nada: el destino no tenía memoria previa)'}`);
+    if (regeneraConfig) info(`Regenerado desde la plantilla: ${REGENERATED.join(', ')}`);
   }
   ok(`Harness ${verb}${partTag} (agents, commands, skills, memoria, scripts)`);
   if (doGit) gitInitAndCommit(targetDir, TEMPLATE_DIR, force);
@@ -701,10 +995,10 @@ const FLAGS = [
   { name: 'stack-deploy', value: '<v>', help: 'deploy' },
   { name: 'autoskills', value: '<1|2|3>', enum: ['1', '2', '3'], help: '1=en proyecto (npx), 2=global (npm i -g), 3=omitir' },
   { name: 'git', value: '<yes|no>', bool: true, help: 'inicializar git + commit inicial' },
-  { name: 'upgrade', help: 'actualizar un harness existente (alias de --part all; backup keep 5; no requiere --force)' },
+  { name: 'upgrade', help: 'actualizar un harness existente (alias de --part all; backup keep 5; preserva memoria y regenera config; no requiere --force)' },
   { name: 'part', value: '<p>', enum: PARTS, help: 'alcance modular: harness|memoria|autoskills|all (install/upgrade/uninstall)' },
   { name: 'status', help: 'estado read-only del harness (no escribe)' },
-  { name: 'restore', help: 'restaurar un backup (requiere --from)' },
+  { name: 'restore', help: 'restaurar un backup (requiere --from; las rutas del .tgz se validan antes de mover nada)' },
   { name: 'from', value: '<tgz>', help: 'backup a restaurar (advisor-<ts>.tgz o harness-<ts>.tgz)' },
   { name: 'uninstall', help: 'desinstalar el alcance de --part (pide confirmación sin --force; memoria con backup previo)' },
   { name: 'dry-run', help: 'simular: no escribe nada y no imprime el banner de éxito' },
@@ -790,12 +1084,26 @@ function missingTarget(scriptName) {
 }
 
 // ¿Esta operación necesita tar? Determina si su ausencia es fatal (exit 3).
-function needsTar({ values, immediate }) {
-  if (immediate || values['dry-run']) return false;
+// El backup previo es obligatorio antes de escribir sobre un destino con
+// contenido, así que también lo necesita un install o un --quick encima de un
+// proyecto que ya tiene algo (no solo --upgrade).
+function hasContent(target) {
+  if (!existsSync(target)) return false;
+  try { return readdirSync(target).length > 0; } catch { return false; }
+}
+function needsBackup(target, part) {
+  if (part === 'autoskills') return false;
+  return hasContent(target);
+}
+function needsTar(p, target) {
+  const { values, immediate } = p;
+  if (values['dry-run']) return false;
   if (values.restore) return true;
-  if (values.upgrade) return values.part !== 'autoskills';
+  if (values.status) return false;
   if (values.uninstall) return !values.part || values.part === 'memoria' || values.part === 'all';
-  return false;
+  if (values.upgrade) return values.part !== 'autoskills';
+  if (immediate === 'help' || immediate === 'version' || immediate === 'interactive') return false;
+  return needsBackup(target, values.part);
 }
 
 function showHelp(scriptName) {
@@ -808,9 +1116,9 @@ Uso rápido:
 
 Uso avanzado:
   ${scriptName} --version | --help | --interactive
-  ${scriptName} <ruta/proyecto> --upgrade [--part harness|memoria|autoskills|all]  actualizar (backup keep 5, preserva memoria/config)
+  ${scriptName} <ruta/proyecto> --upgrade [--part harness|memoria|autoskills|all]  actualizar (backup keep 5; preserva memoria, regenera config)
   ${scriptName} <ruta/proyecto> --status   estado read-only (no escribe)
-  ${scriptName} <ruta/proyecto> --restore --from <advisor|harness>-<ts>.tgz  restaurar backup
+  ${scriptName} <ruta/proyecto> --restore --from <advisor|harness>-<ts>.tgz  restaurar backup (rutas del .tgz validadas)
   ${scriptName} <ruta/proyecto> --uninstall --part <harness|memoria|autoskills> [--force]  desinstalar (memoria exige backup previo)
   ${scriptName} <ruta/proyecto> --dry-run  simulación sin escribir
 
@@ -822,7 +1130,8 @@ Códigos de salida:
   1  error de uso o validación: flag desconocido, valor fuera de dominio, falta --part,
      destino no vacío sin --force, --upgrade sin harness previo
   2  hace falta confirmación: sesión no interactiva donde se requiere, o confirmación rechazada
-  3  falta una dependencia requerida (tar para --upgrade / --restore / --uninstall memoria)
+  3  falta una dependencia requerida (tar para --upgrade / --restore / --uninstall memoria /
+     para escribir sobre un destino con contenido, que exige backup previo)
   4  falló el backup/restauración con tar (el backup previo nunca se descarta)
   5  fallo parcial: se escribió algo y un paso posterior falló
 
@@ -831,11 +1140,21 @@ Notas:
   - --dry-run no escribe nada y nunca imprime el banner de "proyecto listo".
   - Solo se expande un '~' inicial; los valores de flag nunca se toman por destino.
   - Un hook post-commit existente se copia a .advisor/backups/hooks/ y solo se reemplaza con --force.
+  - Cualquier escritura sobre un destino con contenido hace un backup previo en
+    .advisor/backups/ (install, --quick, asistente o --upgrade). Es obligatorio: si
+    falla, no se escribe nada y se sale con 4.
+
+Qué se preserva y qué se regenera (en install y en --upgrade):
+  - Nunca se regenera (se restaura del backup): PROJECT_STATE.md, SUMMARY.md, CHANGELOG/.
+  - Se regenera desde la plantilla: AGENTS.md, opencode.json, .gitignore.
+    De opencode.json solo se conservan tus agent.<nombre>.model (el resto es de la plantilla).
+  - Nunca se sobrescribe: skills-lock.json (tus pins de autoskills); solo se crea si no existe.
+  - --part harness no crea CHANGELOG/ ni toca los archivos de memoria.
 
 Estado: vivo en .advisor/.
 
-Genera: .opencode/ (agents, commands, plans, skills, scripts), AGENTS.md,
-PROJECT_STATE.md, SUMMARY.md, CHANGELOG/, .advisor/, .gitignore, skills-lock.json.
+Genera (por defecto, --part all): .opencode/ (agents, commands, plans, skills, scripts),
+AGENTS.md, PROJECT_STATE.md, SUMMARY.md, CHANGELOG/, .advisor/, .gitignore, skills-lock.json.
 
 Instalación: solo por proyecto, sin binario global.
   npx advisor-harness@latest /ruta/proyecto
@@ -862,15 +1181,20 @@ function happyPath(targetDir = process.cwd()) {
   ok('Autoskills: 3 (omitir) | Git init: Sí');
   installTail({
     projectName, targetDir, scope: 'all', dry: false, force: true, doGit: true,
-    autoChoice: '3', upgrade: false, backup: NO_BACKUP,
+    autoChoice: '3', upgrade: false,
   });
 }
 
 // Destino del happy path: --dir manda; si no, el primer token que no sea flag
 // ni valor de flag — la tabla garantiza que un valor nunca se confunde con él.
-function quickPath(p) {
+// (Se resuelve también antes del preflight, para saber si hará falta tar.)
+function quickTarget(p) {
   const raw = p.values.dir || p.positional[0] || '';
-  const targetDir = raw ? resolveTarget(raw) : process.cwd();
+  return raw ? resolveTarget(raw) : process.cwd();
+}
+
+function quickPath(p) {
+  const targetDir = quickTarget(p);
   if (existsSync(targetDir) && readdirSync(targetDir).length > 0) {
     warn(`Directorio no vacío — happy path forzado con --quick (${targetDir}).`);
   }
@@ -885,7 +1209,9 @@ async function main() {
   // Un preflight por corrida, antes de cualquier escritura. --help y --version
   // no tocan disco, así que se resuelven sin exigir plantillas ni herramientas.
   if (args.length === 0) {
-    preflight();
+    // Sin flags: cwd vacío -> happy path (nada que respaldar). Cwd con contenido
+    // -> asistente, que acabará escribiendo encima: el backup es obligatorio.
+    preflight({ tar: !cwdEmpty() });
     if (cwdEmpty()) happyPath();
     else await interactiveCreate();
     return;
@@ -895,7 +1221,10 @@ async function main() {
   if (p.immediate === 'help') { warnUnknown(p.unknown); showHelp(scriptName); return; }
   if (p.immediate === 'version') { warnUnknown(p.unknown); console.log(`ADVISOR v${VERSION}`); return; }
 
-  preflight({ tar: needsTar(p) });
+  // El destino se resuelve ANTES del preflight: el backup previo es obligatorio
+  // en toda escritura sobre un destino con contenido, así que la necesidad de
+  // tar depende de si ese destino ya tiene algo.
+  preflight({ tar: needsTar(p, quickTarget(p)) });
 
   if (p.immediate === 'interactive') { warnUnknown(p.unknown); await interactiveCreate(); return; }
   if (p.immediate === 'quick') { warnUnknown(p.unknown); quickPath(p); return; }
@@ -956,17 +1285,14 @@ async function main() {
   };
 
   if (v.upgrade) {
-    // --upgrade --part autoskills no toca el harness: sin backup que hacer.
-    let backup = NO_BACKUP;
-    if (scope !== 'autoskills') {
-      step(`Actualizando harness en '${PROJECT_NAME}' --part ${scope} (backup keep 5)`);
-      backup = doBackup(TARGET_DIR, BACKUP_ITEMS, dry);
-    }
-    installTail({ ...common, backup, upgrade: true });
+    // El backup (obligatorio, keep 5) lo hace installTail antes de escribir, en
+    // la misma secuencia que un install: no hay una segunda vía de escritura.
+    if (scope !== 'autoskills') step(`Actualizando harness en '${PROJECT_NAME}' --part ${scope} (backup keep 5)`);
+    installTail({ ...common, upgrade: true });
     return;
   }
 
-  installTail({ ...common, backup: NO_BACKUP, upgrade: false });
+  installTail({ ...common, upgrade: false });
 }
 
 main().catch((e) => { err(e.message); console.error(e); die(EXIT.USO); });
