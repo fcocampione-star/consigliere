@@ -12,6 +12,14 @@
  *   node loader.mjs load "skill-name"
  *   node loader.mjs chunk "skill-name" urls,shortcuts,examples
  *   node loader.mjs refresh [--force]
+ *
+ * Salidas: 0 ok · 1 error (skill no encontrada, chunk inexistente o USO
+ * INVÁLIDO: `chunk <skill>` sin nombres, `search` sin query, comando
+ * desconocido o ninguno — en todos estos casos se imprime el uso real).
+ *
+ * Los comandos de LECTURA (`load`, `chunk`, `search`) son de solo lectura: NUNCA
+ * escriben `.advisor/skill-registry.cache.json`. La cache solo se (re)genera en
+ * `list` y `refresh`, que son los comandos cuyo objeto es el listado/cache.
  */
 import { readdirSync, readFileSync, existsSync, statSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -86,13 +94,19 @@ function isCacheValid(cached, currentFp) {
   return true;
 }
 
-function listSkillsCached(force = false) {
+// `persist` decide si esta rutina puede ESCRIBIR la cache. Por defecto false:
+// leer (load/chunk/search) no muta estado en disco; solo `list` y `refresh` —
+// los comandos cuyo objeto es el listado/cache — pasan true. El formato de la
+// cache no cambia, así que una cache existente se sigue aceptando.
+function listSkillsCached(force = false, persist = false) {
   const raw = listSkillsRaw();
   const fp = fingerprint(raw);
   const cached = loadCache();
   if (!force && isCacheValid(cached, fp)) {
+    // Una clave por nombre: el find() dentro del map era un O(n²).
+    const byName = new Map(cached.entries.map(e => [e.name, e]));
     return raw.map(r => {
-      const e = cached.entries.find(x => x.name === r.name);
+      const e = byName.get(r.name);
       return { ...r, description: e?.description || null, cached: true };
     });
   }
@@ -100,18 +114,40 @@ function listSkillsCached(force = false) {
   const enriched = fp.map(e => {
     try {
       const fm = readFrontmatter(readFileSync(e.path, 'utf8'));
-      return { ...e, description: (fm.description || '').slice(0, 120) };
+      return { ...e, description: summaryLine(fm.description, 120) };
     } catch { return { ...e, description: '' }; }
   });
-  saveCache(enriched);
+  if (persist) saveCache(enriched);
+  const byName = new Map(enriched.map(e => [e.name, e]));
   return raw.map(r => {
-    const e = enriched.find(x => x.name === r.name);
+    const e = byName.get(r.name);
     return { ...r, description: e?.description || null, cached: false };
   });
 }
 
+// Normaliza el texto ANTES de cualquier parseo markdown: quita el BOM inicial
+// (UTF-8 con BOM) y convierte CRLF/CR a LF. Sin esto, el patrón de front-matter
+// no casa en un checkout Windows (core.autocrlf=true) ni en un archivo con BOM y
+// la función devuelve {} — descripciones vacías y validación de chunks saltada.
+// NOTA: debe consolidarse con los helpers markdown compartidos cuando exista
+// .opencode/scripts/lib/; de momento va en línea a propósito.
+function normalizeText(content) {
+  return String(content ?? '').replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+}
+
+// Descripción de LISTADO: siempre UNA línea. El front-matter admite bloques
+// escalares (`description: |`), así que su valor trae saltos de línea; sin
+// aplanarlos, `list` y `search` imprimían una entrada partida en varias líneas
+// y se rompía el formato "una skill por línea" (y su parseo). El valor
+// completo y multilínea sigue saliendo tal cual en `load`.
+function summaryLine(desc, max) {
+  // El trim final importa: el corte por longitud puede dejar un espacio o salto
+  // colgando en el borde de la línea.
+  return String(desc ?? '').replace(/\s+/g, ' ').trim().slice(0, max).trim();
+}
+
 function readFrontmatter(content) {
-  const m = content.match(/^---\n([\s\S]*?)\n---/);
+  const m = normalizeText(content).match(/^---[ \t]*\n([\s\S]*?)\n---[ \t]*(?:\n|$)/);
   if (!m) return {};
   const fm = {};
   const lines = m[1].split('\n');
@@ -145,14 +181,36 @@ function validateSkill(name, content, fm) {
   return warnings;
 }
 
+// Detección de bloques de código fence (CommonMark básico, como el parser
+// fence-aware de memory-rotate): apertura = hasta 3 espacios de indentación +
+// ``` o ~~~ de 3+ caracteres; cierre = mismo carácter, longitud >= a la de
+// apertura y nada más en la línea. Emparejar fence a ciegas (el bug anterior)
+// tomaba como bloque cualquier par de ``` — incluidos los de ejemplo anidados
+// dentro de un fence de 4 — y hacía que un marcador de chunk que era solo
+// documentación pareciera texto real.
 function fenceSpans(content) {
+  const text = normalizeText(content);
   const spans = [];
-  const re = /```/g;
-  let m, open = -1;
-  while ((m = re.exec(content))) {
-    if (open === -1) open = m.index;
-    else { spans.push([open, m.index + 3]); open = -1; }
+  const open = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+  let fence = null; // { char, len, start }
+  let offset = 0;
+  for (const line of text.split('\n')) {
+    const lineStart = offset;
+    offset += line.length + 1;
+    const m = open.exec(line);
+    if (fence) {
+      // Solo cierra el mismo carácter, con al menos tantos como la apertura y
+      // sin info string detrás.
+      if (m && m[1][0] === fence.char && m[1].length >= fence.len && m[2].trim() === '') {
+        spans.push([fence.start, lineStart + line.length]);
+        fence = null;
+      }
+      continue;
+    }
+    // Un fence de info string con backticks dentro no es un fence (CommonMark).
+    if (m && !(m[1][0] === '`' && m[2].includes('`'))) fence = { char: m[1][0], len: m[1].length, start: lineStart };
   }
+  if (fence) spans.push([fence.start, text.length]); // fence sin cerrar: llega al final
   return spans;
 }
 
@@ -161,7 +219,8 @@ function inSpans(spans, idx) {
   return false;
 }
 
-function chunkNames(content) {
+function chunkNames(raw) {
+  const content = normalizeText(raw);
   const spans = fenceSpans(content);
   const names = [];
   const re = /<!--\s*CHUNK:\s*([\w-]+)\s*-->/g;
@@ -170,7 +229,8 @@ function chunkNames(content) {
   return names;
 }
 
-function extractChunks(content, wanted) {
+function extractChunks(raw, wanted) {
+  const content = normalizeText(raw);
   const spans = fenceSpans(content);
   const re = /<!--\s*(\/)?CHUNK(?::\s*([\w-]+))?\s*-->/g;
   let m;
@@ -189,7 +249,9 @@ function extractChunks(content, wanted) {
 }
 
 function findSkill(name, useCache = true) {
-  const skills = useCache ? listSkillsCached(false) : listSkillsRaw();
+  // useCache=true lee la cache en memoria pero NO la escribe: buscar una skill
+  // es una operación de lectura.
+  const skills = useCache ? listSkillsCached(false, false) : listSkillsRaw();
   for (const s of skills) if (s.name === name) return s;
   return null;
 }
@@ -200,43 +262,64 @@ const arg = args[1];
 const arg2 = args[2];
 const hasFlag = (f) => args.includes(f);
 
+const USAGE = `Uso:
+  node loader.mjs list [--refresh|--json]
+  node loader.mjs refresh [--force]
+  node loader.mjs search "query" [--json]
+  node loader.mjs load "skill-name"
+  node loader.mjs chunk "skill-name" urls,shortcuts,examples`;
+
+// Error de uso: explica qué falta y reimprime el uso real (exit 1, el mismo
+// código documentado que el comando desconocido). Se distingue de "sin
+// resultados": aquí falta un ARGUMENTO obligatorio.
+function usageError(motivo) {
+  console.error(`loader.mjs: ${motivo}\n`);
+  console.error(USAGE);
+  process.exit(1);
+}
+
 switch (cmd) {
   case 'list': {
     const force = hasFlag('--refresh') || hasFlag('--force');
     const json = hasFlag('--json');
-    const skills = listSkillsCached(force);
+    const skills = listSkillsCached(force, true);
     if (!skills.length) { console.log('No hay skills disponibles.'); break; }
     if (json) {
       console.log(JSON.stringify(skills.map(s => ({ name: s.name, source: s.source, path: s.path, description: s.description, cached: s.cached })), null, 2));
     } else {
       for (const s of skills) {
-        const desc = s.description ?? (() => { try { return (readFrontmatter(readFileSync(s.path, 'utf8')).description || '').slice(0,80); } catch { return ''; } })();
+        const desc = s.description ?? (() => { try { return summaryLine(readFrontmatter(readFileSync(s.path, 'utf8')).description, 80); } catch { return ''; } })();
         console.log(`- ${s.name} [${s.source}]${s.cached ? ' (cache)' : ''} — ${desc}`);
       }
     }
     break;
   }
   case 'refresh': {
-    const skills = listSkillsCached(true);
+    const skills = listSkillsCached(true, true);
     console.log(`Cache regenerada: ${skills.length} skills → ${CACHE_FILE}`);
     break;
   }
   case 'search': {
-    const q = (arg || '').toLowerCase();
+    // `search` sin query es un error de uso, no "cero resultados": antes caía
+    // en el mensaje `Sin resultados para "undefined"`. Un primer token con
+    // guion se interpreta como flag, así que `search --json` también es uso.
+    if (!arg || !String(arg).trim() || String(arg).startsWith('-')) usageError('falta la query de búsqueda.');
+    const q = String(arg).toLowerCase();
     const json = hasFlag('--json');
-    const skills = listSkillsCached(false);
+    const skills = listSkillsCached(false, false);
     const hits = [];
     for (const s of skills) {
       const content = readFileSync(s.path, 'utf8');
       const fm = readFrontmatter(content);
       const hay = (content + '\n' + (fm.description || '')).toLowerCase();
-      if (q && hay.includes(q)) hits.push({ name: s.name, source: s.source, description: (fm.description || '').slice(0, 80) });
+      if (hay.includes(q)) hits.push({ name: s.name, source: s.source, description: summaryLine(fm.description, 80) });
     }
     if (json) console.log(JSON.stringify(hits, null, 2));
     else console.log(hits.length ? hits.map(h => `- ${h.name} [${h.source}]: ${h.description}`).join('\n') : `Sin resultados para "${arg}".`);
     break;
   }
   case 'load': {
+    if (!arg || !String(arg).trim()) usageError('falta el nombre de la skill.');
     const s = findSkill(arg, true);
     if (!s) { console.error(`Skill "${arg}" no encontrada. Usa "list" para ver disponibles.`); process.exit(1); }
     const content = readFileSync(s.path, 'utf8');
@@ -249,10 +332,14 @@ switch (cmd) {
     break;
   }
   case 'chunk': {
+    if (!arg || !String(arg).trim()) usageError('falta el nombre de la skill.');
+    // Sin nombres de chunk NO se devuelve la skill entera en silencio: era el
+    // fallo silencioso que hacía que un typo trajera el archivo completo.
+    if (!arg2 || !String(arg2).trim()) usageError(`faltan los chunks a extraer de "${arg}".`);
     const s = findSkill(arg, true);
     if (!s) { console.error(`Skill "${arg}" no encontrada.`); process.exit(1); }
     const content = readFileSync(s.path, 'utf8');
-    const wanted = (arg2 || 'all').split(',').map((x) => x.trim()).filter(Boolean);
+    const wanted = String(arg2).split(',').map((x) => x.trim()).filter(Boolean);
     for (const w of validateSkill(s.name, content, readFrontmatter(content))) console.error(`Aviso: ${w}`);
     let parts;
     if (wanted.includes('all')) parts = extractChunks(content, chunkNames(content));
@@ -262,11 +349,6 @@ switch (cmd) {
     break;
   }
   default:
-    console.log(`Uso:
-  node loader.mjs list [--refresh|--json]
-  node loader.mjs refresh [--force]
-  node loader.mjs search "query" [--json]
-  node loader.mjs load "skill-name"
-  node loader.mjs chunk "skill-name" urls,shortcuts,examples`);
+    console.log(USAGE);
     process.exit(1);
 }

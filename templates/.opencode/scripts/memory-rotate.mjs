@@ -39,7 +39,12 @@
  *    (`— - : | ,`), en vez del prefijo de ~80 chars que daba falsos positivos.
  *  - Separación: al anexar 2+ entradas al mismo CHANGELOG se normaliza a una
  *    única línea en blanco entre entradas.
- *  - Atomicidad: escrituras con temp+rename en el mismo directorio.
+ *  - Atomicidad: escrituras con temp+rename en el mismo directorio, con
+ *    reintentos ACOTADOS del rename (EPERM/EACCES/EBUSY/EEXIST: el destino
+ *    está bloqueado momentáneamente en Windows) y backoff corto. Un fallo
+ *    definitivo borra el temp: una rotación fallida nunca deja debris.
+ *  - Complejidad: la región se parsea UNA vez y el bucle de drenaje quita una
+ *    entrada por iteración (trabajo ∝ entrada quitada, no ∝ archivo entero).
  *  - Cross-platform EOL: la lectura normaliza CRLF/CR a LF antes de parsear
  *    (los regex anclan con `$`, que no casa ante `\r`); evita perder entradas
  *    en checkouts Windows con core.autocrlf=true.
@@ -131,14 +136,56 @@ function changelogHeader(monday) {
   return `# Changelog ${monday}\n\n> Historial semanal archivado desde SUMMARY.md. Detalle de diffs: \`git log\`.\n\n`;
 }
 
-// Escritura atómica temp+rename en el mismo directorio.
-function writeAtomic(file, content) {
+// --- Escritura atómica temp+rename ------------------------------------------
+// En Windows el rename puede fallar con EPERM/EBUSY aunque el temp esté escrito:
+// destino bloqueado momentáneamente por un editor, un antivirus o un indexador.
+// Sin reintento, la rotación se aborta DESPUÉS de haber anexado ya en otro
+// archivo (rotación a medias). Por eso el rename se reintenta con backoff corto
+// y acotado, y un fallo definitivo borra el temp: nunca queda debris.
+const RENAME_ATTEMPTS = 5;
+const RENAME_BACKOFF_MS = [10, 25, 50, 100, 200];
+const RENAME_RETRYABLE = new Set(['EPERM', 'EACCES', 'EBUSY', 'EEXIST', 'ENOTEMPTY']);
+
+// Pausa síncrona sin dependencias ni busy-wait: Atomics.wait sobre un buffer
+// compartido duerme el hilo (el rename de fs es síncrono, no hay await aquí).
+const SLEEPER = new Int32Array(new SharedArrayBuffer(4));
+function sleepSync(ms) {
+  if (!(ms > 0)) return;
+  Atomics.wait(SLEEPER, 0, 0, ms);
+}
+
+// Renombra con reintentos ACOTADOS solo para los códigos transitorios de
+// bloqueo; cualquier otro error (p.ej. ENOENT) se propaga de inmediato.
+// `rename` es inyectable para poder probar el reintento sin bloquear un archivo
+// real de verdad (ver test/memory-rotate-extra.test.mjs).
+function renameWithRetry(from, to, { attempts = RENAME_ATTEMPTS, backoffMs = RENAME_BACKOFF_MS, rename = renameSync } = {}) {
+  const tries = Math.max(1, Number(attempts) || 1);
+  for (let i = 0; i < tries; i++) {
+    try {
+      rename(from, to);
+      return;
+    } catch (e) {
+      if (i === tries - 1 || !RENAME_RETRYABLE.has(e && e.code)) throw e;
+      sleepSync(backoffMs[i] ?? backoffMs[backoffMs.length - 1] ?? 0);
+    }
+  }
+}
+
+// Escritura atómica temp+rename en el mismo directorio: o el destino queda con
+// el contenido nuevo completo, o queda como estaba y sin temp huérfano.
+export function writeAtomic(file, content, opts = {}) {
   const tmp = join(dirname(file), `.${basename(file)}.${process.pid}.${randomBytes(4).toString('hex')}.tmp`);
+  const dropTmp = () => { try { rmSync(tmp, { force: true }); } catch { /* best-effort */ } };
   try {
     writeFileSync(tmp, content, 'utf8');
-    renameSync(tmp, file);
   } catch (e) {
-    try { rmSync(tmp, { force: true }); } catch { /* best-effort */ }
+    dropTmp();
+    throw e;
+  }
+  try {
+    renameWithRetry(tmp, file, opts);
+  } catch (e) {
+    dropTmp(); // rotación fallida no deja temp detrás
     throw e;
   }
 }
@@ -265,6 +312,25 @@ function renderRegion(preamble, entries, epilogue) {
   return `${pre}${body}\n\n${epilogue}`;
 }
 
+// --- Helpers del drenaje lineal ---------------------------------------------
+// Líneas NO vacías: la misma métrica que cuenta memory-stats.countNonEmpty
+// detrás de contentLines. Sumable porque los separadores en blanco que mete
+// renderRegion entre entradas no aportan ninguna.
+function nonEmptyLines(text) {
+  return String(text ?? '').split('\n').filter((l) => l.trim() !== '').length;
+}
+
+// Orden de candidatos al drenaje: fecha ascendente y, a igualdad de fecha,
+// índice ascendente — el mismo desempate que `oldestCandidate` (comparación
+// estricta `date < date` sobre índices crecientes). Los protegidos se calculan
+// una vez y nunca salen, así que este orden no cambia al vaciar entradas y un
+// puntero que solo avanza basta: O(1) por iteración en vez de un O(entradas).
+function candidateOrder(entries, protectedFlags) {
+  const order = [];
+  for (let i = 0; i < entries.length; i++) if (!protectedFlags[i]) order.push(i);
+  return order.sort((a, b) => (entries[a].date < entries[b].date ? -1 : entries[a].date > entries[b].date ? 1 : a - b));
+}
+
 // Inserta filas `| <lunes> | <lunes>.md | rotación automática |` tras la fila
 // separadora de la tabla de §4. Idempotente; quita el placeholder inicial.
 function updateStateIndex(stateText, mondays) {
@@ -307,39 +373,9 @@ export function rotate({ root = DEFAULT_ROOT, dryRun = false, max = DEFAULT_MAX 
   const thisMonday = mondayOf(new Date());
   let moved = 0;
 
-  const initialEntries = parseRegion(region).entries;
-  if (initialEntries.length > 1 && initialEntries[0].date < initialEntries[initialEntries.length - 1].date) {
-    result.warnings.push('Orden ascendente detectado (se espera descendente: más nueva arriba); se protege la entrada más nueva y no se archiva.');
-  }
-
-  while (true) {
-    const parsed = parseRegion(region);
-    const entries = parsed.entries;
-    const count = contentLines(split.prefix + region + split.suffix).count;
-    if (entries.length <= 1) {
-      if (entries.length === 1) {
-        if (count > CHANGELOG_LINE_LIMIT)
-          result.warnings.push(`Protección: la única entrada supera ${CHANGELOG_LINE_LIMIT} líneas (${count}); no se archiva (no dejar SUMMARY vacío).`);
-        else if (mondayOf(entries[0].date) < thisMonday)
-          result.warnings.push(`Protección: la única entrada es de la semana ${mondayOf(entries[0].date)} (< ${thisMonday}); no se archiva.`);
-      }
-      break;
-    }
-    // Protegidos: la entrada más nueva siempre; en fallback, además el último
-    // bloque posicional (puede contener/conducir a un pie no reconocido).
-    const protectedIdx = new Set([newestIndex(entries)]);
-    if (!split.marked) protectedIdx.add(entries.length - 1);
-    const candIdx = oldestCandidate(entries, protectedIdx);
-    if (candIdx === -1) break;
-    const oldest = entries[candIdx];
-    const oldestMonday = mondayOf(oldest.date);
-    const oldWeek = oldestMonday < thisMonday;
-    const over = count > CHANGELOG_LINE_LIMIT;
-    if (!oldWeek && !over) break;
-    if (moved >= max) {
-      result.warnings.push(`Cap --max (${max}) alcanzado; quedan entradas por rotar (${over ? `contentLines=${count}` : `semana antigua=${oldestMonday}`}).`);
-      break;
-    }
+  // Archivado de UNA entrada: anexa al CHANGELOG de su semana con dedup y deja
+  // el rastro en `result`. Compartido por los dos caminos del drenaje.
+  const archivar = (oldest, oldestMonday) => {
     const destFile = join(changelogDir, `${oldestMonday}.md`);
     const existing = existsSync(destFile) ? readFileSync(destFile, 'utf8') : '';
     const dup = hasEntry(existing, oldest);
@@ -349,8 +385,104 @@ export function rotate({ root = DEFAULT_ROOT, dryRun = false, max = DEFAULT_MAX 
     }
     result.changelog.push({ file: destFile, monday: oldestMonday, appended: !dup, reason: dup ? 'dedup' : 'append' });
     result.moved.push({ date: oldest.date, title: oldest.title, monday: oldestMonday, file: destFile, dedup: dup });
-    region = renderRegion(parsed.preamble, entries.filter((_, i) => i !== candIdx), parsed.epilogue);
-    moved++;
+  };
+
+  const parsed = parseRegion(region);
+  const entries = parsed.entries;
+  if (entries.length > 1 && entries[0].date < entries[entries.length - 1].date) {
+    result.warnings.push('Orden ascendente detectado (se espera descendente: más nueva arriba); se protege la entrada más nueva y no se archiva.');
+  }
+
+  // El epilogue solo es estable al vaciar entradas si NINGUNA de ellas trae un
+  // ancla de pie: con una, un reparseo movería a epilogue el resto de la región
+  // y la salida cambiaría. Camino normal (las anclas viven en el pie, fuera de
+  // la región de entradas): `true`, y el parseo se hace UNA vez. Si apareciera
+  // una, se conserva el reparseo por iteración para no alterar la salida.
+  const epilogueEstable = !entries.some((e) => EPILOGUE_RE.test(e.text));
+
+  if (epilogueEstable) {
+    // Protegidos: la entrada más nueva siempre; en fallback, además el último
+    // bloque posicional (puede contener/conducir a un pie no reconocido). Ambos
+    // son invariantes durante el drenaje (la más nueva nunca es candidata y el
+    // último bloque está protegido), así que se calculan una sola vez.
+    const protectedFlags = entries.map(() => false);
+    if (entries.length) protectedFlags[newestIndex(entries)] = true;
+    if (!split.marked && entries.length) protectedFlags[entries.length - 1] = true;
+    const order = candidateOrder(entries, protectedFlags);
+
+    const baseLines = nonEmptyLines(parsed.preamble) + nonEmptyLines(parsed.epilogue);
+    const entryLines = entries.map((e) => nonEmptyLines(e.text));
+    let liveLines = entryLines.reduce((a, b) => a + b, 0);
+    const removed = entries.map(() => false);
+    let alive = entries.length;
+    let cursor = 0;
+
+    while (true) {
+      const count = baseLines + liveLines;
+      if (alive <= 1) {
+        if (alive === 1) {
+          const only = entries[removed.findIndex((r) => !r)];
+          if (count > CHANGELOG_LINE_LIMIT)
+            result.warnings.push(`Protección: la única entrada supera ${CHANGELOG_LINE_LIMIT} líneas (${count}); no se archiva (no dejar SUMMARY vacío).`);
+          else if (mondayOf(only.date) < thisMonday)
+            result.warnings.push(`Protección: la única entrada es de la semana ${mondayOf(only.date)} (< ${thisMonday}); no se archiva.`);
+        }
+        break;
+      }
+      while (cursor < order.length && removed[order[cursor]]) cursor++;
+      if (cursor >= order.length) break;
+      const candIdx = order[cursor];
+      const oldest = entries[candIdx];
+      const oldestMonday = mondayOf(oldest.date);
+      const oldWeek = oldestMonday < thisMonday;
+      const over = count > CHANGELOG_LINE_LIMIT;
+      if (!oldWeek && !over) break;
+      if (moved >= max) {
+        result.warnings.push(`Cap --max (${max}) alcanzado; quedan entradas por rotar (${over ? `contentLines=${count}` : `semana antigua=${oldestMonday}`}).`);
+        break;
+      }
+      archivar(oldest, oldestMonday);
+      removed[candIdx] = true;
+      liveLines -= entryLines[candIdx];
+      alive--;
+      cursor++;
+      moved++;
+    }
+    // Sin movimientos la región se deja intacta byte a byte (no se re-renderiza:
+    // `ensureTrailingBlank` introduciría blancos que no estaban).
+    if (moved > 0) region = renderRegion(parsed.preamble, entries.filter((_, i) => !removed[i]), parsed.epilogue);
+  } else {
+    // Caso patológico (ancla de pie dentro de una entrada): reparseo por vuelta.
+    while (true) {
+      const p = parseRegion(region);
+      const live = p.entries;
+      const count = contentLines(split.prefix + region + split.suffix).count;
+      if (live.length <= 1) {
+        if (live.length === 1) {
+          if (count > CHANGELOG_LINE_LIMIT)
+            result.warnings.push(`Protección: la única entrada supera ${CHANGELOG_LINE_LIMIT} líneas (${count}); no se archiva (no dejar SUMMARY vacío).`);
+          else if (mondayOf(live[0].date) < thisMonday)
+            result.warnings.push(`Protección: la única entrada es de la semana ${mondayOf(live[0].date)} (< ${thisMonday}); no se archiva.`);
+        }
+        break;
+      }
+      const protectedIdx = new Set([newestIndex(live)]);
+      if (!split.marked) protectedIdx.add(live.length - 1);
+      const candIdx = oldestCandidate(live, protectedIdx);
+      if (candIdx === -1) break;
+      const oldest = live[candIdx];
+      const oldestMonday = mondayOf(oldest.date);
+      const oldWeek = oldestMonday < thisMonday;
+      const over = count > CHANGELOG_LINE_LIMIT;
+      if (!oldWeek && !over) break;
+      if (moved >= max) {
+        result.warnings.push(`Cap --max (${max}) alcanzado; quedan entradas por rotar (${over ? `contentLines=${count}` : `semana antigua=${oldestMonday}`}).`);
+        break;
+      }
+      archivar(oldest, oldestMonday);
+      region = renderRegion(p.preamble, live.filter((_, i) => i !== candIdx), p.epilogue);
+      moved++;
+    }
   }
 
   if (!split.marked) {

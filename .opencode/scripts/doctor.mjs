@@ -3,6 +3,15 @@
  * Consigliere 2.0 (Advisor Harness) — doctor.mjs (health check programático, md+grep)
  * Uso: node .opencode/scripts/doctor.mjs [--json]
  * Códigos: 0 ok, 1 warnings, 2 errors
+ *
+ * SEVERIDAD = propiedad del CHECK, no de la variante. Las dos copias (raíz y
+ * templates) pueden diferir en QUÉ checks corren, nunca en la severidad de uno
+ * que ambas corren: si divergieran, el mismo repo diagnosticado desde dos rutas
+ * daría exit codes distintos. Ver test/doctor-checks.test.mjs.
+ * Criterio: un artefacto DERIVADO y regenerable (cache, manifest, índice, o un
+ * script que `npx advisor-harness@latest . --upgrade` restaura) es ℹ️
+ * informativo y nunca degrada el exit code; solo lo que afecta de verdad al
+ * proyecto (tamaños de memoria, lock huérfano, opencode.json) llega a ⚠️/❌.
  */
 import { existsSync, readFileSync, statSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -82,13 +91,13 @@ if (existsSync(lock)) {
 const cacheVivo = join(ROOT,'.advisor','skill-registry.cache.json');
 const cache = existsSync(cacheVivo) ? cacheVivo : null;
 if (cache) {
-  try { const j=JSON.parse(readFileSync(cache,'utf8')); add('skill cache', j.version===2?'✅':'⚠️', `${j.entries?.length||0} skills cacheadas (vivo)`, j.version!==2?'node .opencode/skills/_skill-loader/loader.mjs refresh --force':''); } catch { add('skill cache','⚠️','cache corrupta','node .opencode/skills/_skill-loader/loader.mjs refresh --force'); }
-} else add('skill cache','⚠️','sin cache (se genera en /discover)','node .opencode/skills/_skill-loader/loader.mjs refresh');
+  try { const j=JSON.parse(readFileSync(cache,'utf8')); add('skill cache', j.version===2?'✅':'ℹ️', `${j.entries?.length||0} skills cacheadas (vivo)`, j.version!==2?'node .opencode/skills/_skill-loader/loader.mjs refresh --force':''); } catch { add('skill cache','ℹ️','cache corrupta (regenerable)','node .opencode/skills/_skill-loader/loader.mjs refresh --force'); }
+} else add('skill cache','ℹ️','sin cache (se genera en /discover)','node .opencode/skills/_skill-loader/loader.mjs refresh');
 
 // 6 scripts
 for (const s of ['memory-index.mjs','memory-sync.mjs','memory-lock.mjs','memory-stats.mjs','memory-rotate.mjs','doctor.mjs']) {
   const p = join(ROOT,'.opencode','scripts',s);
-  add(`script ${s}`, existsSync(p)?'✅':'❌', existsSync(p)?'presente':'falta','npx advisor-harness@latest . --upgrade');
+  add(`script ${s}`, existsSync(p)?'✅':'ℹ️', existsSync(p)?'presente':'falta (regenerable con --upgrade)', existsSync(p)?'':'npx advisor-harness@latest . --upgrade');
 }
 
 // 7 dirs (estado vivo .advisor/)
@@ -106,9 +115,9 @@ if (manifest) {
     const ml = lines(manifest);
     if (m.version===1 && Array.isArray(m.recent) && m.recent.length<=5 && ml<15)
       add('manifest', '✅', `${m.recent.length} recientes, ${ml} líneas (vivo)`);
-    else add('manifest','⚠️','estructura inesperada o ≥15 líneas','node .opencode/scripts/memory-sync.mjs buildManifest');
-  } catch { add('manifest','⚠️','manifest corrupto','node .opencode/scripts/memory-sync.mjs buildManifest'); }
-} else add('manifest','⚠️','sin manifest (se genera en escritura)','node .opencode/scripts/memory-sync.mjs buildManifest');
+    else add('manifest','ℹ️','estructura inesperada o ≥15 líneas (regenerable)','node .opencode/scripts/memory-sync.mjs buildManifest');
+  } catch { add('manifest','ℹ️','manifest corrupto (regenerable)','node .opencode/scripts/memory-sync.mjs buildManifest'); }
+} else add('manifest','ℹ️','sin manifest (se genera en escritura)','node .opencode/scripts/memory-sync.mjs buildManifest');
 
 // 9 index derivado (stale o ausente no bloquea: fallback md+grep)
 const indexVivo = join(ROOT,'.advisor','memory-index.json');
@@ -118,9 +127,9 @@ if (index) {
     const data = JSON.parse(readFileSync(index,'utf8'));
     if (data.version===1 && isFresh(data, fingerprint()))
       add('index', '✅', `${data.entries?.length||0} entries fresh (vivo)`);
-    else add('index','⚠️','índice desactualizado (stale)','node .opencode/scripts/memory-sync.mjs buildIndex');
-  } catch { add('index','⚠️','índice corrupto','node .opencode/scripts/memory-sync.mjs buildIndex'); }
-} else add('index','⚠️','sin índice (search usa fallback md+grep)','node .opencode/scripts/memory-sync.mjs buildIndex');
+    else add('index','ℹ️','índice desactualizado (stale; search usa fallback md+grep)','node .opencode/scripts/memory-sync.mjs buildIndex');
+  } catch { add('index','ℹ️','índice corrupto (regenerable)','node .opencode/scripts/memory-sync.mjs buildIndex'); }
+} else add('index','ℹ️','sin índice (search usa fallback md+grep)','node .opencode/scripts/memory-sync.mjs buildIndex');
 
 // 10 review_after vencido / stale[] (INFORMATIVO: ℹ️, nunca ❌ ni bloqueante)
 // P4.4: consume el `review_after` de §2 (y el `stale[]` del manifest si existe)
@@ -145,11 +154,16 @@ if (index) {
 const hasError = checks.some(c=>c.status==='❌');
 const hasWarn = checks.some(c=>c.status==='⚠️');
 const json = process.argv.includes('--json');
+// Escapa una celda de la tabla markdown: un `|` dentro de un detalle (o de un
+// fix) rompe la tabla que consume el comando /doctor — y sin nota de que se
+// rompe, el modelo la lee como columnas nuevas. Los saltos de línea también
+// partirían la fila. El JSON no se escapa: su forma es un contrato aparte.
+function cell(v) { return String(v ?? '').replace(/\|/g, '\\|').replace(/\r?\n/g, ' '); }
 if (json) console.log(JSON.stringify({ checks }, null, 2));
 else {
   console.log('ADVISOR doctor — ' + (hasError?'❌ errores':hasWarn?'⚠️ warnings':'✅ ok'));
   console.log('| Check | Estado | Detalle | Fix |');
   console.log('|-------|--------|---------|-----|');
-  for (const c of checks) console.log(`| ${c.name} | ${c.status} | ${c.detail} | ${c.fix} |`);
+  for (const c of checks) console.log(`| ${cell(c.name)} | ${cell(c.status)} | ${cell(c.detail)} | ${cell(c.fix)} |`);
 }
 process.exit(hasError?2:hasWarn?1:0);

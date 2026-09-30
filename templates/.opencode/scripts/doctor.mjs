@@ -4,6 +4,12 @@
  * Uso: node .opencode/scripts/doctor.mjs [--json]
  * Capas: A) proyecto (puede dar ⚠️/❌) · B) infra regenerable (ℹ️, nunca error) · C) adopción stack
  * Exit: 0 ok, 1 warnings (capa A), 2 errors (capa A) — B/C nunca afectan el exit.
+ *
+ * SEVERIDAD = propiedad del CHECK, no de la variante. Las dos copias (raíz y
+ * templates) pueden diferir en QUÉ checks corren, nunca en la severidad de uno
+ * que ambas corren: si divergieran, el mismo repo diagnosticado desde dos rutas
+ * daría exit codes distintos. La raíz comparte esta clasificación capa a capa.
+ * Ver test/doctor-checks.test.mjs.
  */
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -158,11 +164,16 @@ else add('adopción stack','✅','Stack editado (sentinel ausente)');
 const hasError = checks.some(c=>c.status==='❌');
 const hasWarn = checks.some(c=>c.status==='⚠️');
 const json = process.argv.includes('--json');
+// Escapa una celda de la tabla markdown: un `|` dentro de un detalle (o de un
+// fix) rompe la tabla que consume el comando /doctor — y sin nota de que se
+// rompe, el modelo la lee como columnas nuevas. Los saltos de línea también
+// partirían la fila. El JSON no se escapa: su forma es un contrato aparte.
+function cell(v) { return String(v ?? '').replace(/\|/g, '\\|').replace(/\r?\n/g, ' '); }
 if (json) console.log(JSON.stringify({ checks }, null, 2));
 else {
   console.log('ADVISOR doctor — ' + (hasError?'❌ errores (capa proyecto)':hasWarn?'⚠️ warnings (capa proyecto)':'✅ ok'));
   console.log('| Check | Estado | Detalle | Fix |');
   console.log('|-------|--------|---------|-----|');
-  for (const c of checks) console.log(`| ${c.name} | ${c.status} | ${c.detail} | ${c.fix} |`);
+  for (const c of checks) console.log(`| ${cell(c.name)} | ${cell(c.status)} | ${cell(c.detail)} | ${cell(c.fix)} |`);
 }
 process.exit(hasError?2:hasWarn?1:0);
