@@ -293,11 +293,10 @@ jobs:
       # desarrollo que se colaría rompe el build.
       #
       # `git archive` emite además entradas de DIRECTORIO para carpetas que
-      # export-ignore dejó vacías (`.opencode/`, `CHANGELOG/`, `scripts/`): un
-      # directorio sin ficheros no lleva nada, así que se filtran con `/$`.
-      # `.github/` y `test/` sí tienen contenido y quedan en lista blanca de
-      # forma explícita: son desarrollo puro y tampoco deberían estar en una
-      # release, pero hoy no tienen export-ignore (ver informe / PR pendiente).
+      # export-ignore dejó vacías (`.opencode/`, `CHANGELOG/`, `scripts/`,
+      # `test/`, `.github/`): un directorio sin ficheros no lleva nada, así que
+      # se filtran con `/$`. La lista blanca es deliberadamente mínima: si algo
+      # nuevo aparece en el archive, el build lo señala.
       - name: git archive sin rutas de desarrollo (export-ignore)
         run: |
           set -euo pipefail
@@ -308,7 +307,6 @@ jobs:
           leaks=$(grep -Ev \
             -e '^(init\.(mjs|sh|ps1|cmd)|package\.json|README\.md|LICENSE)$' \
             -e '^templates/' \
-            -e '^test/' \
             "$files" || true)
           if [ -n "$leaks" ]; then
             echo "::error::git archive incluye rutas de desarrollo:"
