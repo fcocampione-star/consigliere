@@ -42,7 +42,7 @@
     "test": "node --check init.mjs && node test/run.mjs && node .opencode/scripts/memory-rotate.test.mjs && node .opencode/scripts/contract-tests.mjs && node .opencode/scripts/version-check.mjs && echo \"harness ok\"",
     "test:unit": "node test/run.mjs",
     "test:contract": "node .opencode/scripts/contract-tests.mjs",
-    "lint:sh": "bash -n init.sh scripts/check-memory-limits.sh",
+    "lint:sh": "node .opencode/scripts/lint-sh.mjs",
     "lint:ps1": "pwsh -NoProfile -Command \"$e=$null; [void][System.Management.Automation.Language.Parser]::ParseFile('init.ps1',[ref]$null,[ref]$e); if($e.Count){$e|%{Write-Error $_}; exit 1}\"",
     "version:check": "node .opencode/scripts/version-check.mjs",
     "prepublishOnly": "node .opencode/scripts/version-check.mjs && node .opencode/scripts/contract-tests.mjs"

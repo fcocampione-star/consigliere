@@ -91,6 +91,7 @@ const ROOT_ONLY_EXACT = new Set([
   '.gitattributes',
   '.nvmrc',
   '.opencode/.gitignore',
+  '.opencode/scripts/lint-sh.mjs', // `bash -n` de este repo resolviendo el intérprete: tool de dev, no del harness instalado
   '.opencode/scripts/memory-rotate.test.mjs',
   '.opencode/scripts/contract-tests.mjs',
   '.opencode/scripts/version-check.mjs',

@@ -113,6 +113,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # El mismo `bash -n` de abajo, pero a través del resolutor de
+      # `.opencode/scripts/lint-sh.mjs` (`npm run lint:sh`): el bucle de al lado
+      # llama a `bash` a pelo y solo funciona si el intérprete está en el PATH,
+      # así que la resolución y el mapeo de exit codes (0 ok / 1-2 de bash -n /
+      # 3 sin intérprete, con instrucciones de arreglo) nunca se ejecutaban en
+      # ninguna plataforma. Va ANTES del bucle para que un fallo de resolución
+      # se vea pronto y no se confunda con un error de sintaxis. No sustituye al
+      # bucle: este sigue siendo el que cubre los 5 .sh, incluido
+      # `check-memory-limits.sh` y los lanzadores shell.
+      #
+      # Sin `setup-node`: se usa el node del runner, igual que
+      # `npm run version:check` / `npm run test:contract` en el job
+      # `drift-and-packaging`. Este repo no tiene lockfile ni node_modules que
+      # instalar, así que la acción solo añadiría un download.
+      - name: npm run lint:sh (resolutor de bash + exit codes)
+        run: npm run lint:sh
+
       # Los cinco .sh del repo. El runner trae bash (Git Bash) en los tres SO.
       - name: bash -n sobre los 5 scripts
         run: |
