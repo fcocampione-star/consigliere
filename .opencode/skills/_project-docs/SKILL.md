@@ -125,7 +125,7 @@ npm run test:unit                                    # solo la suite de test/ (m
 npm run test:contract                                # contrato anti-drift (paridad espejo raíz↔templates/ + catálogos)
 npm run lint:sh                                      # bash -n init.sh + scripts/check-memory-limits.sh
 npm run lint:ps1                                     # parse AST de PowerShell sobre init.ps1
-npm run version:check                                # versión única: package.json == init.mjs/init.sh/init.ps1
+npm run version:check                                # versión única: package.json == init.mjs/init.sh/init.ps1 + las 2 SKILL.md de _project-docs
 node --check init.mjs && node --check .opencode/scripts/doctor.mjs  # validación ESM syntax
 node .opencode/scripts/doctor.mjs --json              # diagnóstico harness (exit 0 ok / 1 warnings / 2 errors)
 node .opencode/skills/_skill-loader/loader.mjs list --json  # listar skills (cache fingerprint)

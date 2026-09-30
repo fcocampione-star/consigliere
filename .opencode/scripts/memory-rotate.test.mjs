@@ -5,9 +5,11 @@
  * Cubre: B1 (parser fence-aware), B2 (fallback no archiva el pie), B3
  * (normalización de blancos al anexar 2+ entradas), B4 (dedup por fecha+título
  * normalizado, sin falso positivo por prefijo), B5 (orden descendente/warning),
- * B6 (--root test-only documentado) y la regresión clave (rotación normal,
- * idempotencia, dry-run, cap --max, entrada única protegida, separadores
- * `:`/`|`, migrate-markers idempotente, lock sin huérfano, sin `.tmp`, CRLF).
+ * B6 (--root test-only documentado), el lock tomado DENTRO de la función
+ * mutante (con el lock ajeno ocupado no se escribe nada y sale con exitCode 3,
+ * y tras una corrida no queda lock huérfano) y la regresión clave (rotación
+ * normal, idempotencia, dry-run, cap --max, entrada única protegida,
+ * separadores `:`/`|`, migrate-markers idempotente, sin `.tmp`, CRLF).
  *
  * Uso: node .opencode/scripts/memory-rotate.test.mjs
  */
@@ -15,13 +17,22 @@ import { readFileSync, mkdirSync, writeFileSync, rmSync, existsSync, readdirSync
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-const ENGINE = new URL('./memory-rotate.mjs', import.meta.url);
-const { rotate, migrateMarkers, parseRegion, hasEntry, scanEntryHeads } = await import(ENGINE.href);
-const { acquireLock, releaseLock, listStaleDirs } = await import(new URL('./memory-lock.mjs', import.meta.url).href);
-
 const START = '<!-- ADVISOR:ENTRIES:START -->';
 const END = '<!-- ADVISOR:ENTRIES:END -->';
 const BASE = join(tmpdir(), 'advisor-rotate-test-' + process.pid + '-' + Date.now());
+
+// `rotate`/`migrateMarkers` toman el lock canónico (el contrato del módulo decía
+// que lo tomaban y solo lo hacía el dispatcher del CLI). `ADVISOR_LOCK_ROOT` se
+// lee UNA vez al cargar memory-lock.mjs, así que debe fijarse ANTES de importar
+// nada: memory-rotate.mjs lo importa transitivamente y, sin esto, la suite
+// rotaría contra fixtures SIN sandbox tocando el `.memory-lock` real del repo —
+// justo lo que la documentación del módulo dice que no pasa (el lock no cuelga de
+// `--root`; el override por env es lo que lo mueve aquí).
+process.env.ADVISOR_LOCK_ROOT = BASE;
+
+const ENGINE = new URL('./memory-rotate.mjs', import.meta.url);
+const { rotate, migrateMarkers, parseRegion, hasEntry, scanEntryHeads } = await import(ENGINE.href);
+const { acquireLock, releaseLock, listStaleDirs, lockPath } = await import(new URL('./memory-lock.mjs', import.meta.url).href);
 
 let pass = 0;
 let fail = 0;
@@ -117,6 +128,51 @@ try {
     const src = readFileSync(ENGINE, 'utf8');
     check('B6 docstring/--help: --root test-only', /--root.*TEST-ONLY/i.test(src) || /TEST-ONLY[\s\S]*--root/i.test(src));
     check('B6 lock sobre raíz del script, no --root', /lock[\s\S]*raíz del repo del propio script/i.test(src));
+    // El lock se toma en la FUNCIÓN MUTANTE, no en el dispatcher: si lo tomara
+    // `main()`, el patrón de `withMemoryLock` con `acquireLock` no aparecería ahí.
+    check('B6 el lock se toma en la función mutante, no en main()', /function withMemoryLock[\s\S]*acquireLock\(\)/.test(src) && !/function main\(\)[\s\S]*acquireLock\(/.test(src));
+  }
+
+  // ---------- Lock tomado por la propia API (no solo por el CLI) ----------
+  // El contrato del módulo decía "adquiere el lock al inicio y SIEMPRE lo
+  // libera" y la adquisición estaba en main(): llamar a `rotate()` por API (la
+  // ruta que la suite entera ejercita) no tomaba lock. Aquí se afirma el
+  // comportamiento real: con el lock ajeno ocupado no se escribe nada y sale
+  // con exitCode 3; una vez liberado, rota y no deja lock huérfano.
+  {
+    const d = fresh('lock-busy');
+    writeFileSync(join(d, 'SUMMARY.md'), summary([E('2024-01-15', 'New', 'n'), E('2024-01-01', 'Old', 'o')], FOOTER));
+    writeFileSync(join(d, 'PROJECT_STATE.md'), state());
+    const antes = JSON.stringify(snap(d));
+    const ajeno = acquireLock();
+    check('lock-busy: el lock se adquiere en el sandbox', ajeno.acquired === true);
+    check('lock-busy: el lock del sandbox, no el del repo', lockPath().startsWith(BASE), lockPath());
+    let err = null;
+    try { rotate({ root: d }); } catch (e) { err = e; }
+    check('lock-busy: rotate() por API lanza si el lock está ocupado', err !== null, 'no lanzó');
+    check('lock-busy: exitCode 3 = lock ocupado', err && err.exitCode === 3, err && `${err.exitCode} / ${err.message}`);
+    check('lock-busy: con el mensaje que cita estado y pid', err && /no se pudo adquirir lock de memoria \(busy, pid \d+\)/.test(err.message), err && err.message);
+    check('lock-busy: NO se escribió nada', JSON.stringify(snap(d)) === antes);
+    const rel = releaseLock({ token: ajeno.token });
+    check('lock-busy: liberado por token', rel.released === true);
+    const r = rotate({ root: d });
+    check('lock-busy: liberada la mutua exclusión, rotate() vuelve a funcionar', r.moved.length === 1, JSON.stringify(r.moved.map((m) => m.date)));
+    check('lock-busy: rotate() NO deja lock huérfano', existsSync(lockPath()) === false);
+    // migrate-markers es la otra mutante: mismo contrato.
+    const d2 = fresh('lock-busy-mm');
+    writeFileSync(join(d2, 'SUMMARY.md'), ['# S', '', '## 2024-01-15 — A', '', 'a', '', '> Cuando registres progreso', '', '> Topic upsert'].join('\n'));
+    const ajeno2 = acquireLock();
+    let err2 = null;
+    try { migrateMarkers({ root: d2 }); } catch (e) { err2 = e; }
+    check('lock-busy: migrateMarkers() también respeta el lock', err2 !== null && err2.exitCode === 3, err2 && `${err2.exitCode} / ${err2.message}`);
+    releaseLock({ token: ajeno2.token });
+    const r2 = migrateMarkers({ root: d2 });
+    check('lock-busy: migrateMarkers() funciona con el lock libre', r2.changed === true && existsSync(lockPath()) === false);
+    // dry-run: no escribe nada, así que no exige el lock (ni lo deja tomado).
+    const d3 = fresh('lock-dryrun');
+    writeFileSync(join(d3, 'SUMMARY.md'), summary([E('2024-01-15', 'New', 'n'), E('2024-01-01', 'Old', 'o')], FOOTER));
+    const dr = rotate({ root: d3, dryRun: true });
+    check('lock: dry-run simula sin tomar el lock (no escribe)', dr.moved.length === 1 && !existsSync(lockPath()));
   }
 
   // ---------- Regresión clave ----------
@@ -198,6 +254,8 @@ try {
   }
 
   // ---------- Lock: busy / no-owner sin huérfano ----------
+  // Rutas del SANDBOX (`ADVISOR_LOCK_ROOT` = BASE, fijado arriba), no las del repo:
+  // con el lock real, esta suite tocaría el `.memory-lock` del repo en cada corrida.
   {
     const staleBefore = listStaleDirs().length;
     const l1 = acquireLock();
@@ -205,13 +263,13 @@ try {
     const l2 = acquireLock();
     check('lock: segundo acquire → busy', l2.acquired === false && l2.reason === 'busy');
     // Suplanta el owner por uno ajeno para probar el rechazo por token/pid.
-    const ownerPath = new URL('../../.memory-lock/owner.json', import.meta.url);
+    const ownerPath = join(BASE, '.memory-lock', 'owner.json');
     writeFileSync(ownerPath, JSON.stringify({ pid: 999999, host: 'otro-host', ts: Date.now(), version: 1, token: 'foreign' }));
     const bad = releaseLock({ token: l1.token });
     check('lock: release ajeno token erróneo → not-owner', bad.released === false && bad.reason === 'not-owner', JSON.stringify(bad));
     const forced = releaseLock({ force: true });
     check('lock: --force libera lock ajeno', forced.released === true && forced.reason === 'forced');
-    check('lock: sin lock residual ni stale nuevo', existsSync(new URL('../../.memory-lock', import.meta.url)) === false && listStaleDirs().length === staleBefore);
+    check('lock: sin lock residual ni stale nuevo', existsSync(lockPath()) === false && listStaleDirs().length === staleBefore);
   }
 } catch (e) {
   fail++;

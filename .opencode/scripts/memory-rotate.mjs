@@ -39,10 +39,9 @@
  *    (`— - : | ,`), en vez del prefijo de ~80 chars que daba falsos positivos.
  *  - Separación: al anexar 2+ entradas al mismo CHANGELOG se normaliza a una
  *    única línea en blanco entre entradas.
- *  - Atomicidad: escrituras con temp+rename en el mismo directorio, con
- *    reintentos ACOTADOS del rename (EPERM/EACCES/EBUSY/EEXIST: el destino
- *    está bloqueado momentáneamente en Windows) y backoff corto. Un fallo
- *    definitivo borra el temp: una rotación fallida nunca deja debris.
+ *  - Atomicidad: escrituras con temp+rename en el mismo directorio y
+ *    reintentos ACOTADOS del rename, con backoff corto. Un fallo definitivo
+ *    borra el temp: una rotación fallida nunca deja debris.
  *  - Complejidad: la región se parsea UNA vez y el bucle de drenaje quita una
  *    entrada por iteración (trabajo ∝ entrada quitada, no ∝ archivo entero).
  *  - Cross-platform EOL: la lectura normaliza CRLF/CR a LF antes de parsear
@@ -51,7 +50,13 @@
  *  - §4: actualiza la tabla con una fila `| <lunes> | <lunes>.md | ... |`
  *    insertada tras la fila separadora (manipulación de strings, sin sed -i);
  *    idempotente; si §4 no aparece, avisa y sigue.
- *  - Lock: adquiere memory-lock al inicio y SIEMPRE lo libera en finally.
+ *  - Lock: `rotate` y `migrateMarkers` toman el lock canónico (memory-lock.mjs)
+ *    DENTRO de la función que muta, y lo liberan en `finally` por su token —
+ *    igual que hace memory-sync con `withMemoryLock`. Quien llama por API queda
+ *    protegido por tanto, no solo el CLI. `--dry-run` no lo toma: no escribe
+ *    nada, y exigir el lock para una simulación solo añade un modo de fallo.
+ *    Si el lock está ocupado, la función lanza con `exitCode = 3` y no se
+ *    escribe nada.
  *  - Cache: tras escribir (rotate/migrate-markers) llama `invalidateCaches()`
  *    (registro neutro de memory-stats) para que un host in-process no sirva
  *    entradas stale de memory-index (evita ciclo memory-rotate→memory-index).
@@ -62,14 +67,18 @@
  *
  * Nota `--root`: es TEST-ONLY (default = raíz del repo inferida del script,
  * `../..`), para correr contra fixtures sandbox. Importante: el lock canónico
- * (memory-lock.mjs) vive SIEMPRE en la raíz del repo del propio script (su ROOT
- * es fijo), NO en `--root`; `--root` solo redirige los archivos de memoria
- * (SUMMARY.md / PROJECT_STATE.md / CHANGELOG/), no el lock.
- * v5 (adopción de la lib compartida, sin cambio de comportamiento): `isMain` y
- * `readText` vienen de lib/core.mjs, y la escritura atómica ES la de lib/core.mjs
- * (ver `writeAtomic`). Se mantiene el ROOT local —core.REPO_ROOT resuelve en
- * `.opencode/`—, la lectura CRUDA del CHANGELOG destino de `archivar` (se reescribe
- * tal cual) y el uso sin comando por stdout.
+ * (memory-lock.mjs) NO cuelga de `--root`: vive en la raíz del repo del propio script
+ * (su ROOT es fijo) salvo el override `ADVISOR_LOCK_ROOT` de memory-lock.mjs, que
+ * es lo que usan los tests para apuntarlo a un sandbox. `--root` solo redirige
+ * los archivos de memoria (SUMMARY.md / PROJECT_STATE.md / CHANGELOG/), no el lock.
+ * v5 (adopción de la lib compartida): `isMain` y `readText` vienen de
+ * lib/core.mjs, y la escritura atómica ES la de lib/core.mjs (ver `writeAtomic`).
+ * Se mantiene el ROOT local —core.REPO_ROOT resuelve en `.opencode/`—, la
+ * lectura CRUDA del CHANGELOG destino de `archivar` (se reescribe tal cual) y el
+ * uso sin comando por stdout. La ÚNICA diferencia de comportamiento es de
+ * seguridad: el lock canónico lo toman ahora las funciones mutantes (antes lo
+ * tomaba solo el dispatcher del CLI), de modo que la API tiene la misma garantía
+ * que la línea de comandos.
  */
 import { existsSync, readFileSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve, dirname, basename } from 'node:path';
@@ -84,6 +93,33 @@ import { acquireLock, releaseLock } from './memory-lock.mjs';
 const DEFAULT_ROOT = resolve(join(import.meta.dirname, '..', '..'));
 const CHANGELOG_LINE_LIMIT = 150;
 const DEFAULT_MAX = 20;
+// Exit 3 = lock de memoria ocupado (mismo código que memory-sync.mjs): quien
+// reintenta sabe que debe esperar, no que la memoria esté corrupta.
+const LOCK_BUSY_EXIT = 3;
+
+// Envuelve el trabajo que MUTA el corpus en el lock canónico (memory-lock.mjs),
+// el MISMO que toma memory-sync: acquire con token propio, trabajo, release POR
+// TOKEN en `finally` (nunca `owner` a ciegas, nunca sin liberar).
+//
+// Vive AQUÍ, en la función que muta, y NO en el dispatcher del CLI. Estaba al
+// revés: el módulo documentaba "adquiere el lock al inicio y SIEMPRE lo libera"
+// pero la adquisición estaba en `main()`, así que la mitad del contrato era
+// mentira para la API — y la ruta que los tests ejercitan (y con la que un host
+// in-process o cualquier importador rotaría) era justo la SIN lock.
+function withMemoryLock(etiqueta, fn) {
+  const lock = acquireLock();
+  if (!lock.acquired) {
+    const err = new Error(`no se pudo adquirir lock de memoria (${lock.reason}${lock.owner ? `, pid ${lock.owner.pid}` : ''}); no se escribió nada, reintente.`);
+    err.exitCode = LOCK_BUSY_EXIT;
+    throw err;
+  }
+  try {
+    return fn();
+  } finally {
+    const rel = releaseLock({ token: lock.token });
+    if (!rel.released) console.error(`memory-rotate ${etiqueta}: no se pudo liberar lock (${rel.reason || rel.error || 'desconocido'})`);
+  }
+}
 
 // Heading de entrada tolerante: separador em dash, guion, dos puntos o pipe.
 // Se aplica LÍNEA A LÍNEA y solo fuera de fences (ver scanEntryHeads).
@@ -149,18 +185,22 @@ function changelogHeader(monday) {
 // `rename` (mismo volumen = atómico), de modo que un lector nunca ve el fichero a
 // medias y un fallo no deja ni temp ni destino corrupto. En Windows el rename
 // falla con EPERM/EBUSY/EACCES aunque el temp esté escrito (destino bloqueado
-// momentáneamente por un editor, un antivirus o un indexador): por eso la
-// compartida reintenta con backoff corto y ACOTADO, y borra el temp si el fallo
-// es definitivo — una rotación fallida nunca deja debris.
+// momentáneamente por un editor, un antivirus o un indexador): la compartida
+// reintenta esos TRES códigos con backoff corto y ACOTADO, y borra el temp si el
+// fallo es definitivo — una rotación fallida nunca deja debris. Ese conjunto es
+// el de `RETRYABLE` en lib/core.mjs y es el ÚNICO que aplica en producción.
 //
 // `attempts` es el nombre histórico de esta firma (tries TOTALES del rename) y se
 // traduce a `retries` de la compartida. `rename` es un SEAM SOLO PARA TESTS (permite
 // simular el bloqueo de Windows sin bloquear un archivo real); core.writeAtomic no
 // admite rename inyectado, así que cuando viene se conserva el bucle acotado de
-// aquí. En producción `rename` no se pasa nunca y el algoritmo real solo existe en
-// lib/core.mjs.
+// aquí — y ese bucle usa `RENAME_RETRYABLE`, más ancho (añade EEXIST y ENOTEMPTY)
+// solo porque los dobles de prueba las usan para ejercitar el agotamiento de
+// reintentos. En producción `rename` no se pasa nunca y el algoritmo real solo
+// existe en lib/core.mjs.
 const RENAME_ATTEMPTS = 5;
 const RENAME_BACKOFF_MS = [10, 25, 50, 100, 200];
+// Solo del seam de test (ver arriba): en producción manda RETRYABLE de lib/core.
 const RENAME_RETRYABLE = new Set(['EPERM', 'EACCES', 'EBUSY', 'EEXIST', 'ENOTEMPTY']);
 
 // Pausa síncrona sin dependencias ni busy-wait: Atomics.wait sobre un buffer
@@ -376,7 +416,14 @@ function updateStateIndex(stateText, mondays) {
   return { text: stateText.slice(0, secIdx) + out.join('\n') + stateText.slice(secEnd), updated: toAdd };
 }
 
+// `rotate` es la FUNCIÓN MUTANTE: toma el lock canónico y lo libera en `finally`
+// (ver `withMemoryLock`). `--dry-run` no lo toma porque no escribe nada y
+// exigir el lock para una simulación solo añade un modo de fallo.
 export function rotate({ root = DEFAULT_ROOT, dryRun = false, max = DEFAULT_MAX } = {}) {
+  return dryRun ? rotateBajoLock({ root, dryRun, max }) : withMemoryLock('rotate', () => rotateBajoLock({ root, dryRun, max }));
+}
+
+function rotateBajoLock({ root = DEFAULT_ROOT, dryRun = false, max = DEFAULT_MAX } = {}) {
   const summaryPath = join(root, 'SUMMARY.md');
   const statePath = join(root, 'PROJECT_STATE.md');
   const changelogDir = join(root, 'CHANGELOG');
@@ -536,7 +583,13 @@ export function rotate({ root = DEFAULT_ROOT, dryRun = false, max = DEFAULT_MAX 
   return result;
 }
 
+// `migrateMarkers` también es mutante y toma el lock por el mismo motivo que
+// `rotate`: comparte corpus con ella y con memory-sync.
 export function migrateMarkers({ root = DEFAULT_ROOT, dryRun = false } = {}) {
+  return dryRun ? migrateMarkersBajoLock({ root, dryRun }) : withMemoryLock('migrate-markers', () => migrateMarkersBajoLock({ root, dryRun }));
+}
+
+function migrateMarkersBajoLock({ root = DEFAULT_ROOT, dryRun = false } = {}) {
   const summaryPath = join(root, 'SUMMARY.md');
   const result = { command: 'migrate-markers', dryRun, root, changed: false, alreadyMarked: false, summaryWritten: false };
   if (!existsSync(summaryPath)) throw new Error(`No existe SUMMARY.md en ${root}`);
@@ -609,17 +662,17 @@ function main() {
   node .opencode/scripts/memory-rotate.mjs rotate [--dry-run] [--max N] [--json] [--root <dir>]
   node .opencode/scripts/memory-rotate.mjs migrate-markers [--dry-run] [--json] [--root <dir>]
 
-  --root es TEST-ONLY (fixtures sandbox); el lock de memoria se toma sobre la
-  raíz del repo del script, no sobre --root.`);
+  --root es TEST-ONLY (fixtures sandbox); el lock de memoria lo toma la propia
+  función mutante (rotate/migrate-markers) sobre la raíz del repo del script, no
+  sobre --root. --dry-run no lo toma: no escribe nada.`);
     process.exit(1);
   }
   const root = flags.root ? resolve(flags.root) : DEFAULT_ROOT;
-  const lock = acquireLock();
-  if (!lock.acquired) {
-    console.error(`memory-rotate: no se pudo adquirir lock de memoria (${lock.reason}${lock.owner ? `, pid ${lock.owner.pid}` : ''}); reintente.`);
-    process.exit(3);
-  }
-  let exitCode = 0;
+  // El lock NO se toma aquí: lo toma y lo libera la función mutante, que es la
+  // que de verdad escribe (ver `withMemoryLock`). Así el CLI y la API comparten
+  // exactamente la misma garantía. Aquí ya no queda nada que liberar, así que un
+  // error se reporta con el `exitCode` que le puso la propia función (3 = lock
+  // ocupado) en vez del 1 genérico.
   try {
     const max = Number.isFinite(flags.max) && flags.max >= 0 ? flags.max : DEFAULT_MAX;
     const result = cmd === 'rotate'
@@ -627,16 +680,10 @@ function main() {
       : migrateMarkers({ root, dryRun: flags.dryRun });
     report(result, flags.json);
   } catch (e) {
-    // El texto ya es `memory-rotate: <motivo>`, el formato de core.fail, pero NO
-    // se puede usar aquí: fail() hace process.exit() y saltaría el `finally` que
-    // libera el lock de memoria.
     console.error(`memory-rotate: ${e.message}`);
-    exitCode = 1;
-  } finally {
-    const rel = releaseLock({ token: lock.token });
-    if (!rel.released) console.error(`memory-rotate: no se pudo liberar lock (${rel.reason || rel.error || 'desconocido'})`);
+    process.exit(e.exitCode || 1);
   }
-  process.exit(exitCode);
+  process.exit(0);
 }
 
 if (isMain(import.meta.url, process.argv[1])) main();

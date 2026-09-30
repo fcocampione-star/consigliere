@@ -6,7 +6,7 @@
 
 ## Requisitos
 
-- **Node.js >= 20.11.0** — obligatorio en **todas** las vías de instalación, incluidas `./init.sh`, `powershell -File init.ps1` e `init.cmd`: los tres son lanzadores de ~20 líneas que ejecutan `init.mjs` a través de Node (`exec node .../init.mjs`). El suelo es 20.11 porque el harness usa `import.meta.dirname`; con menos, el instalador aborta con exit 1.
+- **Node.js >= 20.11.0** — obligatorio en **todas** las vías de instalación. Hay cuatro puntos de entrada: `init.mjs`, que es la única implementación, y tres lanzadores de ~20 líneas (`./init.sh`, `powershell -File init.ps1` e `init.cmd`) que la ejecutan a través de Node (`exec node .../init.mjs`). El suelo es 20.11 porque el harness usa `import.meta.dirname`; con menos, el instalador aborta con exit 1.
 - `git` — recomendado: sin él se omite el `git init`, el hook post-commit y el commit inicial (aviso, no error).
 - `tar` — obligatorio para el backup previo y para `--restore`. Sin él solo se puede instalar en un destino vacío.
 
@@ -63,7 +63,7 @@ Ese es el día a día. Si tu carpeta **no está vacía**, el mismo comando abre 
 │   │   ├── routine-model.mjs      # overrides de modelo por agente
 │   │   ├── lib/                   # core.mjs / md.mjs / cache.mjs (compartido, sin deps)
 │   │   └── doctor.mjs             # health check
-│   └── hooks/                     # post-commit-memory-rotate.sh + sync
+│   └── hooks/                     # post-commit-memory-rotate.sh (opcional/gated; no hay hook de sync)
 ├── .advisor/                      # estado VIVO del harness
 │   ├── backups/                   # advisor-*.tgz keep 5 (backup previo a cualquier escritura)
 │   ├── chunks/                    # memoria sync local (git-tracked opcional)
@@ -78,7 +78,7 @@ Ese es el día a día. Si tu carpeta **no está vacía**, el mismo comando abre 
 └── skills-lock.json
 ```
 
-> **Repo público ≠ proyecto instalado.** En este repositorio, `opencode.json`, `skills-lock.json`, `scripts/`, `test/`, `.github/` y la memoria (`PROJECT_STATE.md`, `SUMMARY.md`, `CHANGELOG/`, `.advisor/`) quedan **fuera del paquete público** (`package.json` `files`: `init.sh`, `init.ps1`, `init.cmd`, `init.mjs`, `templates/`, `README.md`, `LICENSE`; `export-ignore` en `git archive`). Todos ellos **sí se generan** en cada proyecto que instalas: el árbol de arriba es lo que obtiene el proyecto, no lo que se publica en npm.
+> **Repo público ≠ proyecto instalado.** En este repositorio, `opencode.json`, `skills-lock.json`, `scripts/`, `test/`, `.github/` y la memoria (`PROJECT_STATE.md`, `SUMMARY.md`, `CHANGELOG/`, `.advisor/`) quedan **fuera del paquete público** (`package.json` `files`: `init.sh`, `init.ps1`, `init.cmd`, `init.mjs`, `templates/`, `README.md`, `LICENSE`; `export-ignore` en `git archive`). Salvo `test/` y `.github/`, **todo lo anterior sí se genera** en cada proyecto que instalas: el árbol de arriba es lo que obtiene el proyecto, no lo que se publica en npm. Los dos excluidos son de desarrollo de este repo —la suite propia y los workflows de CI— y no se instalan en ningún proyecto. `.advisor/` tampoco viene de `templates/`: lo crea el instalador en caliente como estado vivo (backups, chunks, cache).
 
 ## Instalación
 
@@ -93,7 +93,7 @@ node init.mjs            # en una carpeta vacía: genera directo, sin preguntar 
 
 - Defaults: modelos heredados (sin asignar), sin stack, autoskills omitido (3), `git init` + commit.
 - CI-safe: no lee de stdin, apto para pipelines.
-- Mismo comportamiento en `./init.sh`, `powershell -File init.ps1` e `init.cmd`: los tres son lanzadores que ejecutan `init.mjs` con Node, así que el CLI, los flags y los códigos de salida son los mismos.
+- Mismo comportamiento en los tres lanzadores (`./init.sh`, `powershell -File init.ps1` e `init.cmd`): ejecutan `init.mjs` con Node, así que el CLI, los flags y los códigos de salida son los mismos.
 
 **Forzar happy path en cualquier carpeta** (aunque no esté vacía): `--quick` / `-y`. Respeta `--dir <ruta>` o la ruta posicional como destino; si no hay, usa la carpeta actual:
 
@@ -171,7 +171,7 @@ Contrato estable (`init.mjs` `EXIT`, documentado en `--help`):
 | 0 | ok |
 | 1 | uso o validación: flag desconocido, valor fuera de dominio, falta `--part`, destino no vacío sin `--force`, `--upgrade` sin harness previo, Node < 20.11 |
 | 2 | hace falta confirmación y no la hubo: sesión no interactiva donde se requería, o confirmación rechazada |
-| 3 | falta una dependencia requerida (`tar` para el backup previo, `--upgrade`, `--restore` o `--uninstall memoria`) |
+| 3 | falta una dependencia requerida (`tar` para el backup previo, `--upgrade`, `--restore` o `--uninstall memoria`/`--uninstall all`) |
 | 4 | falló el backup o la restauración con `tar` (el backup previo nunca se descarta) |
 | 5 | fallo parcial: se escribió algo y un paso posterior falló |
 
@@ -187,7 +187,7 @@ Contrato estable (`init.mjs` `EXIT`, documentado en `--help`):
 - **Estado vivo**: solo `.advisor/` (backups, chunks, cache). Sin directorios legacy.
 - **Backups**: nuevos `advisor-<ts>.tgz`; restore/prune aceptan `^(harness|advisor)-` (keep 5 combinado). Skill-cache v2 (`refresh --force` invalida v1).
 - **Se preserva a propósito**: historial `SUMMARY.md`/`CHANGELOG/`, autor git `CONSIGLIERE` + email `consigliere@local`, `installed_by: consigliere` en `skills-lock.json`.
-- **Seguridad uninstall**: sin `--force` pide confirmación; memoria solo con `--part memoria` (+ `--force`) y backup previo obligatorio (aborta si falla); borrado solo de rutas listadas explícitamente, nunca `.git`; mantiene harden bash (`deny` irreparable + `ask` sensibles).
+- **Seguridad uninstall**: sin `--force` pide confirmación; la memoria (`PROJECT_STATE.md`, `SUMMARY.md`, `CHANGELOG/`) se borra con `--part memoria` **y también con `--part all`**, que es la unión de los tres alcances — en ambos casos hace falta `--force` y un backup previo obligatorio con copia externa fuera del proyecto (aborta con 4 si falla); borrado solo de rutas listadas explícitamente, nunca `.git`; mantiene harden bash (`deny` irreparable + `ask` sensibles).
 
 ## Flujo de trabajo en cada proyecto
 
@@ -228,8 +228,8 @@ Lo que **no** es una solución: el harness solo valida la *forma* de un id de mo
 | 2 | `CHANGELOG/YYYY-MM-DD.md` | rare | historial semanal (lunes) + `DECISIONS-ARCHIVE.md` |
 
 - **Topic upsert**: `topic: architecture/auth-model` 2 niveles; mismo topic → upsert no duplicado.
-- **Búsqueda progresiva (md+grep, cero dependencias)**: `node .opencode/scripts/memory-index.mjs search "query"` → IDs, `timeline <id>`, `get <id>`. No hay base de datos detrás: `search` filtra con regex sobre los Markdown y `get` devuelve el cuerpo de la entrada.
-- **Rotación**: canónica en `/record` vía el motor Node `.opencode/scripts/memory-rotate.mjs` (dispara por lunes o `contentLines` > 150, con dedup + §4). El hook `post-commit` es un **backup opcional/gated** (`ADVISOR_ROTATE_HOOK=1`, desactivado por defecto). Sin `flock`: el lock lo gestiona `memory-lock.mjs`.
+- **Búsqueda progresiva (md+grep, cero dependencias)**: `node .opencode/scripts/memory-index.mjs search "query"` → IDs, `timeline <id>`, `get <id>`. No hay base de datos detrás: `search` hace coincidencia de **subcadena sin distinguir mayúsculas** sobre el título, el resumen y el `topic` de cada entrada (no es una regex), ordena los hits por relevancia (recencia + `topic` + título) y `get` devuelve el cuerpo de la entrada.
+- **Rotación**: canónica en `/record` vía el motor Node `.opencode/scripts/memory-rotate.mjs` (dispara por lunes o `contentLines` > 150, con dedup + §4). El hook `post-commit` es un **backup opcional/gated** (`ADVISOR_ROTATE_HOOK=1`, desactivado por defecto). Sin `flock`: el lock canónico es `memory-lock.mjs`, y lo toman por igual las rutas que mutan la memoria (`rotate`, `migrate-markers` y `memory-sync export/import`), no solo el CLI.
 - **Sync local**: `node .opencode/scripts/memory-sync.mjs export` → `.advisor/chunks/<monday>.json` (git-tracked), `import` restaura en clone.
 - **Session summary**: 6 campos `Goal/Discoveries/Accomplished/Next/Files/Verificación`.
 - **Stale**: `/review` lista `needs_review` si `review_after` pasado.
@@ -256,7 +256,7 @@ consigliere/
 ├── init.ps1                # lanzador PowerShell: & node init.mjs @args
 ├── init.cmd                # lanzador CMD: init.ps1 %*
 ├── templates/              # {{VAR}} + scripts + skills (lo que se instala en cada proyecto)
-├── package.json            # publica en npm como `advisor-harness` v2.0.0
+├── package.json            # publica en npm como `advisor-harness` (se consume con `npx advisor-harness@latest`)
 ├── README.md + LICENSE     # incluidos en el paquete publicado (files: init.* + templates/ + README + LICENSE)
 ├── CONTRIBUTING.md         # flujo de desarrollo y notas de mantenimiento
 ├── .nvmrc                  # Node de desarrollo: 20
@@ -264,7 +264,7 @@ consigliere/
 └── .github/workflows/      # ci.yml (5 jobs) + release.yml (gatea en CI)
 ```
 
-> Ficheros de desarrollo **fuera** del paquete y del `git archive` (`export-ignore`): `opencode.json`, `skills-lock.json`, `scripts/`, `.opencode/` raíz, `.advisor/`, `AGENTS.md`, memoria y `test/`. Todo eso **sí se genera completo en cada proyecto instalado**.
+> Ficheros de desarrollo **fuera** del paquete y del `git archive` (`export-ignore`): `opencode.json`, `skills-lock.json`, `scripts/`, `.opencode/` raíz, `.advisor/`, `AGENTS.md`, memoria y `test/`. Todo eso **sí se genera en cada proyecto instalado** salvo `test/`, que es la suite de desarrollo de este repo y no se instala en ningún proyecto.
 
 ## Dependencias
 
@@ -283,10 +283,10 @@ El repo tiene su propia suite, sin dependencias externas (nada de `npm ci`: no h
 |---|---|
 | `npm test` | `node --check init.mjs` + suite de `test/` + tests de rotación + contrato anti-drift + `version:check` |
 | `npm run test:unit` | solo la suite de `test/` (micro-framework sin deps, un archivo por proceso hijo) |
-| `npm run test:contract` | contrato anti-drift: paridad espejo raíz↔`templates/`, catálogos de archivos solo-raíz, invariantes, `node --check` derivado |
+| `npm run test:contract` | contrato anti-drift: paridad espejo raíz↔`templates/`, catálogos de archivos solo-raíz **y solo-template** (los dos fallan), invariantes, `node --check` derivado |
 | `npm run lint:sh` | `bash -n` de `init.sh` y `scripts/check-memory-limits.sh` |
 | `npm run lint:ps1` | parse real con el AST de PowerShell sobre `init.ps1` |
-| `npm run version:check` | la versión de `package.json` aparece en los tres lanzadores |
+| `npm run version:check` | la versión de `package.json` aparece en `init.mjs`, `init.sh`, `init.ps1` y en las 2 copias de `_project-docs/SKILL.md` |
 | `prepublishOnly` | `version:check` + contrato, antes de publicar |
 
 `.github/workflows/ci.yml`, cinco jobs:

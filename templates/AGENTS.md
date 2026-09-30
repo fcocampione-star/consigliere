@@ -79,7 +79,7 @@ El harness de agentes + memoria (`.opencode/`, `.agents/skills/`, `.advisor/` y 
 | Límites memoria | `PROJECT_STATE.md` <100 líneas · `SUMMARY.md` <150 |
 | Actualizar harness | `npx advisor-harness@latest . --upgrade` (backup previo obligatorio: preserva `PROJECT_STATE.md`, `SUMMARY.md` y `CHANGELOG/`; regenera `AGENTS.md`, `opencode.json` y `.gitignore`) |
 
-> Instalador y actualizaciones: **Node.js >= 20.11** en todas las vías (`npx advisor-harness@latest`, `node init.mjs`, `init.sh`, `init.ps1`; los tres últimos ejecutan `init.mjs` a través de Node). `tar` es necesario para el backup previo y `--restore`.
+> Instalador y actualizaciones: **Node.js >= 20.11** en todas las vías. Desde el clon del repo hay cuatro puntos de entrada —`node init.mjs`, que es la única implementación, y los tres lanzadores `init.sh`, `init.ps1` e `init.cmd`, que la ejecutan a través de Node— y con el paquete publicado, `npx advisor-harness@latest`. `tar` es necesario para el backup previo y `--restore`.
 
 ## Key architecture decisions
 

@@ -15,17 +15,28 @@
  *
  * `writeAtomic` es lo único que se importa del motor (además de `rotate`); el
  * resto de la suite usa `rotate({root})` contra fixtures, con `--root` siendo
- * TEST-ONLY y el lock canonico quedandose en la raiz del repo del script.
+ * TEST-ONLY y el lock canonico quedandose en la raiz del repo del script. Como
+ * `rotate`/`migrateMarkers` toman ese lock DENTRO de la funcion mutante, esta
+ * suite lo aparta a su propio sandbox con `ADVISOR_LOCK_ROOT` (ver abajo): sin
+ * eso, cada `rotate({root})` de los fixtures tomaba el `.memory-lock` real del
+ * repo en pleno `npm test`.
  */
 
 import { readFileSync, existsSync, readdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { suite, test, assert, eq, neq, match, includes, throws, tmpdir, cleanup, runAll } from './harness.mjs';
 import { makeProject, summaryWithEntries } from './fixtures.mjs';
-import { writeAtomic, rotate, CHANGELOG_LINE_LIMIT, DEFAULT_MAX } from '../.opencode/scripts/memory-rotate.mjs';
-import { contentLines, ENTRIES_START, ENTRIES_END } from '../.opencode/scripts/memory-stats.mjs';
 
-const TEMPS = [];
+// `ADVISOR_LOCK_ROOT` se lee UNA vez al cargar memory-lock.mjs, asi que tiene que
+// fijarse ANTES del import de memory-rotate.mjs (que lo importa transitivamente):
+// por eso el import del motor es dinamico y no estatico.
+const LOCK_SANDBOX = tmpdir('advisor-rotate-lock');
+process.env.ADVISOR_LOCK_ROOT = LOCK_SANDBOX;
+const { writeAtomic, rotate, CHANGELOG_LINE_LIMIT, DEFAULT_MAX } = await import('../.opencode/scripts/memory-rotate.mjs');
+const { lockPath } = await import('../.opencode/scripts/memory-lock.mjs');
+const { contentLines, ENTRIES_START, ENTRIES_END } = await import('../.opencode/scripts/memory-stats.mjs');
+
+const TEMPS = [LOCK_SANDBOX];
 process.on('exit', () => cleanup(TEMPS));
 
 const N_ESCALA = 300;
@@ -230,6 +241,11 @@ test('parseRegion se llama desde un numero acotado de sitios, no desde el bucle 
 test('DEFAULT_MAX y CHANGELOG_LINE_LIMIT conservan sus valores de contrato', () => {
   eq(DEFAULT_MAX, 20, 'el cap por defecto sigue siendo 20');
   eq(CHANGELOG_LINE_LIMIT, 150, 'el limite sigue siendo 150');
+});
+
+test('rotate() toma y suelta el lock canonico (y no lo deja huerfano en el repo)', () => {
+  assert(lockPath().startsWith(LOCK_SANDBOX), `el lock debe vivir en el sandbox de la suite, no en el repo: ${lockPath()}`);
+  eq(existsSync(lockPath()), false, 'tras todas las corridas de rotate() no queda lock tomado');
 });
 
 // ── 3. El cap --max reporta el conteo real ─────────────────────────────────

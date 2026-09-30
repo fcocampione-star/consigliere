@@ -19,19 +19,22 @@
  *
  * Los comandos de LECTURA (`load`, `chunk`, `search`) son de solo lectura: NUNCA
  * escriben `.advisor/skill-registry.cache.json`. La cache solo se (re)genera en
- * `list` y `refresh`, que son los comandos cuyo objeto es el listado/cache.
+ * `list` y `refresh`, que son los comandos cuyo objeto es el listado/cache, y se
+ * escribe con `writeAtomic` de lib/core.mjs (temp+rename). Si esa escritura
+ * falla, el aviso va a stderr y el comando sigue: la cache es un derivado.
  *
- * v5 (adopción de la lib compartida del harness, sin cambio de comportamiento):
- * la lectura normalizada es `readText` de `.opencode/scripts/lib/core.mjs`, los
- * fences se detectan con `fenceSpans` de `lib/md.mjs` (una sola máquina de estados
- * CommonMark en vez de dos) y el par fingerprint/isFresh es el de `lib/cache.mjs`.
- * Se mantiene el PROJECT_ROOT local de tres niveles —core.REPO_ROOT resolvería en
- * `.opencode/`— y el uso sin comando por stdout.
+ * v5 (adopción de la lib compartida del harness): la lectura normalizada es
+ * `readText` de `.opencode/scripts/lib/core.mjs`, las escrituras (la cache)
+ * pasan por su `writeAtomic`, los fences se detectan con `fenceSpans` de
+ * `lib/md.mjs` (una sola máquina de estados CommonMark en vez de dos) y el par
+ * fingerprint/isFresh es el de `lib/cache.mjs`. Se mantiene el PROJECT_ROOT local
+ * de tres niveles —core.REPO_ROOT resolvería en `.opencode/`— y el uso sin
+ * comando por stdout.
  */
-import { readdirSync, readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { exitUsage, readText } from '../../scripts/lib/core.mjs';
+import { exitUsage, readText, writeAtomic } from '../../scripts/lib/core.mjs';
 import { fenceSpans } from '../../scripts/lib/md.mjs';
 import { fingerprint as fingerprintShared, isFresh } from '../../scripts/lib/cache.mjs';
 
@@ -87,11 +90,24 @@ function loadCache() {
   } catch { return null; }
 }
 
+// Escritura de la cache: la ATÓMICA de lib/core.mjs (temp de nombre único en el
+// mismo directorio + rename), la misma que usan memory-rotate/memory-sync. Antes
+// escribía directo con writeFileSync y además se tragaba el error, con lo que un
+// destino a medias o ilegible pasaba por una cache "escrita": era la última
+// escritura no atómica del harness y contradecía el contrato de memory-sync
+// ("todo fichero escrito pasa por temp+rename"). El error ya no se traga: se
+// avisa por stderr con la ruta y el motivo, y el comando sigue — la cache es un
+// derivado, no un requisito para leer skills, y un fallo al escribirla no puede
+// convertir un `list` correcto en un error.
 function saveCache(fp) {
+  const payload = JSON.stringify({ version: CACHE_VERSION, generatedAt: new Date().toISOString(), entries: fp }, null, 2);
   try {
-    mkdirSync(CACHE_DIR, { recursive: true });
-    writeFileSync(CACHE_FILE, JSON.stringify({ version: CACHE_VERSION, generatedAt: new Date().toISOString(), entries: fp }, null, 2), 'utf8');
-  } catch {}
+    writeAtomic(CACHE_FILE, payload);
+    return true;
+  } catch (e) {
+    console.error(`loader: no se pudo escribir la cache ${CACHE_FILE} (${e.message}); el listado sigue y se regenerará en la próxima.`);
+    return false;
+  }
 }
 
 // `persist` decide si esta rutina puede ESCRIBIR la cache. Por defecto false:

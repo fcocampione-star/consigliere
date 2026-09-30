@@ -34,10 +34,31 @@
  * `{{` legitimo que queda en el arbol generado es el ejemplo documentado
  * `{{MODEL_*}}` de AGENTS.md (templates/AGENTS.md:25), que por llevar `*` no
  * casa con el patron de marcador y ademas se comprueba aparte.
+ *
+ * Suite 2 — seguridad de datos (lo que el camino feliz no cubria). El contrato
+ * de la rama es "el backup previo es obligatorio, la memoria NUNCA se regenera
+ * y la config SI", asi que se comprueba en las dos direcciones:
+ *  - install sobre un destino no vacio deja un .tgz con el contenido PREVIO.
+ *  - --upgrade preserva PROJECT_STATE/SUMMARY/CHANGELOG, REGENERA AGENTS.md y
+ *    funde de opencode.json solo agent.<nombre>.model. Repetido, es idempotente.
+ *  - el render salta lo preservado que ya esta respaldado (no lo vacia para
+ *    reponerlo despues: la memoria nunca pasa por un estado vacio). El
+ *    contenido por si solo no lo demuestra —el restore del backup lo repone
+ *    igual—, asi que se comprueba que el render ANUNCIE el salto.
+ *  - install en un directorio vacio crea la memoria: el salto no puede
+ *    comerse la creacion inicial.
+ *  - --restore repone la memoria; un .tgz con ruta absoluta o '../' se rechaza
+ *    con exit 4 sin escribir nada (archivo malicioso hecho a mano en Node:
+ *    ni bsdtar ni GNU tar dejan crear uno).
+ *  - --uninstall --part harness borra por ruta exacta y no toca lo del usuario
+ *    (scripts/deploy.sh).
+ *  - la poda de backups borra por EDAD (timestamp del nombre, parseado), no por
+ *    prefijo, y el preflight solo exige tar si hay algo que respaldar.
  */
 
 import { spawnSync } from 'node:child_process';
-import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
+import { readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -110,10 +131,12 @@ function listar(root, acc = [], cur = root) {
 }
 
 // Instala como proceso hijo. stdin pipeado y vacio: ningun prompt puede colgar
-// la corrida aunque el instalador intente leer de la terminal.
-function instalar(args, cwd) {
+// la corrida aunque el instalador intente leer de la terminal. `env` permite
+// simular una maquina sin una herramienta (PATH vacio).
+function instalar(args, cwd, env) {
   const r = spawnSync(process.execPath, [INIT, ...args], {
     cwd,
+    env: env || process.env,
     encoding: 'utf8',
     timeout: TIMEOUT_MS,
     maxBuffer: MAX_BUFFER,
@@ -130,6 +153,88 @@ function instalar(args, cwd) {
 
 function salida(res, ctx) {
   return `${ctx}: exit=${res.status}\n${cola(res.out, 600)}`;
+}
+
+// ── Utilidades de seguridad de datos (backup / upgrade / restore / uninstall) ──
+const RE_BACKUP = /^(?:harness|advisor)-.*\.tgz$/;
+const DIR_BACKUPS = '.advisor/backups';
+
+function escribir(p, txt) {
+  writeFileSync(p, txt, 'utf8');
+}
+// Anade al final conservando lo que habia (asi el sentinel se distingue del
+// contenido de la plantilla sin depender de la plantilla).
+function anadir(p, txt) {
+  writeFileSync(p, `${leer(p)}\n\n${txt}\n`, 'utf8');
+}
+function backupsDe(dir) {
+  try {
+    return readdirSync(join(dir, ...DIR_BACKUPS.split('/'))).filter((f) => RE_BACKUP.test(f)).sort();
+  } catch {
+    return [];
+  }
+}
+// Miembros de un .tgz (o null si tar no lo puede leer).
+function miembros(tgz) {
+  const r = spawnSync('tar', ['-tzf', tgz], { encoding: 'utf8', timeout: 60000, windowsHide: true });
+  if (r.error || r.status !== 0) return null;
+  return String(r.stdout || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+}
+// Extrae a un temporal propio para poder COMPARAR el contenido archivado con el
+// que habia antes del install.
+function extraerEn(tgz, dest) {
+  mkdirSync(dest, { recursive: true });
+  const r = spawnSync('tar', ['-xzf', tgz, '-C', dest], { encoding: 'utf8', timeout: 60000, windowsHide: true });
+  assert(!r.error && r.status === 0, `no se pudo extraer ${tgz}: ${r.stderr || (r.error && r.error.message)}`);
+  return dest;
+}
+// Foto del arbol: { ruta relativa -> contenido }. `skip` deja fuera lo que cambia
+// en cada corrida (backups, repo git).
+function instantanea(root, skip = ['.advisor', '.git']) {
+  const out = {};
+  for (const rel of listar(root)) {
+    if (skip.some((s) => rel === s || rel.startsWith(`${s}/`))) continue;
+    out[rel] = leer(join(root, ...rel.split('/')));
+  }
+  return out;
+}
+
+// --- .tgz。...
+// Un .tgz malicioso hay que construirlo A MANO: ni bsdtar ni GNU tar aceptan
+// meter rutas absolutas o '../' en un archivo que ellos mismos crean (lo
+// stripsan), así que para poder probar el rechazo del instalador se escribe la
+// cabecera ustar (512 B) en Node puro + gzip. Formato: sin cambios respecto al
+// ustar de POSIX, que es lo que leen los dos tars de las tres plataformas de CI.
+function octalTar(n, len) {
+  return `${n.toString(8).padStart(len - 1, '0')}\0`;
+}
+function cabeceraUstar(name, size) {
+  const b = Buffer.alloc(512);
+  b.write(name, 0, 100, 'utf8');
+  b.write(octalTar(0o644, 8), 100, 8, 'ascii'); // mode
+  b.write(octalTar(0, 8), 108, 8, 'ascii'); // uid
+  b.write(octalTar(0, 8), 116, 8, 'ascii'); // gid
+  b.write(octalTar(size, 12), 124, 12, 'ascii');
+  b.write(octalTar(1750000000, 12), 136, 12, 'ascii'); // mtime (fijo: determinista)
+  b.write('        ', 148, 8, 'ascii'); // chksum = espacios
+  b.write('0', 156, 1, 'ascii'); // typeflag: fichero
+  b.write('ustar\0', 257, 6, 'ascii');
+  b.write('00', 263, 2, 'ascii');
+  let suma = 0;
+  for (const byte of b) suma += byte;
+  b.write(`${suma.toString(8).padStart(6, '0')}\0 `, 148, 8, 'ascii');
+  return b;
+}
+function tgzDe(members) {
+  const trozos = [];
+  for (const [name, content] of members) {
+    const data = Buffer.from(content, 'utf8');
+    trozos.push(cabeceraUstar(name, data.length), data);
+    const pad = (512 - (data.length % 512)) % 512;
+    if (pad) trozos.push(Buffer.alloc(pad));
+  }
+  trozos.push(Buffer.alloc(1024)); // dos bloques de fin
+  return gzipSync(Buffer.concat(trozos));
 }
 
 // ── Escaneo de placeholders ─────────────────────────────────────────────────
@@ -418,10 +523,317 @@ test('--part invalido: exit 1 y no escribe nada', () => {
   }
 });
 
+// =============================================================================
+// Suite 2: seguridad de datos. El contrato de la rama es "el backup previo es
+// obligatorio, la memoria nunca se regenera, la config sí" y hasta ahora solo
+// lo caracterizaba el camino feliz del install. Cada test instala en un temporal
+// con --autoskills 3 --git no (sin red, sin repo) y lo borra en el finally.
+// Los que necesitan tar se OMITEN (no fallan) si no está en el PATH.
+// =============================================================================
+suite('init.mjs - seguridad de datos (backup / upgrade / restore / uninstall)');
+
+test('install sobre un destino no vacío: deja un backup con el contenido PREVIO', () => {
+  const base = tmpdir('advisor-init-backup');
+  const dir = join(base, 'proyecto');
+  try {
+    if (!TAR) { omitir('tar ausente: el backup previo de un install no se puede ejercitar'); return; }
+    mkdirSync(dir, { recursive: true });
+    escribir(join(dir, 'AGENTS.md'), 'AGENTS PROPIO v1\n');
+    escribir(join(dir, 'PROJECT_STATE.md'), 'ESTADO PROPIO v1\n');
+    escribir(join(dir, 'notas.txt'), 'notas del usuario\n');
+
+    const res = instalar([dir, '--force', ...SIN_RED], base);
+    eq(res.status, 0, salida(res, 'install con --force sobre destino no vacío'));
+
+    const backups = backupsDe(dir);
+    eq(backups.length, 1, `debe quedar exactamente un backup previo, no ${backups.length}`);
+    const tgz = join(dir, ...DIR_BACKUPS.split('/'), backups[0]);
+    assert(esDir(join(dir, '.opencode')), 'el harness debe quedar instalado tras el install');
+
+    // El .tgz contiene lo que había ANTES, no lo que dejó el render.
+    const nombres = miembros(tgz);
+    assert(nombres, `tar no pudo listar el backup ${tgz}`);
+    for (const esperado of ['AGENTS.md', 'PROJECT_STATE.md']) {
+      assert(nombres.includes(esperado), `el backup debe contener ${esperado} (miembros: ${cola(nombres.join(', '))})`);
+    }
+    const copia = extraerEn(tgz, join(base, 'extraido'));
+    eq(leer(join(copia, 'AGENTS.md')), 'AGENTS PROPIO v1\n', 'el backup debe guardar el AGENTS.md anterior al install');
+    eq(leer(join(copia, 'PROJECT_STATE.md')), 'ESTADO PROPIO v1\n', 'el backup debe guardar el PROJECT_STATE.md anterior al install');
+    // Y el destino ya tiene la versión regenerada.
+    neq(leer(join(dir, 'AGENTS.md')), 'AGENTS PROPIO v1\n', 'AGENTS.md debe quedar regenerado desde la plantilla');
+  } finally {
+    cleanup(base);
+  }
+});
+
+test('--upgrade preserva la memoria, REGENERA AGENTS.md y funde tu modelo de opencode.json', () => {
+  const base = tmpdir('advisor-init-upgrade');
+  const dir = join(base, 'proyecto');
+  try {
+    if (!TAR) { omitir('tar ausente: --upgrade exige backup previo'); return; }
+    eq(instalar([dir, ...SIN_RED], base).status, 0, 'el install base debe salir con 0');
+    mkdirSync(join(dir, 'CHANGELOG'), { recursive: true });
+    anadir(join(dir, 'PROJECT_STATE.md'), '## SENTINEL-ESTADO-USUARIO');
+    anadir(join(dir, 'SUMMARY.md'), 'SENTINEL-SUMMARY-USUARIO');
+    escribir(join(dir, 'CHANGELOG', '2026-01-05.md'), 'entrada de changelog del usuario');
+    anadir(join(dir, 'AGENTS.md'), '<!-- MARCA-QUE-DEBE-DESAPARECER -->');
+    const cfgPath = join(dir, 'opencode.json');
+    const cfg = JSON.parse(leer(cfgPath));
+    cfg.agent.builder.model = 'anthropic/claude-sonnet-4-5';
+    escribir(cfgPath, `${JSON.stringify(cfg, null, 2)}\n`);
+
+    const res = instalar([dir, '--upgrade', ...SIN_RED], base);
+    eq(res.status, 0, salida(res, '--upgrade'));
+
+    // PRESERVADO: la memoria no se regenera (ni siquiera durante el proceso).
+    includes(leer(join(dir, 'PROJECT_STATE.md')), 'SENTINEL-ESTADO-USUARIO', 'el upgrade debe preservar PROJECT_STATE.md');
+    includes(leer(join(dir, 'SUMMARY.md')), 'SENTINEL-SUMMARY-USUARIO', 'el upgrade debe preservar SUMMARY.md');
+    includes(leer(join(dir, 'CHANGELOG', '2026-01-05.md')), 'entrada de changelog del usuario', 'el upgrade debe preservar CHANGELOG/');
+
+    // REGENERADO: tu edición de AGENTS.md se pierde, y esa es la gracia del upgrade.
+    assert(!leer(join(dir, 'AGENTS.md')).includes('MARCA-QUE-DEBE-DESAPARECER'), 'AGENTS.md debe REGENERARSE (la marca editada tiene que desaparecer)');
+
+    // FUSIÓN: de opencode.json solo sobrevive agent.<nombre>.model.
+    const nuevo = JSON.parse(leer(cfgPath));
+    eq(nuevo.agent.builder.model, 'anthropic/claude-sonnet-4-5', 'el modelo del usuario debe pasar al opencode.json regenerado');
+    eq(nuevo.agent.explore.model, '', 'un agente sin modelo propio debe seguir heredando');
+    includes(leer(cfgPath), '$schema', 'el opencode.json regenerado debe conservar el resto de la plantilla');
+  } finally {
+    cleanup(base);
+  }
+});
+
+test('--upgrade dos veces seguidas deja el árbol idéntico (idempotente)', () => {
+  const base = tmpdir('advisor-init-idem');
+  const dir = join(base, 'proyecto');
+  try {
+    if (!TAR) { omitir('tar ausente: --upgrade exige backup previo'); return; }
+    eq(instalar([dir, ...SIN_RED], base).status, 0, 'el install base debe salir con 0');
+    anadir(join(dir, 'PROJECT_STATE.md'), '## SENTINEL-ESTADO-USUARIO');
+    eq(instalar([dir, '--upgrade', ...SIN_RED], base).status, 0, 'el primer upgrade debe salir con 0');
+    const primera = instantanea(dir);
+    assert(Object.keys(primera).length > 10, `el árbol generado debe tener archivos que comparar (hay ${Object.keys(primera).length})`);
+
+    const segunda = instalar([dir, '--upgrade', ...SIN_RED], base);
+    eq(segunda.status, 0, salida(segunda, 'el segundo upgrade debe salir con 0'));
+    const tras = instantanea(dir);
+    eq(Object.keys(tras).sort(), Object.keys(primera).sort(), 'un --upgrade repetido no debe crear ni quitar archivos');
+    const distintos = Object.keys(primera).filter((k) => tras[k] !== primera[k]);
+    eq(distintos, [], `un --upgrade repetido debe dejar el contenido idéntico (cambiaron: ${cola(distintos.join(', '))})`);
+    includes(tras['PROJECT_STATE.md'], 'SENTINEL-ESTADO-USUARIO', 'la memoria sigue intacta tras dos upgrades');
+  } finally {
+    cleanup(base);
+  }
+});
+
+test('--restore desde el backup del install repone la memoria', () => {
+  const base = tmpdir('advisor-init-restore');
+  const dir = join(base, 'proyecto');
+  try {
+    if (!TAR) { omitir('tar ausente: --restore necesita tar para extraer'); return; }
+    mkdirSync(dir, { recursive: true });
+    escribir(join(dir, 'PROJECT_STATE.md'), 'ESTADO PROPIO v1\n');
+    escribir(join(dir, 'AGENTS.md'), 'AGENTS PROPIO v1\n');
+    eq(instalar([dir, '--force', ...SIN_RED], base).status, 0, 'install con --force');
+    const [backup] = backupsDe(dir);
+    assert(backup, 'debe existir un backup que restaurar');
+
+    // Simula la pérdida: la memoria del proyecto se destruye después del install.
+    escribir(join(dir, 'PROJECT_STATE.md'), 'MEMORIA PERDIDA\n');
+    escribir(join(dir, 'AGENTS.md'), 'AGENTS PERDIDO\n');
+
+    const res = instalar([dir, '--restore', '--from', join(dir, ...DIR_BACKUPS.split('/'), backup)], base);
+    eq(res.status, 0, salida(res, '--restore --from <advisor-*.tgz>'));
+    eq(leer(join(dir, 'PROJECT_STATE.md')), 'ESTADO PROPIO v1\n', '--restore debe devolver PROJECT_STATE.md tal como estaba antes del install');
+    eq(leer(join(dir, 'AGENTS.md')), 'AGENTS PROPIO v1\n', '--restore debe devolver AGENTS.md tal como estaba antes del install');
+  } finally {
+    cleanup(base);
+  }
+});
+
+test('--uninstall --part harness deja scripts/deploy.sh intacto y borra lo del harness', () => {
+  const base = tmpdir('advisor-init-uninstall');
+  const dir = join(base, 'proyecto');
+  try {
+    eq(instalar([dir, ...SIN_RED], base).status, 0, 'el install base debe salir con 0');
+    mkdirSync(join(dir, 'scripts'), { recursive: true });
+    escribir(join(dir, 'scripts', 'deploy.sh'), '#!/bin/sh\necho deploy propio\n');
+    assert(existe(join(dir, 'scripts', 'check-memory-limits.sh')), 'precondición: el harness trae su propio script');
+
+    const res = instalar([dir, '--uninstall', '--part', 'harness', '--force'], base);
+    eq(res.status, 0, salida(res, '--uninstall --part harness --force'));
+
+    // Lo del usuario: intacto, contenido incluido.
+    assert(existe(join(dir, 'scripts', 'deploy.sh')), 'scripts/deploy.sh es del usuario: --uninstall harness no puede borrarlo');
+    eq(leer(join(dir, 'scripts', 'deploy.sh')), '#!/bin/sh\necho deploy propio\n', 'scripts/deploy.sh no debe cambiar de contenido');
+    // Lo del harness: fuera, por ruta exacta.
+    for (const rel of ['AGENTS.md', 'opencode.json', '.gitignore', 'skills-lock.json', 'scripts/check-memory-limits.sh', '.opencode/agents/advisor.md']) {
+      assert(!existe(join(dir, ...rel.split('/'))), `${rel} es del harness y debe desaparecer con --uninstall --part harness`);
+    }
+    assert(!esDir(join(dir, '.opencode')), '.opencode/ debe quedarse vacío y podarse (no hay nada del usuario dentro)');
+    // La memoria es de otro --part: intacta.
+    assert(existe(join(dir, 'PROJECT_STATE.md')), '--uninstall --part harness no debe tocar la memoria');
+    assert(esDir(join(dir, '.advisor')), '--uninstall --part harness no debe tocar .advisor/');
+  } finally {
+    cleanup(base);
+  }
+});
+
+test('un .tgz con ruta absoluta o ../ se rechaza con exit 4 y no escribe fuera del destino', () => {
+  const base = tmpdir('advisor-init-evil');
+  const dir = join(base, 'proyecto');
+  try {
+    if (!TAR) { omitir('tar ausente: --restore necesita tar para listar el .tgz'); return; }
+    mkdirSync(dir, { recursive: true });
+    escribir(join(base, 'canario.txt'), 'NO DEBE CAMBIAR\n');
+    const evil = join(base, 'advisor-2001-01-01T00-00-00-000Z.tgz');
+    escribir(evil, tgzDe([
+      ['../escape.txt', 'PWNED-POR-SUBIDA\n'],
+      ['/C:/tmp/abs.txt', 'PWNED-ABSOLUTA\n'],
+      ['PROJECT_STATE.md', 'PWNED-MEMORIA\n'],
+    ]));
+    assert(miembros(evil), 'el .tgz malicioso debe ser legible por tar (si no, el caso no probaría nada)');
+
+    const res = instalar([dir, '--restore', '--from', evil], base);
+    eq(res.status, 4, salida(res, 'un .tgz con rutas fuera del destino debe salir con 4 (BACKUP)'));
+    match(res.out, /rechazad|no se ha escrito nada/i, 'el fallo debe decir que no se ha escrito nada');
+    // Nada fuera del destino: ni un archivo nuevo en el temporal, ni canario tocado.
+    eq(leer(join(base, 'canario.txt')), 'NO DEBE CAMBIAR\n', 'el --restore no puede tocar nada fuera del destino');
+    assert(!existe(join(base, 'escape.txt')), "no debe existir escape.txt en el padre (miembro '../')");
+    for (const rel of listar(base)) {
+      assert(!rel.includes('escape.txt') && !rel.includes('abs.txt'), `un miembro escapó del temporal: ${rel}`);
+    }
+    assert(!existe(join(dir, 'PROJECT_STATE.md')), 'un .tgz rechazado no debe materializar ningún miembro dentro del destino');
+  } finally {
+    cleanup(base);
+  }
+});
+
+test('install en un directorio VACÍO crea la memoria (el salto del render no la impide)', () => {
+  const base = tmpdir('advisor-init-vacio');
+  const dir = join(base, 'proyecto');
+  try {
+    mkdirSync(dir, { recursive: true });
+    assert(backupsDe(dir).length === 0, 'precondición: nada que respaldar en un destino vacío');
+    const res = instalar([dir, '--name', 'memoria-nueva', ...SIN_RED], base);
+    eq(res.status, 0, salida(res, 'install en directorio vacío'));
+    for (const rel of ['PROJECT_STATE.md', 'SUMMARY.md']) {
+      assert(existe(join(dir, rel)), `${rel} debe crearse desde la plantilla en un install limpio`);
+    }
+    includes(leer(join(dir, 'PROJECT_STATE.md')), 'memoria-nueva', 'PROJECT_STATE.md generado debe llevar PROJECT_NAME sustituido');
+    match(leer(join(dir, 'SUMMARY.md')), /^# Session Log/m, 'SUMMARY.md debe generarse desde la plantilla (no estar vacío)');
+    assert(esDir(join(dir, 'CHANGELOG')), 'CHANGELOG/ debe crearse en un install limpio');
+    eq(backupsDe(dir).length, 0, 'sin nada que respaldar no debe crearse un .tgz vacío');
+    match(res.out, /no ten/i, 'el informe debe decir que no había memoria previa que preservar');
+  } finally {
+    cleanup(base);
+  }
+});
+
+test('--part memoria: el render SALTA la memoria ya respaldada (no la reescribe)', () => {
+  const base = tmpdir('advisor-init-skip');
+  const dir = join(base, 'proyecto');
+  try {
+    if (!TAR) { omitir('tar ausente: --part memoria sobre un proyecto existente exige backup'); return; }
+    eq(instalar([dir, ...SIN_RED], base).status, 0, 'el install base debe salir con 0');
+    anadir(join(dir, 'PROJECT_STATE.md'), '## SENTINEL-ESTADO-USUARIO');
+    anadir(join(dir, 'SUMMARY.md'), 'SENTINEL-SUMMARY-USUARIO');
+
+    const res = instalar([dir, '--part', 'memoria', ...SIN_RED], base);
+    eq(res.status, 0, salida(res, '--part memoria sobre un proyecto existente'));
+    includes(leer(join(dir, 'PROJECT_STATE.md')), 'SENTINEL-ESTADO-USUARIO', 'la memoria debe sobrevivir a --part memoria');
+    includes(leer(join(dir, 'SUMMARY.md')), 'SENTINEL-SUMMARY-USUARIO', 'la memoria debe sobrevivir a --part memoria');
+    // El contenido por sí solo NO prueba el salto (el restore del backup lo
+    // repone igual): lo que lo demuestra es que el render diga que se saltó
+    // cada archivo. Sin esa línea, el árbol se vacía y se rellena después.
+    for (const rel of ['PROJECT_STATE.md', 'SUMMARY.md']) {
+      match(res.out, new RegExp(`${rel}: dato tuyo ya respaldado`), `el render debe anunciar que salta ${rel} (issue 1)`);
+    }
+  } finally {
+    cleanup(base);
+  }
+});
+
+test('la poda de backups borra por EDAD (timestamp parseado), no por prefijo', () => {
+  const base = tmpdir('advisor-init-prune');
+  const dir = join(base, 'proyecto');
+  try {
+    if (!TAR) { omitir('tar ausente: sin backup previo no hay poda que ejercitar'); return; }
+    eq(instalar([dir, ...SIN_RED], base).status, 0, 'el install base debe salir con 0');
+    const bkDir = join(dir, ...DIR_BACKUPS.split('/'));
+    // Seis nombres en LOS DOS formatos que el código produce, con edades
+    // intercaladas. Ordenados como string, `advisor-*` y `harness-*` caen en
+    // rangos fijos ('a' < 'h') y la poda borraría un grupo por prefijo.
+    const falsos = [
+      'advisor-2001-01-01T00-00-00-000Z.tgz',
+      'harness-2001-01-02T00-00-00-000Z.tgz',
+      'advisor-2001-01-03T00-00-00-000Z.tgz',
+      'harness-2001-01-04T00-00-00-000Z.tgz',
+      'advisor-2001-01-05T00-00-00-000Z.tgz',
+      'harness-2001-01-06T00-00-00-000Z.tgz',
+    ];
+    for (const f of falsos) escribir(join(bkDir, f), 'no es un tgz real, solo un nombre para la poda\n');
+    // El install de un destino vacío no deja backup (nada que respaldar): aquí
+    // solo están los 6 nombres de prueba, y el upgrade añade el 7º.
+    const antes = backupsDe(dir);
+    eq(antes.length, 6, `precondición: los 6 nombres de prueba (hay ${antes.length}: ${cola(antes.join(', '))})`);
+
+    eq(instalar([dir, '--upgrade', ...SIN_RED], base).status, 0, '--upgrade que dispara la poda');
+    const despues = backupsDe(dir);
+    eq(despues.length, 5, `la poda debe dejar 5 backups (dejó ${despues.length}: ${cola(despues.join(', '))})`);
+    // Los dos MÁS VIEJOS por timestamp se van, estén donde estén en el string.
+    assert(!despues.includes('advisor-2001-01-01T00-00-00-000Z.tgz'), 'el backup más viejo (advisor 01) debe podarse');
+    assert(!despues.includes('harness-2001-01-02T00-00-00-000Z.tgz'), 'el segundo más viejo (harness 02) debe podarse');
+    for (const f of ['advisor-2001-01-03T00-00-00-000Z.tgz', 'harness-2001-01-04T00-00-00-000Z.tgz', 'advisor-2001-01-05T00-00-00-000Z.tgz', 'harness-2001-01-06T00-00-00-000Z.tgz']) {
+      assert(despues.includes(f), `${f} es más reciente que los podados y debe sobrevivir`);
+    }
+    const reales = despues.filter((f) => !f.includes('2001-'));
+    eq(reales.length, 1, `el backup real del upgrade (el más reciente) debe sobrevivir (quedan: ${cola(reales.join(', '))})`);
+  } finally {
+    cleanup(base);
+  }
+});
+
+test('preflight: contenido ajeno al harness sin tar NO bloquea el install; con harness sí', () => {
+  const base = tmpdir('advisor-init-preflight');
+  const dir = join(base, 'proyecto');
+  const binVacio = join(base, 'bin-vacio');
+  try {
+    mkdirSync(binVacio, { recursive: true });
+    mkdirSync(dir, { recursive: true });
+    escribir(join(dir, 'notas.txt'), 'contenido del usuario, nada del harness\n');
+    escribir(join(dir, 'main.js'), '// su codigo\n');
+    const sinTar = { ...process.env, PATH: binVacio };
+
+    // No hay nada del harness que respaldar: doBackup no llamaría a tar, así que
+    // exigirlo en el preflight sería contradecir su propia regla.
+    const res = instalar([dir, '--force', ...SIN_RED], base, sinTar);
+    if (!/No encuentro 'tar'/.test(res.out)) {
+      omitir(`tar sigue resoluble pese al PATH vacío en ${process.platform}: el caso no probaría nada`);
+    } else {
+      eq(res.status, 0, salida(res, 'install forzado sin tar sobre un directorio con contenido ajeno'));
+      assert(existe(join(dir, 'AGENTS.md')), 'el harness debe generarse igualmente');
+      eq(leer(join(dir, 'notas.txt')), 'contenido del usuario, nada del harness\n', 'los archivos del usuario no se tocan');
+    }
+
+    // Ahora sí hay algo que respaldar (AGENTS.md es un ítem de BACKUP_ITEMS):
+    // sin tar el backup es imposible y el preflight debe cortar con exit 3.
+    mkdirSync(dir, { recursive: true });
+    escribir(join(dir, 'AGENTS.md'), 'AGENTS PROPIO\n');
+    const conHarness = instalar([dir, '--force', ...SIN_RED], base, sinTar);
+    if (/No encuentro 'tar'/.test(conHarness.out)) {
+      eq(conHarness.status, 3, salida(conHarness, 'install sobre un destino CON harness sin tar (DEPENDENCIA)'));
+      eq(leer(join(dir, 'AGENTS.md')), 'AGENTS PROPIO\n', 'sin backup no se puede escribir nada: AGENTS.md intacto');
+    }
+  } finally {
+    cleanup(base);
+  }
+});
+
 // ── Informe de entorno y de pasos omitidos ──────────────────────────────────
 console.log(`plataforma: ${process.platform} | node: ${process.version} | instalador: ${INIT}`);
 console.log(`herramientas externas -> git: ${GIT || 'AUSENTE'} | tar: ${TAR || 'AUSENTE'}`);
-if (!TAR) console.log('nota: --upgrade (backup con tar) no se ejercita en este smoke; no es necesario para --quick.');
+if (!TAR) console.log('nota: --upgrade/--restore y el backup previo no se ejercitan sin tar; los tests correspondientes se omiten (nunca fallan).');
 console.log(omitidos.length ? `omitidos (${omitidos.length}):\n  - ${omitidos.join('\n  - ')}` : 'omitidos: ninguno');
 
 await runAll();

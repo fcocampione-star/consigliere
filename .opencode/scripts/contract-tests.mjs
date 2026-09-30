@@ -16,10 +16,8 @@ const ROOT = join(import.meta.dirname, '..', '..');
 const TPL = join(ROOT, 'templates');
 
 const failures = [];
-const warnings = [];
 const passes = [];
 const fail = (name, msg) => failures.push(`${name}: ${msg}`);
-const warn = (name, msg) => warnings.push(`${name}: ${msg}`);
 const pass = (name, msg = '') => passes.push(msg ? `${name} — ${msg}` : name);
 const read = (p) => { try { return readFileSync(p, 'utf8'); } catch { return null; } };
 const sha = (p) => createHash('sha1').update(readFileSync(p)).digest('hex');
@@ -112,8 +110,13 @@ const ROOT_ONLY_PREFIXES = [
   // puro, no se instala por proyecto ni forma parte del harness publicable.
   'test/',
 ];
-// Archivos presente solo en templates/ y no espejados a propósito:
-const TEMPLATE_ONLY_EXACT = new Set(['opencode.json']);
+// Archivos presentes solo en templates/ y NO espejados a propósito, con el motivo
+// (igual que ALLOW_DIVERGENCE): un solo-template sin catalogar es drift silencioso
+// (nadie lo espeja, nadie lo comparó, nadie lo declaró excepción).
+const TEMPLATE_ONLY_EXACT = {
+  'opencode.json':
+    'el opencode.json de la raíz es la config DEV del repo (gitignored, `{{MODEL_*}}` resueltos a cadena vacía, propia de esta máquina): no es la que se instala. La de templates/ es la que se compara contra la allowlist de arriba.',
+};
 
 // Lock de memoria y su debris (`.memory-lock`, `.memory-lock.stale.<pid>`): no es
 // contenido versionable y un lock/transitorio de un test no debe contaminar el run.
@@ -163,8 +166,15 @@ for (const r of rootFiles) {
 }
 for (const r of tplFiles) {
   if (rootSet.has(r)) continue;
-  if (TEMPLATE_ONLY_EXACT.has(r)) continue;
-  warn('espejo', `archivo solo-template no catalogado: ${r}`);
+  if (r in TEMPLATE_ONLY_EXACT) continue;
+  // Un archivo solo-TEMPLATE FALLA, no avisa: es la dirección cara. templates/ es
+  // lo que se instala en cada proyecto, así que un archivo que solo existe ahí
+  // nunca se compara byte a byte con su par, nunca pasa el `node --check` de más
+  // abajo (que solo recorre el conjunto espejo) y divergen en silencio de la raíz.
+  // Un aviso no lo detiene: quien lee el reporte igual publica el tarball. O se
+  // espeja a la raíz o se catalega arriba con su motivo, y en ambos casos la
+  // comprobación existe.
+  fail('espejo', `archivo solo-template no catalogado: ${r} (¿debe espejarse o catalogarse en TEMPLATE_ONLY_EXACT?)`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -267,18 +277,16 @@ if (!failures.some((f) => f.startsWith('drift-doc')))
   pass('drift-doc', 'sin grep+perl ni legacy .consigliere/ no intencional');
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 7. doctor: nº de checks ≥ mínimo razonable + `node --check` de los scripts
+// 7. `node --check` de TODO script .mjs del harness (raíz + templates/ + init.mjs)
 // ─────────────────────────────────────────────────────────────────────────────
-const DOCTOR_MIN_CHECKS = 10;
-try {
-  const doctor = read(join(ROOT, '.opencode/scripts/doctor.mjs'));
-  if (doctor === null) fail('doctor', 'falta .opencode/scripts/doctor.mjs');
-  else {
-    const checkCount = (doctor.match(/\badd\(/g) || []).length - 1; // -1 por la definición de add()
-    if (checkCount < DOCTOR_MIN_CHECKS) fail('doctor', `solo ${checkCount} checks (< ${DOCTOR_MIN_CHECKS})`);
-    else pass('doctor', `${checkCount} checks programáticos (≥ ${DOCTOR_MIN_CHECKS})`);
-  }
-} catch (e) { fail('doctor', e.message); }
+// Lo que sí mide el doctor NO es el texto de una copia: `test/doctor-checks.test.mjs`
+// monta dos sandboxes y EJECUTA las dos copias de doctor.mjs (raíz y templates/),
+// afirmando qué checks corren de verdad y con qué severidad. Contar `add(` en el
+// fuente no medía checks ejecutados (contaba call sites, podía contar la cadena
+// dentro de un comentario o de un literal, y restaba un 1 a ciegas por la propia
+// definición) y nunca miraba la copia que se instala: por eso ese recuento ya no
+// existe. La cobertura real es el `node --check` de abajo (si un script no
+// parsea, no se instala ni se ejecuta) más esa suite.
 
 // Lista DERIVADA del walk (no una lista fija): todo `.mjs` bajo `.opencode/` en
 // la raíz y bajo `templates/.opencode/`, más los `.mjs` de raíz que quedan fuera
@@ -306,6 +314,5 @@ pass('node --check', `${SCRIPTS_TO_CHECK.length} scripts`);
 // ─────────────────────────────────────────────────────────────────────────────
 console.log(`CONTRACT TESTS — ${failures.length ? `❌ ${failures.length} fallo(s)` : '✅ PASS'}`);
 for (const p of passes) console.log(`  ✅ ${p}`);
-for (const w of warnings) console.log(`  ⚠️  ${w}`);
 for (const f of failures) console.log(`  ❌ ${f}`);
 process.exit(failures.length ? 1 : 0);

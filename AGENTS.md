@@ -38,7 +38,7 @@
 | Frontend | N/A — harness CLI sin UI (genera .opencode/ para opencode TUI; instalador para proyecto vacío) |
 | Auth | N/A — local sin auth; bash harden opencode.json (*:allow, deny rm/dd/mkfs, ask **/.env*/**/*.pem/**/*.key/**/secrets/*/~/.ssh/* + git push) |
 | Validation | suite propia sin deps: `npm test` = `node --check init.mjs` + `test/run.mjs` + memory-rotate.test + contrato anti-drift + `version:check`; CI con `lint:sh` / `lint:ps1` |
-| Deploy | npm registry advisor-harness@latest v2.0.0 via npx / init.mjs + init.sh + init.ps1 per-project (los tres son lanzadores de Node), --upgrade con backup previo keep 5 en .advisor/backups/ |
+| Deploy | npm registry advisor-harness@latest via npx / init.mjs + init.sh + init.ps1 + init.cmd per-project (los tres últimos son lanzadores de Node que delegan en init.mjs), --upgrade con backup previo keep 5 en .advisor/backups/ |
 
 ## Skills (con cache fingerprint)
 
@@ -62,7 +62,7 @@ npm run test:unit                                    # solo la suite de test/ (m
 npm run test:contract                                # contrato anti-drift (paridad espejo raíz↔templates/ + catálogos)
 npm run lint:sh                                      # bash -n init.sh + scripts/check-memory-limits.sh
 npm run lint:ps1                                     # parse AST de PowerShell sobre init.ps1
-npm run version:check                                # versión única: package.json == init.mjs/init.sh/init.ps1
+npm run version:check                                # versión única: package.json == init.mjs/init.sh/init.ps1 + las 2 SKILL.md de _project-docs
 node --check init.mjs && node --check .opencode/scripts/doctor.mjs  # validación ESM syntax
 node .opencode/scripts/doctor.mjs --json              # diagnóstico harness (opencode.json, memoria, lock, hook, cache, scripts, dirs, derivados)
 node .opencode/skills/_skill-loader/loader.mjs list --json  # listar skills (cache fingerprint)

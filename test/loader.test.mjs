@@ -540,4 +540,54 @@ test('el sandbox de solo lectura tampoco escribe cache al leer', () => {
   assert(existsSync(SB.cache), 'refresh genera la cache');
 });
 
+// ── Escritura de la cache: atómica y con el error VISIBLE ────────────────────
+// La cache es la última escritura que quedaba fuera del temp+rename, y su fallo
+// se tragaba: un destino ilegible pasaba por cache "escrita". Se afirma el
+// comportamiento, no el texto: (a) la escritura va por writeAtomic de lib/core,
+// (b) si no se puede escribir, el comando AVISA por stderr y sigue.
+suite('loader · escritura de la cache');
+
+test('la cache se escribe con writeAtomic de lib/core (no con writeFileSync directo)', () => {
+  const src = readFileSync(LOADER, 'utf8');
+  const tpl = readFileSync(join(REPO, 'templates', '.opencode', 'skills', '_skill-loader', 'loader.mjs'), 'utf8');
+  assert(/import \{[^}]*\bwriteAtomic\b[^}]*\} from '\.\.\/\.\.\/scripts\/lib\/core\.mjs'/.test(src),
+    'el loader debe importar writeAtomic de lib/core.mjs');
+  // Código sin comentarios: el contrato es sobre lo que se EJECUTA, así que ni
+  // el JSDoc ni las notas que nombran el patrón viejo cuentan como uso.
+  const codigo = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').filter((l) => !/^\s*(\/\/|\*)/.test(l)).join('\n');
+  assert(!/writeFileSync/.test(codigo(src)), 'ninguna escritura directa en el loader');
+  assert(!/writeFileSync/.test(codigo(tpl)), 'ninguna escritura directa en la copia de templates/ (espejo byte a byte)');
+});
+
+test('una cache que no se puede escribir avisa por stderr y no rompe list/refresh', () => {
+  // `.advisor` pasa a ser un FICHERO: mkdir/writeFile del destino fallan con
+  // ENOTDIR en cualquier SO, que es la forma portable de romper la escritura sin
+  // depender de permisos (que en Windows no sirven para esto).
+  const dir = join(tmpdir('advisor-loader'), 'cache-rota');
+  rmSync(dir, { recursive: true, force: true });
+  const skills = join(dir, '.opencode', 'skills');
+  mkdirSync(join(skills, '_skill-loader'), { recursive: true });
+  copyFileSync(LOADER, join(skills, '_skill-loader', 'loader.mjs'));
+  const lib = join(dir, '.opencode', 'scripts', 'lib');
+  mkdirSync(lib, { recursive: true });
+  for (const f of LIB_FILES) copyFileSync(join(REPO, '.opencode', 'scripts', 'lib', f), join(lib, f));
+  mkdirSync(join(skills, SB_SKILL), { recursive: true });
+  writeFileSync(join(skills, SB_SKILL, 'SKILL.md'), '---\nname: _sandbox\ndescription: d\n---\n\n# S\n', 'utf8');
+  const loader = join(skills, '_skill-loader', 'loader.mjs');
+  const rota = join(dir, '.advisor');
+  rmSync(rota, { recursive: true, force: true });
+  writeFileSync(rota, 'no soy un directorio\n', 'utf8');
+  try {
+    for (const args of [['list'], ['refresh']]) {
+      const r = run(args, loader);
+      eq(r.code, 0, `${args[0]} sigue saliendo con 0: la cache es un derivado, no un requisito`);
+      assert(lineas(r.out).length > 0, `${args[0]} imprime el listado igualmente`);
+      includes(r.err, 'no se pudo escribir la cache', `${args[0]} avisa del fallo de escritura`);
+      includes(r.err, 'skill-registry.cache.json', 'el aviso nombra la ruta que no pudo escribirse');
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 await runAll();

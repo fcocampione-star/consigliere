@@ -154,6 +154,26 @@ function hasTool(cmd, args) {
 const hasTar = () => hasTool('tar', ['--version']);
 const hasGit = () => hasTool('git', ['--version']);
 
+// Primera línea con texto de un stream de error. Es lo que hace accionable un
+// fallo de tar: sin ella el backup solo reportaba un código de salida.
+function firstLine(s) {
+  for (const raw of String(s || '').split(/\r?\n/)) {
+    const l = raw.trim();
+    if (l) return l;
+  }
+  return '';
+}
+
+// Por qué falló tar: su error real (spawn, o código + primera línea de stderr).
+// En Windows la causa habitual es un tar que interpreta una ruta `C:\...` como
+// un host remoto (`C: Cannot connect to host`), y esa línea es justo la que
+// dice qué corregir.
+function tarWhy(r) {
+  const base = r.error ? (r.error.code || r.error.message) : `salió con código ${r.status}`;
+  const detail = firstLine(r.stderr);
+  return detail ? `${base}: ${detail}` : base;
+}
+
 // Preflight: todo lo que puede fallar ANTES de tocar el destino. tar es fatal
 // solo cuando la operación lo necesita (si no, es un aviso, no un bloqueante).
 function preflight({ tar = false } = {}) {
@@ -164,11 +184,11 @@ function preflight({ tar = false } = {}) {
   }
   if (!hasTar()) {
     if (tar) {
-      err(`Falta 'tar' y esta operación lo necesita (--upgrade / --restore / --uninstall memoria / escribir sobre un destino con contenido).`);
+      err(`Falta 'tar' y esta operación lo necesita (hay algo que respaldar en el destino: --upgrade / --restore / --uninstall memoria / escribir encima de un proyecto con harness o memoria).`);
       err('Instala un tar funcional (GNU tar o bsdtar) y repite; sin él no hay backup ni restore.');
       die(EXIT.DEPENDENCIA);
     }
-    warn(`No encuentro 'tar': el backup previo es obligatorio antes de escribir sobre un destino con contenido, así que --upgrade, --restore y la reinstalación sobre un proyecto existente no estarán disponibles aquí.`);
+    warn(`No encuentro 'tar': solo se necesita si hay algo que respaldar (--upgrade, --restore, o escribir encima de un destino con harness o memoria), así que aquí la operación sigue sin backup.`);
   }
   if (!hasGit()) warn(`No encuentro 'git': se omiten la inicialización del repo y el hook post-commit.`);
 }
@@ -190,7 +210,9 @@ function ensureStateDirs(target, dry) {
 // Backup / restore ----------------------------------------------------------
 // Se llama en TODA vía de escritura (install, --quick, asistente, --upgrade) y
 // SIEMPRE antes del render. `present` vacío = NO_BACKUP: un destino sin nada del
-// harness ni datos previos no tiene nada que perder y se sigue sin tar.
+// harness ni datos previos no tiene nada que perder y se sigue sin tar. Esa es
+// la MISMA condición que usa el preflight para decidir si tar es obligatorio
+// (`needsBackup`/`backupableItems`): preflight y backup no pueden discrepar.
 function doBackup(target, items, dry) {
   const present = items.filter((item) => existsSync(join(target, item)));
   if (present.length === 0) { info('Sin harness ni datos previos que respaldar (nada de lo que se va a escribir ya existe)'); return { file: '', items: [] }; }
@@ -204,10 +226,11 @@ function doBackup(target, items, dry) {
   mkdirSync(backupDir, { recursive: true });
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
   const backupFile = join(backupDir, `advisor-${ts}.tgz`);
-  const tar = spawnSync('tar', ['-czf', backupFile, '-C', target, `--exclude=${STATE_DIR}/backups`, '--exclude=.memory-lock', ...present], { stdio: 'ignore' });
+  const tar = spawnSync('tar', ['-czf', backupFile, '-C', target, `--exclude=${STATE_DIR}/backups`, '--exclude=.memory-lock', ...present], { encoding: 'utf8', windowsHide: true });
   if (tar.error || tar.status !== 0) {
     // El backup previo es obligatorio: si falla, no se sobrescribe nada.
-    err(`Backup falló (tar ${tar.error ? `no disponible: ${tar.error.code || tar.error.message}` : `salió con código ${tar.status}`}): ${backupFile}`);
+    err(`Backup falló (tar ${tarWhy(tar)}): ${backupFile}`);
+    err('Sin backup no se escribe nada. Si es Windows, el tar del PATH tiene que entender rutas Windows: anteponer System32 (bsdtar) al tar GNU de Git, que lee `C:` como host remoto.');
     die(EXIT.BACKUP);
   }
   ok(`Backup: ${backupFile} (${present.length} ítems)`);
@@ -215,13 +238,31 @@ function doBackup(target, items, dry) {
   return { file: backupFile, items: present };
 }
 
+// Timestamp dentro del nombre de un backup: `advisor-|harness-<ts>.tgz` con el
+// ISO de `new Date()` con `:` y `.` sustituidos por `-`
+// (advisor-2026-09-30T12-34-56-789Z.tgz). El nombre entero NO es parseable como
+// fecha (la hora lleva guiones), así que se reconstruye el ISO.
+const BACKUP_TS_RE = /^(?:harness|advisor)-(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z\.tgz$/;
+function backupStamp(name) {
+  const m = BACKUP_TS_RE.exec(name);
+  if (!m) return null;
+  const t = Date.parse(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}.${m[7]}Z`);
+  return Number.isNaN(t) ? null : t;
+}
+
+// Poda keep-5 POR EDAD, no por orden de string. Ordenando los nombres en crudo,
+// `advisor-*` y `harness-*` caen en rangos fijos ('a' < 'h') y la poda borra un
+// grupo entero por prefijo: los cinco `harness-*` más recientes sobreviven y se
+// lleva por delante todos los `advisor-*` aunque sean los únicos recientes. Aquí
+// el orden sale del timestamp PARSEADO del nombre; un nombre sin timestamp
+// legible va al final (es lo más oldest) y la cadena solo desempata.
 function pruneBackups(backupDir) {
   try {
-    const files = readdirSync(backupDir)
+    const archivos = readdirSync(backupDir)
       .filter((f) => /^(harness|advisor)-/.test(f) && f.endsWith('.tgz'))
-      .sort()
-      .reverse();
-    for (const f of files.slice(5)) unlinkSync(join(backupDir, f));
+      .map((f) => ({ f, ts: backupStamp(f) }))
+      .sort((a, b) => (b.ts ?? -1) - (a.ts ?? -1) || b.f.localeCompare(a.f));
+    for (const { f } of archivos.slice(5)) unlinkSync(join(backupDir, f));
   } catch {}
 }
 
@@ -239,7 +280,7 @@ function pruneBackups(backupDir) {
 function listArchive(archive) {
   const r = spawnSync('tar', ['-tzf', archive], { encoding: 'utf8', windowsHide: true });
   if (r.error || r.status !== 0) {
-    return { ok: false, motivo: `tar ${r.error ? (r.error.code || r.error.message) : `salió con código ${r.status}`}` };
+    return { ok: false, motivo: `tar ${tarWhy(r)}` };
   }
   return { ok: true, names: String(r.stdout || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean) };
 }
@@ -290,7 +331,7 @@ function extractValidated(archive, target) {
     mkdirSync(join(target, STATE_DIR, 'backups'), { recursive: true });
     tmp = mkdtempSync(join(target, STATE_DIR, 'backups', '.extract-'));
     const r = spawnSync('tar', ['-xzf', archive, '-C', tmp], { encoding: 'utf8', windowsHide: true });
-    if (r.error || r.status !== 0) motivo = `tar ${r.error ? (r.error.code || r.error.message) : `salió con código ${r.status}`}`;
+    if (r.error || r.status !== 0) motivo = `tar ${tarWhy(r)}`;
     else {
       const bad = escapesIn(tmp);
       if (bad.length) motivo = `${bad.length} enlace(s) simbólico(s) fuera del temporal (p. ej. ${bad.slice(0, 3).map((b) => basename(b)).join(', ')})`;
@@ -316,6 +357,10 @@ function moveValidated(tmp, target, only = null) {
   return names;
 }
 
+// Repone la memoria desde el backup. RED DE SEGURIDAD, no el mecanismo: el
+// render ya no escribe estos archivos (ver `preservados` en installTail), así
+// que esto solo actúa si algo los alteró. Se conserva igualmente porque es la
+// garantía de que un .tgz válido y legible devuelve la memoria intacta.
 // true = memoria preservada (o nada que preservar), false = el .tgz no valió.
 function restorePreserved(target, backupFile, backupItems) {
   const restored = PRESERVE_DATA.filter((f) => backupItems.includes(f));
@@ -376,17 +421,27 @@ function renderFile(src, dst, vars) {
 
 // Un único renderizador. `allow` filtra SOLO el primer nivel (así --part
 // harness/memoria incluye el .opencode/ entero, como siempre). `relBase` lleva
-// la ruta relativa del archivo para poder aplicar NO_SOBRESCRIBIR.
-function renderTree(srcDir, dstDir, vars, allow = null, relBase = '') {
+// la ruta relativa del archivo para poder aplicar NO_SOBRESCRIBIR. `skip` es el
+// conjunto de rutas RELATIVAS que ya están respaldadas y son dato del usuario
+// (PRESERVE_DATA ∩ lo que el backup respaldó de verdad): no se tocan. Así la
+// memoria no pasa nunca por un estado vaciado, ni siquiera un instante, y el
+// restore deja de ser el mecanismo para pasar a ser la red de seguridad.
+function renderTree(srcDir, dstDir, vars, allow = null, relBase = '', skip = null) {
   const entries = readdirSync(srcDir, { withFileTypes: true });
   for (const e of entries) {
     if (allow && !allow.includes(e.name)) continue;
     const rel = relBase ? `${relBase}/${e.name}` : e.name;
+    if (skip && skip.has(rel)) {
+      // Preservado y respaldado: ni se escribe ni se pisa. Un directorio entero
+      // (CHANGELOG/) se salta con su contenido.
+      info(`${rel}: dato tuyo ya respaldado — se preserva, no se regenera.`);
+      continue;
+    }
     const src = join(srcDir, e.name);
     const dst = join(dstDir, e.name);
     if (e.isDirectory()) {
       mkdirSync(dst, { recursive: true });
-      renderTree(src, dst, vars, null, rel);
+      renderTree(src, dst, vars, null, rel, skip);
     } else if (e.isFile()) {
       // Dato del usuario que la plantilla también trae (vacío): solo se crea si
       // no existe. Pisarlo dejaría al proyecto sin los pins de autoskills.
@@ -405,8 +460,8 @@ function partAllowlist(part) {
   return part === 'harness' ? PART_HARNESS : part === 'memoria' ? PART_MEMORIA : null;
 }
 
-function renderSelected(srcDir, dstDir, vars, part) {
-  renderTree(srcDir, dstDir, vars, partAllowlist(part));
+function renderSelected(srcDir, dstDir, vars, part, skip = null) {
+  renderTree(srcDir, dstDir, vars, partAllowlist(part), '', skip);
 }
 
 // Fusión de `agent.<nombre>.model` -------------------------------------------
@@ -625,7 +680,9 @@ function statusCmd(targetDir, projectName) {
   try {
     for (const f of readdirSync(join(targetDir, STATE_DIR, 'backups'))) if (BACKUP_RE.test(f)) backups.push(f);
   } catch {}
-  backups.sort().reverse();
+  // Más reciente primero, por el timestamp PARSEADO del nombre (mismo criterio
+  // que pruneBackups): el string crudo ordenaría por prefijo, no por edad.
+  backups.sort((a, b) => (backupStamp(b) ?? -1) - (backupStamp(a) ?? -1) || b.localeCompare(a));
   const cacheFile = join(targetDir, STATE_DIR, 'skill-registry.cache.json');
   let cache = 'sin cache';
   try {
@@ -907,9 +964,9 @@ async function interactiveCreate() {
 // Única secuencia de escritura. Install, upgrade, interactivo y --quick entran
 // por aquí: las diferencias son opciones explícitas, no ramas que se puedan
 // desincronizar. El backup previo ocurre SIEMPRE antes de la primera escritura
-// (NO_BACKUP escapa cuando el destino no tiene nada que perder) y la
-// restauración de la memoria se intenta siempre, así la asimetría
-// install/upgrade no puede reaparecer.
+// (NO_BACKUP escapa cuando el destino no tiene nada que perder), el render NUNCA
+// escribe un ítem preservado que esté en ese backup, y la restauración de la
+// memoria se intenta igualmente como red de seguridad.
 function installTail(opts) {
   const { projectName, targetDir, scope, dry, force, doGit, autoChoice, upgrade } = opts;
   const verb = upgrade ? 'actualizado' : 'generado';
@@ -932,10 +989,15 @@ function installTail(opts) {
   step(`${upgrade ? 'Actualizando' : 'Generando'} proyecto '${projectName}'${partTag}`);
   // Los modelos por agente se leen ANTES del render: después el archivo es nuevo.
   const prevModels = regeneraConfig ? readAgentModels(join(targetDir, 'opencode.json')) : null;
+  // Lista de skip EXACTA del render: dato del usuario que además está en el
+  // backup (o sea, que existe en disco AHORA MISMO y está a salvo en el .tgz).
+  // Lo que se preserva pero no llegó a respaldarse se escribe normal: en un
+  // install limpio no hay nada preservado y la memoria sí se crea.
+  const preservados = new Set(PRESERVE_DATA.filter((f) => backup.items.includes(f)));
   try {
     mkdirSync(targetDir, { recursive: true });
     if (scope === 'autoskills') info('--part autoskills: solo autoskills, sin render');
-    else renderSelected(TEMPLATE_DIR, targetDir, buildVars(opts), scope);
+    else renderSelected(TEMPLATE_DIR, targetDir, buildVars(opts), scope, preservados);
     // CHANGELOG/ es memoria: un --part harness no debe dejarlo colgando vacío.
     if (conMemoria) mkdirSync(join(targetDir, 'CHANGELOG'), { recursive: true });
     ensureStateDirs(targetDir, false);
@@ -945,14 +1007,16 @@ function installTail(opts) {
     die(EXIT.PARCIAL);
   }
   if (regeneraConfig) mergeAgentModels(prevModels, join(targetDir, 'opencode.json'));
+  // Red de seguridad (no el mecanismo): el render ya saltó esos archivos, así que
+  // esto solo repone memoria si algo la alteró entre medias. Si falla, se dice.
   if (!restorePreserved(targetDir, backup.file, backup.items)) {
     err(`Memoria NO restaurada tras ${verb} el harness en '${targetDir}'.`);
     die(EXIT.PARCIAL);
   }
   if (scope !== 'autoskills') {
-    // Informe explícito: qué se restauró del backup y qué salió de la plantilla.
+    // Informe explícito: qué se preservó sin regenerar y qué salió de la plantilla.
     const datos = PRESERVE_DATA.filter((f) => backup.items.includes(f));
-    info(`Preservado (restaurado del backup, nunca se regenera): ${datos.length ? datos.join(', ') : '(nada: el destino no tenía memoria previa)'}`);
+    info(`Preservado (nunca se regenera; verificado contra el backup): ${datos.length ? datos.join(', ') : '(nada: el destino no tenía memoria previa)'}`);
     if (regeneraConfig) info(`Regenerado desde la plantilla: ${REGENERATED.join(', ')}`);
   }
   ok(`Harness ${verb}${partTag} (agents, commands, skills, memoria, scripts)`);
@@ -1083,25 +1147,35 @@ function missingTarget(scriptName) {
   die(EXIT.USO);
 }
 
-// ¿Esta operación necesita tar? Determina si su ausencia es fatal (exit 3).
-// El backup previo es obligatorio antes de escribir sobre un destino con
-// contenido, así que también lo necesita un install o un --quick encima de un
-// proyecto que ya tiene algo (no solo --upgrade).
-function hasContent(target) {
-  if (!existsSync(target)) return false;
-  try { return readdirSync(target).length > 0; } catch { return false; }
+// ¿Hay algo que respaldar? SOLO esto decide si la operación necesita tar, en el
+// preflight y en doBackup: un destino puede estar lleno de archivos propios del
+// usuario sin un solo ítem de BACKUP_ITEMS, y ahí doBackup no haría nada (no hay
+// backup que crear), así que exigir tar sería contradecir su propia regla.
+// La lista se calcula sobre el destino REAL, no sobre `¿tiene contenido?`.
+function backupableItems(target) {
+  return BACKUP_ITEMS.filter((item) => existsSync(join(target, item)));
 }
 function needsBackup(target, part) {
   if (part === 'autoskills') return false;
-  return hasContent(target);
+  return backupableItems(target).length > 0;
+}
+// La memoria es lo único que --uninstall protege con backup previo: sin ella
+// (autoskills/harness) el borrado es por ruta exacta y no toca tar.
+function uninstallMemoryItems(target) {
+  return planFor('memoria').items.filter((item) => existsSync(join(target, item)));
 }
 function needsTar(p, target) {
   const { values, immediate } = p;
   if (values['dry-run']) return false;
-  if (values.restore) return true;
+  if (values.restore) return true; // --restore siempre extrae un .tgz
   if (values.status) return false;
-  if (values.uninstall) return !values.part || values.part === 'memoria' || values.part === 'all';
-  if (values.upgrade) return values.part !== 'autoskills';
+  // --uninstall solo pide backup previo de la memoria, y solo si la memoria está
+  // en el alcance (harness/autoskills borran por ruta exacta: no necesitan tar).
+  if (values.uninstall) {
+    if (values.part !== 'memoria' && values.part !== 'all') return false;
+    return uninstallMemoryItems(target).length > 0;
+  }
+  if (values.upgrade) return values.part !== 'autoskills' && needsBackup(target, values.part);
   if (immediate === 'help' || immediate === 'version' || immediate === 'interactive') return false;
   return needsBackup(target, values.part);
 }
@@ -1130,8 +1204,9 @@ Códigos de salida:
   1  error de uso o validación: flag desconocido, valor fuera de dominio, falta --part,
      destino no vacío sin --force, --upgrade sin harness previo
   2  hace falta confirmación: sesión no interactiva donde se requiere, o confirmación rechazada
-  3  falta una dependencia requerida (tar para --upgrade / --restore / --uninstall memoria /
-     para escribir sobre un destino con contenido, que exige backup previo)
+  3  falta una dependencia requerida (tar cuando hay algo que respaldar en el
+     destino: --upgrade / --restore / --uninstall memoria / escribir encima de un
+     proyecto con harness o memoria; un destino vacío no lo necesita)
   4  falló el backup/restauración con tar (el backup previo nunca se descarta)
   5  fallo parcial: se escribió algo y un paso posterior falló
 
@@ -1140,12 +1215,16 @@ Notas:
   - --dry-run no escribe nada y nunca imprime el banner de "proyecto listo".
   - Solo se expande un '~' inicial; los valores de flag nunca se toman por destino.
   - Un hook post-commit existente se copia a .advisor/backups/hooks/ y solo se reemplaza con --force.
-  - Cualquier escritura sobre un destino con contenido hace un backup previo en
+  - Cualquier escritura que pise algo del harness hace un backup previo en
     .advisor/backups/ (install, --quick, asistente o --upgrade). Es obligatorio: si
-    falla, no se escribe nada y se sale con 4.
+    falla, no se escribe nada y se sale con 4. Si no hay nada que respaldar, no se
+    llama a tar (y por tanto no hace falta que exista).
+  - El backup se poda por EDAD (timestamp del nombre, parseado), no por nombre.
 
 Qué se preserva y qué se regenera (en install y en --upgrade):
-  - Nunca se regenera (se restaura del backup): PROJECT_STATE.md, SUMMARY.md, CHANGELOG/.
+  - Nunca se regenera ni se pisa: PROJECT_STATE.md, SUMMARY.md, CHANGELOG/. Si
+    están respaldados, el render los salta; el restore del backup queda como red
+    de seguridad (y es el que repone la memoria tras un --restore manual).
   - Se regenera desde la plantilla: AGENTS.md, opencode.json, .gitignore.
     De opencode.json solo se conservan tus agent.<nombre>.model (el resto es de la plantilla).
   - Nunca se sobrescribe: skills-lock.json (tus pins de autoskills); solo se crea si no existe.
@@ -1210,8 +1289,11 @@ async function main() {
   // no tocan disco, así que se resuelven sin exigir plantillas ni herramientas.
   if (args.length === 0) {
     // Sin flags: cwd vacío -> happy path (nada que respaldar). Cwd con contenido
-    // -> asistente, que acabará escribiendo encima: el backup es obligatorio.
-    preflight({ tar: !cwdEmpty() });
+    // -> asistente, que acabará escribiendo encima. Aquí el destino aún no está
+    // decidido (lo pregunta el asistente), así que el criterio es el del cwd: si
+    // aquí no hay nada del harness que respaldar, tar no se exige (si más tarde el
+    // destino elegido sí tiene algo, doBackup es el que aborta con exit 4).
+    preflight({ tar: backupableItems(process.cwd()).length > 0 });
     if (cwdEmpty()) happyPath();
     else await interactiveCreate();
     return;
@@ -1222,8 +1304,8 @@ async function main() {
   if (p.immediate === 'version') { warnUnknown(p.unknown); console.log(`ADVISOR v${VERSION}`); return; }
 
   // El destino se resuelve ANTES del preflight: el backup previo es obligatorio
-  // en toda escritura sobre un destino con contenido, así que la necesidad de
-  // tar depende de si ese destino ya tiene algo.
+  // en toda escritura, así que la necesidad de tar depende de si en ese destino
+  // hay algo que respaldar (mismo criterio que doBackup, ver needsTar).
   preflight({ tar: needsTar(p, quickTarget(p)) });
 
   if (p.immediate === 'interactive') { warnUnknown(p.unknown); await interactiveCreate(); return; }

@@ -457,23 +457,63 @@ jobs:
           node "$dest/target/.opencode/scripts/doctor.mjs"
           echo "doctor exit=$?"
 
-      # Idempotencia: la segunda pasada es `--upgrade` (el camino documentado
-      # para actualizar un harness existente). Esta vez SÍ hace backup previo, y
-      # el backup usa `tar` con rutas absolutas estilo `C:\...`: en windows el
-      # shell bash pone el tar de GNU (Git) antes que el bsdtar de System32, y el
-      # de GNU interpreta `C:` como un host remoto. Anteponiendo System32 el
+      # Segunda pasada = `--upgrade`, el camino documentado para actualizar un
+      # harness existente. Aquí sí se comprueba el INVARIANTE CENTRAL de la
+      # rama, no que el harness siga ahí: el backup previo es obligatorio, la
+      # memoria del proyecto se PRESERVA y la config se REGENERA. Para que eso
+      # sea comprobable, antes del upgrade se siembran dos marcas: un sentinel
+      # en PROJECT_STATE.md (memoria: tiene que seguir ahí) y un marker en
+      # AGENTS.md (config: tiene que desaparecer, porque se regenera).
+      #
+      # Nota del tar: el backup usa rutas absolutas estilo `C:\...` y en windows
+      # el shell bash pone el tar de GNU (Git) antes que el bsdtar de System32;
+      # el de GNU interpreta `C:` como un host remoto. Anteponiendo System32 el
       # `tar` resuelto es el de Windows, que sí entiende esas rutas.
-      - name: segunda ejecución idempotente (--upgrade)
+      - name: segunda pasada (--upgrade): preserva memoria, regenera config y deja backup
         run: |
           set -euo pipefail
           if [ "$RUNNER_OS" = "Windows" ]; then
             export PATH="/c/Windows/System32:$PATH"
           fi
           inst="$dest/node_modules/advisor-harness/init.mjs"
-          node "$inst" --dir "$dest/target" --upgrade --autoskills 3 --git no
-          test -f "$dest/target/.opencode/scripts/doctor.mjs"
-          node "$dest/target/.opencode/scripts/doctor.mjs" >/dev/null
-          echo "idempotente: segunda pasada correcta"
+          target="$dest/target"
+
+          # 1) Marcas reconocibles antes de la segunda pasada.
+          sentinel='<!-- CI-SENTINEL-MEMORIA-no-debe-desaparecer -->'
+          marker='<!-- CI-MARKER-AGENTS-debe-desaparecer -->'
+          printf '\n%s\n' "$sentinel" >> "$target/PROJECT_STATE.md"
+          printf '\n%s\n' "$marker" >> "$target/AGENTS.md"
+          grep -qF "$sentinel" "$target/PROJECT_STATE.md"
+          grep -qF "$marker" "$target/AGENTS.md"
+
+          node "$inst" --dir "$target" --upgrade --autoskills 3 --git no
+
+          # 2) MEMORIA preservada: el sentinel sigue en PROJECT_STATE.md.
+          if ! grep -qF "$sentinel" "$target/PROJECT_STATE.md"; then
+            echo "::error::--upgrade perdió la memoria del proyecto: el sentinel de PROJECT_STATE.md desapareció"
+            exit 1
+          fi
+          # 3) CONFIG regenerada: lo que editaste en AGENTS.md tiene que estar fuera.
+          if grep -qF "$marker" "$target/AGENTS.md"; then
+            echo "::error::--upgrade no regeneró AGENTS.md: la marca sigue en el archivo"
+            exit 1
+          fi
+          # 4) El opencode.json regenerado tiene que seguir siendo JSON válido
+          #    (la fusión de agent.<nombre>.model lo reescribe entero).
+          node -e "JSON.parse(require('fs').readFileSync(process.argv[1],'utf8'))" "$target/opencode.json"
+          # 5) El backup previo es obligatorio: al menos un .tgz en .advisor/backups/.
+          shopt -s nullglob
+          backups=("$target"/.advisor/backups/*.tgz)
+          if [ "${#backups[@]}" -eq 0 ]; then
+            echo "::error::--upgrade no dejó ningún backup en .advisor/backups/"
+            exit 1
+          fi
+          echo "invariante OK: memoria preservada · AGENTS.md regenerado · opencode.json válido · ${#backups[@]} backup(s):"
+          printf '  - %s\n' "${backups[@]##*/}"
+
+          # Y el harness generado sigue vivo tras la segunda pasada.
+          test -f "$target/.opencode/scripts/doctor.mjs"
+          node "$target/.opencode/scripts/doctor.mjs" >/dev/null && echo "doctor exit=0"
 
       - name: borrar el tarball (nunca se commitea)
         if: always()
