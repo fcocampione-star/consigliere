@@ -22,7 +22,7 @@ metadata:
 | npm advisor-harness | https://www.npmjs.com/package/advisor-harness | https://github.com/fcocampione-star/consigliere#readme | https://github.com/fcocampione-star/consigliere | v2.0.0 via npx advisor-harness@latest |
 | Git SCM | https://git-scm.com/doc | https://git-scm.com/docs/git-init | https://github.com/git/git | git/tar backups keep 5 |
 | Bash 4+ / PowerShell 5.1+ | https://www.gnu.org/software/bash/manual/ | https://learn.microsoft.com/en-us/powershell/ | https://git.savannah.gnu.org/cgit/bash.git | init.sh / init.ps1 |
-| md+grep (memory-index, regex Node) | https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_expressions | https://nodejs.org/api/ | — | sin SQLite, fallback sqlite3 opcional |
+| md+grep (memory-index, regex Node) | https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_expressions | https://nodejs.org/api/ | — | sin base de datos: Markdown + grep, cero dependencias |
 
 <!-- /CHUNK -->
 
@@ -66,7 +66,7 @@ webfetch "https://www.gnu.org/software/bash/manual/" --format markdown
 |----------|------------|----------|
 | `/discover` | `node .opencode/scripts/doctor.mjs` + skill audit | Audita stack real vs declarado |
 | `/routine` | routing orgánico direct/delegated + spec-lite ≤650w | Flujo explore→plan→critic→build→verify→record |
-| `/doctor` | `node .opencode/scripts/doctor.mjs --json` | Diagnóstico 20 checks (variable por condicionales §2/topic/manifest/index) |
+| `/doctor` | `node .opencode/scripts/doctor.mjs --json` | Diagnóstico del harness: opencode.json + harden, tamaños/topic de memoria, lock, hook, cache, scripts, directorios y derivados (exit 0 ok / 1 warnings / 2 errors) |
 | `/record` | 6 campos Goal/Discoveries/Accomplished/Next/Files/Verificación + topic | Persistir memoria |
 | `/review` | stale review_after +90d | Listar decisiones caducadas |
 | `memory/search` | `node .opencode/scripts/memory-index.mjs search "query"` | Búsqueda md+grep |
@@ -81,6 +81,7 @@ webfetch "https://www.gnu.org/software/bash/manual/" --format markdown
 <!-- CHUNK: examples -->
 ### 4.1 Harness install (Node ESM universal)
 ```bash
+# Node >=20.11 es obligatorio en TODAS las vías: init.sh/init.ps1/init.cmd lanzan init.mjs vía Node
 npx advisor-harness@latest /ruta/proyecto --name mi-app --stack-backend node/express --git yes
 node init.mjs /tmp/demo --name demo
 bash init.sh --dir /tmp/demo --name demo
@@ -118,23 +119,32 @@ node .opencode/scripts/doctor.mjs --json
 
 <!-- CHUNK: commands -->
 ```bash
-# Dev — harness CLI por proyecto
-npm test                                              # node --check init.mjs + loader + doctor + memory scripts
+# Dev — harness CLI por proyecto (Node >=20.11, ver .nvmrc)
+npm test                                              # suite completa: node --check + test/ + rotación + contrato + versión
+npm run test:unit                                    # solo la suite de test/ (micro-framework sin deps)
+npm run test:contract                                # contrato anti-drift (paridad espejo raíz↔templates/ + catálogos)
+npm run lint:sh                                      # bash -n init.sh + scripts/check-memory-limits.sh
+npm run lint:ps1                                     # parse AST de PowerShell sobre init.ps1
+npm run version:check                                # versión única: package.json == init.mjs/init.sh/init.ps1
 node --check init.mjs && node --check .opencode/scripts/doctor.mjs  # validación ESM syntax
-node .opencode/scripts/doctor.mjs --json              # diagnóstico harness (20 checks, variable por condicionales §2/topic/manifest/index)
+node .opencode/scripts/doctor.mjs --json              # diagnóstico harness (exit 0 ok / 1 warnings / 2 errors)
 node .opencode/skills/_skill-loader/loader.mjs list --json  # listar skills (cache fingerprint)
 node .opencode/scripts/memory-index.mjs search "query"      # búsqueda memoria md+grep
 node .opencode/scripts/memory-sync.mjs status         # estado sync local chunks
 bash scripts/check-memory-limits.sh                   # límites 100/150 líneas (PROJECT_STATE/SUMMARY)
 node init.mjs /tmp/demo --name demo                   # probar instalador universal
 ```
+
+### Modelos: free tier de opencode
+
+Si un agente falla con `Error: OpenCode's free tier can only be used from within OpenCode`, **no es un fallo del harness**: opencode exige que la petición venga de su propio cliente (`User-Agent: opencode/<semver>` + cabecera `x-opencode-session`). El harness solo valida la forma de un id de modelo (`MODEL_RE`), nunca su entitlement, así que el error aparece al ejecutar el modelo, no al configurarlo. Mitigaciones: un modelo que no sea del free tier para ese agente, o `opencode auth login`. No lo resuelvas parcheando el harness (ver § "Modelos del free tier" del README).
 <!-- /CHUNK -->
 
 ## 6. Quick Reference Card
 
 | Need | Command |
 |------|---------|
-| doctor 20 | `node .opencode/scripts/doctor.mjs --json` |
+| doctor | `node .opencode/scripts/doctor.mjs --json` |
 | list skills | `node .opencode/skills/_skill-loader/loader.mjs list --json` |
 | search memoria | `node .opencode/scripts/memory-index.mjs search "query"` |
 | check límites | `bash scripts/check-memory-limits.sh` |

@@ -165,3 +165,9 @@ Adapta tu tono y nivel de detalle al modo de comunicación activo (session-scope
 - **copiloto**: «Hecho. Añadí el handler en `src/route.ts`. Nota: usé `retry(3)` porque el upstream es inestable.»
 
 El modo es **session-scoped** y se propaga en cada prompt delegado (contexto autocontenido): al delegar, incluye el modo activo para que los subagentes mantengan el mismo registro. **NO** se escribe memoria ni `opencode.json` para persistir el modo.
+
+## 9. Modelos del free tier (error conocido de opencode)
+
+Si una hoja falla con `Error: OpenCode's free tier can only be used from within OpenCode`, **no lo reintentes y no lo tapes**: no es un fallo del harness, es una comprobación de opencode, que solo sirve sus modelos del free tier si la petición viene de su propio cliente (`User-Agent: opencode/<semver>` + cabecera `x-opencode-session`). Activa desde el 2026-09-17, con issues upstream abiertos (49433, 49580, 49590) y presente en la release 1.18.33.
+
+El harness solo valida la **forma** de un id de modelo (`MODEL_RE`), nunca su entitlement: el error sale de opencode al ejecutar el modelo, no de ninguna configuración. Explica al usuario las dos salidas —usar un modelo que no sea del free tier para ese agente, o `opencode auth login`— y continúa con el resto de la tarea. Ningún código de este repositorio intenta saltarse la comprobación, y no debes proponer hacerlo: falsificar cabeceras o la identidad de cliente para colar la petición sería esquivar una decisión de opencode, no arreglar un fallo.

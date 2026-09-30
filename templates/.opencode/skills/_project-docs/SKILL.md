@@ -22,7 +22,7 @@ metadata:
 | npm advisor-harness | https://www.npmjs.com/package/advisor-harness | https://github.com/fcocampione-star/consigliere#readme | https://github.com/fcocampione-star/consigliere | v2.0.0 via npx advisor-harness@latest |
 | Git SCM | https://git-scm.com/doc | https://git-scm.com/docs/git-init | https://github.com/git/git | git/tar backups keep 5 |
 | Bash 4+ / PowerShell 5.1+ | https://www.gnu.org/software/bash/manual/ | https://learn.microsoft.com/en-us/powershell/ | https://git.savannah.gnu.org/cgit/bash.git | init.sh / init.ps1 |
-| md+grep (memory-index, regex Node) | https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_expressions | https://nodejs.org/api/ | — | sin SQLite, fallback sqlite3 opcional |
+| md+grep (memory-index, regex Node) | https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_expressions | https://nodejs.org/api/ | — | sin base de datos: Markdown + grep, cero dependencias |
 
 <!-- /CHUNK -->
 
@@ -66,7 +66,7 @@ webfetch "https://www.gnu.org/software/bash/manual/" --format markdown
 |----------|------------|----------|
 | `/discover` | `node .opencode/scripts/doctor.mjs` + skill audit | Audita stack real vs declarado |
 | `/routine` | routing orgánico direct/delegated + spec-lite ≤650w | Flujo explore→plan→critic→build→verify→record |
-| `/doctor` | `node .opencode/scripts/doctor.mjs --json` | Diagnóstico por capas (A proyecto / B regenerable / C adopción) |
+| `/doctor` | `node .opencode/scripts/doctor.mjs --json` | Diagnóstico por capas (A proyecto / B regenerable / C adopción); el exit code solo depende de la capa A |
 | `/record` | 6 campos Goal/Discoveries/Accomplished/Next/Files/Verificación + topic | Persistir memoria |
 | `/review` | stale review_after +90d | Listar decisiones caducadas |
 | `memory/search` | `node .opencode/scripts/memory-index.mjs search "query"` | Búsqueda md+grep |
@@ -115,13 +115,17 @@ node .opencode/scripts/doctor.mjs --json
 
 <!-- CHUNK: commands -->
 ```bash
-# Dev — comandos del proyecto
+# Instalador / upgrade (Node >=20.11 obligatorio en todas las vías)
+npx advisor-harness@latest . --upgrade                # backup previo obligatorio: preserva PROJECT_STATE/SUMMARY/CHANGELOG, regenera AGENTS.md/opencode.json/.gitignore
 node .opencode/scripts/doctor.mjs --json              # diagnóstico harness por capas (A proyecto / B regenerable / C adopción)
 node .opencode/scripts/memory-index.mjs search "query"      # búsqueda memoria md+grep
 node .opencode/scripts/memory-sync.mjs status         # estado sync local chunks
 bash scripts/check-memory-limits.sh                   # límites 100/150 líneas (PROJECT_STATE/SUMMARY)
-npx advisor-harness@latest . --upgrade                # actualizar harness (internos no se tocan a mano)
 ```
+
+### Modelos: free tier de opencode
+
+Si un agente falla con `Error: OpenCode's free tier can only be used from within OpenCode`, **no es un fallo del harness**: opencode exige que la petición venga de su propio cliente (`User-Agent: opencode/<semver>` + cabecera `x-opencode-session`). El harness solo valida la forma de un id de modelo (`MODEL_RE`), nunca su entitlement, así que el error aparece al ejecutar el modelo, no al configurarlo. Mitigaciones: un modelo que no sea del free tier para ese agente, o `opencode auth login`. No lo resuelvas parcheando el harness (ver § "Modelos del free tier" del README).
 <!-- /CHUNK -->
 
 ## 6. Quick Reference Card

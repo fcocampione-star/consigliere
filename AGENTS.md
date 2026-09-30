@@ -23,7 +23,7 @@
 - `advisor` is the additional **primary** agent (Tab) que coordina: siempre lee `PROJECT_STATE.md` primero, luego aplica **routing orgánico** por **clase de riesgo**: esquema/auth/contrato/migración/irreversible/arquitectura → `delegated`/`spec-lite`; riesgo bajo → `direct`; el **conteo de files es solo desempate** (`spec-lite` ante ambigüedad duradera → spec ≤650w Given/When/Then).
 - **Desambiguación**: `bin advisor` (CLI) ≠ `agent advisor` (Tab local primario); `Orchestrator` = harness GLOBAL distinto.
 - **One level of depth** (advisor delega); leaf agents `task: deny` (except `planner→explore` depth 2).
-- **Models**: per-agent `model:` en `opencode.json` (placeholders `{{MODEL_*}}` → cheap=verifier/summarizer/explore, strong=builder/planner/critic).
+- **Models**: per-agent `model:` en `opencode.json` (placeholders `{{MODEL_*}}` → cheap=verifier/summarizer/explore, strong=builder/planner/critic). El harness solo valida la forma del id, nunca si tiene entitlement: si sale `OpenCode's free tier can only be used from within OpenCode`, ver la sección del README "Modelos del free tier" (es opencode, no el harness).
 - **Builder safety**: bash harden `*: allow`, `deny` irreparable + `ask` sensibles (`**/.env*`, `**/*.pem`, `**/*.key`, `**/secrets/*`, `~/.ssh/*`, `git commit/amend/push`).
 - **Commits proposed, never automatic** (`git commit/push/amend → ask`) y **solo tras cerrar memoria**: si hubo cambios, primero `/record` (paso `summarizer`) — el summarizer es el cierre; nunca propongas commit con la memoria sin registrar.
 - Quick commands: `/discover [foco]`, `/routine <tarea> [--parallel --skip-verify --skip-critic]` (routing+spec-lite integrado), `/doctor`, `/record <contexto>` (6 campos + topic), `/review`, `/rotate-memory`, `/compact-state`, `/modo <educador|practicante|copiloto|auto>`.
@@ -33,12 +33,12 @@
 
 | Layer | Choice |
 |-------|--------|
-| DB | N/A — Markdown + grep (PROJECT_STATE.md / SUMMARY.md / CHANGELOG/YYYY-MM-DD.md + memory-index.mjs md+grep, cache .advisor/skill-registry.cache.json; sqlite3 solo fallback) |
-| Backend | Node.js >=20.11 ESM (usa `import.meta.dirname`) + Bash 4+ / PowerShell 5.1+ + git/tar — harness CLI (scripts .opencode/scripts/*.mjs, loader.mjs) |
+| DB | N/A — Markdown + grep (PROJECT_STATE.md / SUMMARY.md / CHANGELOG/YYYY-MM-DD.md + memory-index.mjs md+grep, cache .advisor/skill-registry.cache.json; cero dependencias, sin base de datos) |
+| Backend | Node.js >=20.11 ESM (usa `import.meta.dirname`; `.nvmrc` = 20) + Bash 4+ / PowerShell 5.1+ + git/tar — harness CLI (scripts .opencode/scripts/*.mjs, lib/ compartida, loader.mjs) |
 | Frontend | N/A — harness CLI sin UI (genera .opencode/ para opencode TUI; instalador para proyecto vacío) |
-| Auth | N/A — local sin auth; bash harden opencode.json (*:allow, deny rm/dd/mkfs, ask **/.env*/**/*.pem/**/.key/**/secrets/*/~/.ssh/* + git push) |
-| Validation | node --check syntax (npm test = check init.mjs + loader + doctor + memory-index + memory-sync) |
-| Deploy | npm registry advisor-harness@latest v2.0.0 via npx / init.mjs + init.sh + init.ps1 per-project, --upgrade con backup keep 5 en .advisor/backups/ |
+| Auth | N/A — local sin auth; bash harden opencode.json (*:allow, deny rm/dd/mkfs, ask **/.env*/**/*.pem/**/*.key/**/secrets/*/~/.ssh/* + git push) |
+| Validation | suite propia sin deps: `npm test` = `node --check init.mjs` + `test/run.mjs` + memory-rotate.test + contrato anti-drift + `version:check`; CI con `lint:sh` / `lint:ps1` |
+| Deploy | npm registry advisor-harness@latest v2.0.0 via npx / init.mjs + init.sh + init.ps1 per-project (los tres son lanzadores de Node), --upgrade con backup previo keep 5 en .advisor/backups/ |
 
 ## Skills (con cache fingerprint)
 
@@ -49,17 +49,22 @@
   - `node .opencode/skills/_skill-loader/loader.mjs refresh`
   - `node .opencode/skills/_skill-loader/loader.mjs search "query"`
   - `node .opencode/skills/_skill-loader/loader.mjs chunk "<skill>" urls,shortcuts,examples`
-- **Memoria buscable** (md+grep, sin SQLite): `node .opencode/scripts/memory-index.mjs search "query"` → `timeline <id>` → `get <id>`
+- **Memoria buscable** (md+grep, sin base de datos): `node .opencode/scripts/memory-index.mjs search "query"` → `timeline <id>` → `get <id>`
 - **Sync local**: `node .opencode/scripts/memory-sync.mjs export|import|status` → `.advisor/chunks/`
-- **Doctor**: `node .opencode/scripts/doctor.mjs [--json]` o `/doctor`
-- **Estado vivo .advisor + plantilla limpia**: solo `.advisor/` vivo, sin fallback legacy; instala/actualiza modular con `node init.mjs <dir> --upgrade [--part harness|memoria|autoskills|all]`, `--status`, `--restore --from`, `--uninstall --part` (memoria exige backup previo + `--force`)
+- **Doctor**: `node .opencode/scripts/doctor.mjs [--json]` o `/doctor` (exit 0 ok / 1 warnings / 2 errors)
+- **Estado vivo .advisor + plantilla limpia**: solo `.advisor/` vivo, sin fallback legacy; instala/actualiza modular con `node init.mjs <dir> --upgrade [--part harness|memoria|autoskills|all]`, `--status`, `--restore --from`, `--uninstall --part` (memoria exige backup previo + `--force`; el uninstall borra rutas exactas, nunca un directorio entero del usuario)
 
 ## Development commands
 
 ```bash
-npm test                                              # node --check init.mjs + loader + doctor + memory scripts
+npm test                                              # suite completa: node --check + test/ + rotación + contrato + versión
+npm run test:unit                                    # solo la suite de test/ (micro-framework sin deps, un proceso por archivo)
+npm run test:contract                                # contrato anti-drift (paridad espejo raíz↔templates/ + catálogos)
+npm run lint:sh                                      # bash -n init.sh + scripts/check-memory-limits.sh
+npm run lint:ps1                                     # parse AST de PowerShell sobre init.ps1
+npm run version:check                                # versión única: package.json == init.mjs/init.sh/init.ps1
 node --check init.mjs && node --check .opencode/scripts/doctor.mjs  # validación ESM syntax
-node .opencode/scripts/doctor.mjs --json              # diagnóstico harness (20 checks, variable por condicionales §2/topic/manifest/index)
+node .opencode/scripts/doctor.mjs --json              # diagnóstico harness (opencode.json, memoria, lock, hook, cache, scripts, dirs, derivados)
 node .opencode/skills/_skill-loader/loader.mjs list --json  # listar skills (cache fingerprint)
 node .opencode/scripts/memory-index.mjs search "query"      # búsqueda memoria md+grep
 node .opencode/scripts/memory-sync.mjs status         # estado sync local chunks
@@ -67,19 +72,26 @@ bash scripts/check-memory-limits.sh                   # límites 100/150 líneas
 node init.mjs /tmp/demo --name demo                   # probar instalador universal
 ```
 
+> CI (`.github/workflows/ci.yml`, 5 jobs): `node --check` de cada `.mjs` + `npm test` en 3 SO x Node 20/22/24, lint de shell y PowerShell, límites de memoria con aserción de paridad bash/PowerShell, drift + empaquetado, y `pack-smoke` (instala el tarball en un temporal y ejecuta el instalador). `release.yml` gatea la publicación en CI. Detalles y notas de mantenimiento en `CONTRIBUTING.md`.
+
 ## Directory structure (2.0 solo por proyecto)
 
 ```
 consigliere/
-├── .opencode/               # agents/, commands/, plans/, skills/, scripts/, hooks/
+├── .opencode/               # agents/, commands/, plans/, skills/, scripts/ (lib/ compartida), hooks/
 ├── .agents/skills/          # autoskills (npx autoskills)
-├── .advisor/            # backups/ (keep 5) + chunks/ (sync) + skill-registry.cache.json
+├── .advisor/                # backups/ (keep 5) + chunks/ (sync) + skill-registry.cache.json
+├── test/                    # suite propia: harness sin deps + fixtures + agregador (un proceso por archivo)
+├── .github/workflows/       # ci.yml (5 jobs) + release.yml
 ├── PROJECT_STATE.md         # capa 0 — siempre + review_after
 ├── SUMMARY.md               # capa 1 — última semana + topic
 ├── CHANGELOG/               # capa 2 — semanal + DECISIONS-ARCHIVE.md
 ├── AGENTS.md                # este archivo
+├── CONTRIBUTING.md          # flujo de desarrollo + quirks de CI
+├── README.md + LICENSE      # incluidos en el paquete publicado
+├── .nvmrc                   # Node 20
 ├── .gitignore
-└── harness-only sin src/ (init.mjs + scripts .opencode/scripts/*.mjs)
+└── harness-only sin src/ (init.mjs + init.sh/ps1/cmd lanzadores + scripts .opencode/scripts/*.mjs)
 ```
 
 ## Key architecture decisions

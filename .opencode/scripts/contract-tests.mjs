@@ -91,10 +91,12 @@ const ALLOW_DIVERGENCE = {
 // Archivos presente solo en la raíz y no espejados a propósito:
 const ROOT_ONLY_EXACT = new Set([
   '.gitattributes',
+  '.nvmrc',
   '.opencode/.gitignore',
   '.opencode/scripts/memory-rotate.test.mjs',
   '.opencode/scripts/contract-tests.mjs',
   '.opencode/scripts/version-check.mjs',
+  'CONTRIBUTING.md',
   'LICENSE',
   'README.md',
   'init.cmd',

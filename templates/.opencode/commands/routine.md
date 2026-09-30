@@ -28,7 +28,8 @@ Flags:
 - `--model-<agent>=<m>` — override por agente (`advisor|planner|builder|verifier|critic|summarizer|explore`); ej. `node .opencode/scripts/routine-model.mjs --dry-run --model-builder foo`.
 - `--persist` — guarda overrides en `opencode.json` (merge atómico); `--dry-run` — previsualiza sin escribir.
 - `--spec` — fuerza spec-lite aunque routing diga direct.
-- Nota: `--model-*` solo resuelve via `routine-model.mjs`; hoy `init.mjs:403-409` solo ofrece prompts interactivos de modelo (sin flags CLI).
+- Nota: `--model-*` solo resuelve via `routine-model.mjs`; el instalador (`init.mjs`, sección de prompts de modelo: `interactiveCreate` con `MODEL_AGENT` y `checkModelInputs`) solo ofrece prompts interactivos, sin flags CLI.
+- **Free tier de opencode**: el harness solo valida la FORMA de un id de modelo (`MODEL_RE` en `routine-model.mjs` y en el instalador), nunca si ese id tiene entitlement. Si un subagente falla con `OpenCode's free tier can only be used from within OpenCode`, el error lo emite opencode: no reintentes. Las dos vías son un modelo que no sea del free tier para ese agente, o `opencode auth login` (ver § "Modelos del free tier" del README).
 
 Cierra la rutina con `/record` (cadena `/discover` → `/routine` → `/record`).
 

@@ -22,7 +22,7 @@
 - Custom agents live in `.opencode/agents/`; commands in `.opencode/commands/`.
 - `advisor` is the **primary** agent (Tab) que coordina: siempre lee `PROJECT_STATE.md` primero, luego aplica **routing orgánico** por **clase de riesgo**: esquema/auth/contrato/migración/irreversible/arquitectura → `delegated`/`spec-lite`; riesgo bajo → `direct`; el **conteo de files es solo desempate** (`spec-lite` ante ambigüedad duradera → spec ≤650w Given/When/Then).
 - **One level of depth** (advisor delega); leaf agents `task: deny` (except `planner→explore` depth 2).
-- **Models**: per-agent `model:` en `opencode.json` (placeholders `{{MODEL_*}}` → cheap=verifier/summarizer/explore, strong=builder/planner/critic).
+- **Models**: per-agent `model:` en `opencode.json` (placeholders `{{MODEL_*}}` → cheap=verifier/summarizer/explore, strong=builder/planner/critic). El harness solo valida la forma del id, nunca si tiene entitlement: si sale `OpenCode's free tier can only be used from within OpenCode`, ver la sección del README "Modelos del free tier" (es opencode, no el harness).
 - **Builder safety**: bash harden `*: allow`, `deny` irreparable + `ask` sensibles (`**/.env*`, `**/*.pem`, `**/*.key`, `**/secrets/*`, `~/.ssh/*`, `git commit/amend/push`).
 - **Commits proposed, never automatic** (`git commit/push/amend → ask`) y **solo tras cerrar memoria**: si hubo cambios, primero `/record` (paso `summarizer`) — el summarizer es el cierre; nunca propongas commit con la memoria sin registrar.
 - Quick commands: `/discover [foco]`, `/routine <tarea> [--parallel --skip-verify --skip-critic]` (routing+spec-lite integrado), `/doctor`, `/record <contexto>` (6 campos + topic), `/review`, `/rotate-memory`, `/compact-state`, `/modo <educador|practicante|copiloto|auto>`.
@@ -77,7 +77,9 @@ El harness de agentes + memoria (`.opencode/`, `.agents/skills/`, `.advisor/` y 
 | Rotar memoria semanal | `/rotate-memory` |
 | Compactar PROJECT_STATE | `/compact-state` |
 | Límites memoria | `PROJECT_STATE.md` <100 líneas · `SUMMARY.md` <150 |
-| Actualizar harness | `npx advisor-harness@latest . --upgrade` |
+| Actualizar harness | `npx advisor-harness@latest . --upgrade` (backup previo obligatorio: preserva `PROJECT_STATE.md`, `SUMMARY.md` y `CHANGELOG/`; regenera `AGENTS.md`, `opencode.json` y `.gitignore`) |
+
+> Instalador y actualizaciones: **Node.js >= 20.11** en todas las vías (`npx advisor-harness@latest`, `node init.mjs`, `init.sh`, `init.ps1`; los tres últimos ejecutan `init.mjs` a través de Node). `tar` es necesario para el backup previo y `--restore`.
 
 ## Key architecture decisions
 
