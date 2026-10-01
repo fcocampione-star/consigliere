@@ -50,25 +50,29 @@
 
 ## Directory structure
 
+> El harness vive en la **raíz** del repositorio, junto a tu app, y se commitea con ella. No hay que sacarlo del repo: se excluye del **artefacto de producción** (build/deploy), no del repositorio. Si tu app usa `AGENTS.md`, `opencode.json` o `.gitignore` en la raíz, `--upgrade` los regenera: pon la app en una **subcarpeta** para evitar la colisión.
+
 ```
 {{PROJECT_NAME}}/
-├── src/                  # código del proyecto
-├── tests/                # tests del proyecto
-├── docs/                 # documentación
+├── AGENTS.md             # este archivo (harness)
+├── opencode.json         # agentes + modelos + bash harden (harness)
+├── .opencode/            # agents, commands, skills, scripts del harness
+├── .agents/skills/       # autoskills autoinstaladas (harness)
+├── .advisor/             # estado vivo local: backups/, chunks/, caches (gitignored: backups/ y cache)
 ├── PROJECT_STATE.md      # capa 0 — estado, decisiones, pendientes
 ├── SUMMARY.md            # capa 1 — progreso reciente
 ├── CHANGELOG/            # capa 2 — histórico semanal
-├── AGENTS.md             # este archivo
 ├── .gitignore
-└── Harness (no tocar)/
-    ├── .opencode/        # agents, commands, skills, scripts del harness
-    ├── .agents/skills/   # autoskills autoinstaladas
-    └── .advisor/         # estado vivo: backups/, chunks/, caches
+└── <tu-app>/             # tu código (src/, tests/, docs/…) — subcarpeta recomendada
 ```
 
-## Harness (no tocar)
+## Harness (tooling del proyecto)
 
-El harness de agentes + memoria (`.opencode/`, `.agents/skills/`, `.advisor/` y el pipeline de arriba) se instala y actualiza por comando. No edites sus internos a mano (se regeneran con `--upgrade`).
+El harness de agentes + memoria (`.opencode/`, `.agents/skills/`, `.advisor/` y el pipeline de arriba) es **tooling del proyecto**: se instala en la raíz del repo y se commitea con él. No edites sus internos a mano: se regeneran con `--upgrade`.
+
+**Un repo, un harness + memoria compartidos.** El equipo comparte harness y memoria versionándolos en el mismo repositorio del proyecto (un clon, un `PROJECT_STATE.md`, un `SUMMARY.md`, un `CHANGELOG/`). No hace falta un repo aparte para el harness. `.advisor/` es estado local (backups, caches) y está gitignored.
+
+**Harness vs artefacto de producción.** El harness se queda **commiteado en tu repo**; lo que se excluye es el **artefacto de release**: no lo copies al build, ignóralo en tu `.dockerignore` y, si usas `git archive`, añade tú un `.gitattributes` con `export-ignore` (el harness **no** lo genera). `--uninstall --part harness` **no es un filtro de build**: borra archivos en el sitio y deja `.advisor/`, `.agents/` y la memoria; úsalo solo sobre una **copia desechable**, nunca sobre tu repo de trabajo.
 
 | Operación | Cómo |
 |-----------|------|

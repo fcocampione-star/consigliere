@@ -102,6 +102,7 @@ node .opencode/scripts/memory-index.mjs get <id>
 ### 4.4 Memory limits & sync
 ```bash
 bash scripts/check-memory-limits.sh
+powershell -NoProfile -File ./scripts/check-memory-limits.ps1
 node .opencode/scripts/memory-sync.mjs status
 node .opencode/scripts/memory-sync.mjs export --all
 node .opencode/scripts/doctor.mjs --json
@@ -121,6 +122,7 @@ node .opencode/scripts/doctor.mjs --json              # diagnóstico harness por
 node .opencode/scripts/memory-index.mjs search "query"      # búsqueda memoria md+grep
 node .opencode/scripts/memory-sync.mjs status         # estado sync local chunks
 bash scripts/check-memory-limits.sh                   # límites 100/150 líneas (PROJECT_STATE/SUMMARY)
+powershell -NoProfile -File ./scripts/check-memory-limits.ps1   # límites 100/150 líneas (Windows)
 ```
 
 ### Modelos: free tier de opencode
@@ -135,7 +137,7 @@ Si un agente falla con `Error: OpenCode's free tier can only be used from within
 | doctor | `node .opencode/scripts/doctor.mjs --json` |
 | list skills | `/discover` o skill `_skill-loader` |
 | search memoria | `node .opencode/scripts/memory-index.mjs search "query"` |
-| check límites | `bash scripts/check-memory-limits.sh` |
+| check límites | `bash scripts/check-memory-limits.sh` · `powershell -NoProfile -File ./scripts/check-memory-limits.ps1` |
 | upgrade harness | `npx advisor-harness@latest . --upgrade` |
 
 ---

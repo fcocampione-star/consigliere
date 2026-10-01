@@ -35,6 +35,7 @@
 - Suite propia sin dependencias (`test/run.mjs`) + CI de 5 jobs con matriz 3 SO × Node 20/22/24 y publicación gateada en CI; cero dependencias en runtime [topic: test/ci-gate] review_after: 2027-03-30
 - El gate de free tier de opencode (`{{MODEL_*}}` sin entitlement) se documenta y no se sortea en código: el harness valida la forma del id, nunca el entitlement [topic: dx/free-tier-doc] review_after: 2027-03-30
 - `npm run lint:sh` es un script Node ESM sin deps que resuelve el intérprete (`ADVISOR_BASH` → `bash` del PATH → rutas de Git for Windows) y sale con exit 3 + arreglo accionable si no hay ninguno — en linux/macos el PATH gana siempre, así que no hay divergencia cross-platform; vive SOLO en raíz, sin espejo en `templates/`, catalogado en `ROOT_ONLY_EXACT` como "presente solo en raíz a propósito" (tool de dev del repo, no del harness instalado), igual que `contract-tests.mjs` / `version-check.mjs` / `memory-rotate.test.mjs` [topic: tools/lint-sh-crossplatform] review_after: 2027-03-30
+- El harness vive en la **raíz** del repo del proyecto y se commitea con él (un repo = un harness+memoria compartidos); se excluye del **artefacto de producción** (build/`.dockerignore`/`export-ignore`), no del repositorio; app recomendada en **subcarpeta** porque `--upgrade` regenera `AGENTS.md`/`opencode.json`/`.gitignore` en la raíz [topic: architecture/harness-placement] review_after: 2027-03-30
 
 ---
 
@@ -46,7 +47,7 @@
 - [x] Copia legacy `consigliere/` no commiteable (ignorada vía `/consigliere/` anclado en `.gitignore`). (Sunset F6: legacy eliminado, solo `.advisor/`; la decisión `repo/legacy-ignore` quedó superada y está archivada en `CHANGELOG/DECISIONS-ARCHIVE.md`)
 - [ ] Integrar `feat/hardening-refactor-ci` en `main` con la CI real (5 jobs + `pack-smoke`) en GitHub Actions: la validación local de Fase 1 no cubre CI ni el tarball instalado.
 - [x] Documentar en `AGENTS.md` el requisito de PATH de `npm run lint:sh` en Windows (`bash` no está en el PATH de cmd.exe; existe en `C:\Program Files\Git\bin`), o el equivalente cross-platform. (Cerrado resolviendo, no documentando: `lint:sh` pasa a ser un script Node que resuelve el intérprete y mapea exit codes — §2 `tools/lint-sh-crossplatform`. Consecuencia: el `npm run lint:sh` de `AGENTS.md` ya no necesita requisito de PATH.)
-- [ ] Menor, knowingly NO arreglado: `bash` a pelo en comandos para copiar/pegar — `bash scripts/check-memory-limits.sh` (Development commands) y los bloques de comandos de `_project-docs/SKILL.md` siguen invocando `bash`, así que no funcionan en Windows sin bash en el PATH. No son scripts npm; al tocarlos, pasar por el resolutor de `lint-sh.mjs` o dar la ruta absoluta. (Su línea de `npm run lint:sh` además quedó sin el comentario del resolutor que sí tiene `AGENTS.md`.)
+- [x] Menor cerrado: comandos de docs con `bash` a pelo (`bash scripts/check-memory-limits.sh` en Development commands y en `_project-docs/SKILL.md`) — cada uno tiene ya su par Unix/macOS · Windows (`check-memory-limits.ps1`), el ejemplo de init usa el canónico `node init.mjs` y la `SKILL.md` recupera el comentario del resolutor de `lint:sh`. Docs-only; no se añade decisión en §2 (ya la cubre `tools/lint-sh-crossplatform`).
 
 ---
 

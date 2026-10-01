@@ -68,7 +68,8 @@ node .opencode/scripts/doctor.mjs --json              # diagnóstico harness (op
 node .opencode/skills/_skill-loader/loader.mjs list --json  # listar skills (cache fingerprint)
 node .opencode/scripts/memory-index.mjs search "query"      # búsqueda memoria md+grep
 node .opencode/scripts/memory-sync.mjs status         # estado sync local chunks
-bash scripts/check-memory-limits.sh                   # límites 100/150 líneas (PROJECT_STATE/SUMMARY)
+bash scripts/check-memory-limits.sh                   # límites 100/150 líneas (Unix/macOS)
+powershell -NoProfile -File ./scripts/check-memory-limits.ps1   # límites 100/150 líneas (Windows)
 node init.mjs /tmp/demo --name demo                   # probar instalador universal
 ```
 

@@ -84,7 +84,7 @@ webfetch "https://www.gnu.org/software/bash/manual/" --format markdown
 # Node >=20.11 es obligatorio en TODAS las vías: init.sh/init.ps1/init.cmd lanzan init.mjs vía Node
 npx advisor-harness@latest /ruta/proyecto --name mi-app --stack-backend node/express --git yes
 node init.mjs /tmp/demo --name demo
-bash init.sh --dir /tmp/demo --name demo
+node init.mjs /tmp/demo --name demo                   # Windows/Unix; init.sh|init.cmd|init.ps1 son shims que delegan
 ```
 
 ### 4.2 Memory search (md+grep)
@@ -106,6 +106,7 @@ node .opencode/skills/_skill-loader/loader.mjs refresh --force
 ### 4.4 Memory limits & sync
 ```bash
 bash scripts/check-memory-limits.sh
+powershell -NoProfile -File ./scripts/check-memory-limits.ps1
 node .opencode/scripts/memory-sync.mjs status
 node .opencode/scripts/memory-sync.mjs export --all
 node .opencode/scripts/doctor.mjs --json
@@ -123,7 +124,7 @@ node .opencode/scripts/doctor.mjs --json
 npm test                                              # suite completa: node --check + test/ + rotación + contrato + versión
 npm run test:unit                                    # solo la suite de test/ (micro-framework sin deps)
 npm run test:contract                                # contrato anti-drift (paridad espejo raíz↔templates/ + catálogos)
-npm run lint:sh                                      # bash -n init.sh + scripts/check-memory-limits.sh
+npm run lint:sh                                      # bash -n init.sh + scripts/check-memory-limits.sh (lint-sh.mjs resuelve el bash: PATH → Git for Windows; override ADVISOR_BASH)
 npm run lint:ps1                                     # parse AST de PowerShell sobre init.ps1
 npm run version:check                                # versión única: package.json == init.mjs/init.sh/init.ps1 + las 2 SKILL.md de _project-docs
 node --check init.mjs && node --check .opencode/scripts/doctor.mjs  # validación ESM syntax
@@ -132,6 +133,7 @@ node .opencode/skills/_skill-loader/loader.mjs list --json  # listar skills (cac
 node .opencode/scripts/memory-index.mjs search "query"      # búsqueda memoria md+grep
 node .opencode/scripts/memory-sync.mjs status         # estado sync local chunks
 bash scripts/check-memory-limits.sh                   # límites 100/150 líneas (PROJECT_STATE/SUMMARY)
+powershell -NoProfile -File ./scripts/check-memory-limits.ps1   # límites 100/150 líneas (Windows)
 node init.mjs /tmp/demo --name demo                   # probar instalador universal
 ```
 
@@ -147,7 +149,7 @@ Si un agente falla con `Error: OpenCode's free tier can only be used from within
 | doctor | `node .opencode/scripts/doctor.mjs --json` |
 | list skills | `node .opencode/skills/_skill-loader/loader.mjs list --json` |
 | search memoria | `node .opencode/scripts/memory-index.mjs search "query"` |
-| check límites | `bash scripts/check-memory-limits.sh` |
+| check límites | `bash scripts/check-memory-limits.sh` · `powershell -NoProfile -File ./scripts/check-memory-limits.ps1` |
 
 ---
 

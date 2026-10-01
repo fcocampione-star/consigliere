@@ -197,6 +197,20 @@ Contrato estable (`init.mjs` `EXIT`, documentado en `--help`):
 4. `npm install && npx autoskills` (si `package.json` existe).
 5. En opencode: `/discover` → `/routine "configurar base del proyecto"` → `/doctor` para verificar.
 
+### Equipo: un repo, un harness + memoria compartidos
+
+El harness se instala en la **raíz** del repositorio del proyecto y se **commitea** con él: un solo repo por equipo, con un `PROJECT_STATE.md`, un `SUMMARY.md` y un `CHANGELOG/` compartidos. No hace falta crear un repositorio aparte para el harness ni sacarlo del repo.
+
+Lo que se separa no es el harness del repositorio, sino el harness del **artefacto de producción**:
+
+- **Build/deploy**: no copies `.opencode/`, `.agents/`, `.advisor/` ni la memoria al output (dist, imagen, bundle).
+- **Docker**: añádelos a tu `.dockerignore`.
+- **`git archive` / zip de código**: añade tú un `.gitattributes` con `export-ignore` (el harness no lo genera; solo afecta a `git archive`, no a `npm pack` ni a Docker).
+
+> **Colisión al actualizar:** `--upgrade` regenera `AGENTS.md`, `opencode.json` y `.gitignore` en la raíz. Si tu app usa esos nombres, pon la app en una **subcarpeta** (`src/`, `app/`…): el harness y la app conviven en el mismo repo sin pisarse.
+
+> **Desinstalar en una copia:** `node init.mjs <dir> --uninstall --part harness --force` borra en el sitio `AGENTS.md`, `opencode.json`, `.gitignore`, `skills-lock.json` y `.opencode/**`; **no** borra `.advisor/`, `.agents/` ni la memoria. No lo ejecutes sobre tu repo de trabajo.
+
 ### Modelos del free tier: "can only be used from within OpenCode"
 
 Si opencode responde `Error: OpenCode's free tier can only be used from within OpenCode`, **no es un fallo del harness**. Es una comprobación de opencode: rechaza servir sus modelos del free tier cuando la petición no viene del propio cliente, porque exige un `User-Agent` con la forma `opencode/<semver>` y la cabecera `x-opencode-session`. Está activa desde el 2026-09-17, se sigue en los issues upstream 49433, 49580 y 49590, y seguía presente en la última release (1.18.33). Cualquier cliente que no sea el cliente de opencode —un runner, un proxy, un editor que hable con su API— se queda fuera.
