@@ -39,6 +39,7 @@ tmp/
 # Consigliere 2.0 (Advisor Harness) — memoria persistente (solo por proyecto)
 .memory-lock/
 .advisor/skill-registry.cache.json
+.advisor/autoskills-registry.cache.json
 .advisor/backups/
 .advisor/memory-index.json
 # .advisor/chunks/  ← descomenta si no quieres versionar sync local

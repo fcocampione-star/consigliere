@@ -36,6 +36,9 @@
 - El gate de free tier de opencode (`{{MODEL_*}}` sin entitlement) se documenta y no se sortea en código: el harness valida la forma del id, nunca el entitlement [topic: dx/free-tier-doc] review_after: 2027-03-30
 - `npm run lint:sh` es un script Node ESM sin deps que resuelve el intérprete (`ADVISOR_BASH` → `bash` del PATH → rutas de Git for Windows) y sale con exit 3 + arreglo accionable si no hay ninguno — en linux/macos el PATH gana siempre, así que no hay divergencia cross-platform; vive SOLO en raíz, sin espejo en `templates/`, catalogado en `ROOT_ONLY_EXACT` como "presente solo en raíz a propósito" (tool de dev del repo, no del harness instalado), igual que `contract-tests.mjs` / `version-check.mjs` / `memory-rotate.test.mjs` [topic: tools/lint-sh-crossplatform] review_after: 2027-03-30
 - El harness vive en la **raíz** del repo del proyecto y se commitea con él (un repo = un harness+memoria compartidos); se excluye del **artefacto de producción** (build/`.dockerignore`/`export-ignore`), no del repositorio; app recomendada en **subcarpeta** porque `--upgrade` regenera `AGENTS.md`/`opencode.json`/`.gitignore` en la raíz [topic: architecture/harness-placement] review_after: 2027-03-30
+- Búsqueda real de skills instalables (`skill-search.mjs`): `fetch` best-effort del registry JSON público de autoskills (pineado al tag `v0.3.6`) con cache local `.advisor/autoskills-registry.cache.json` (TTL 7d, gitignored), flags `--json`/`--offline`/`--refresh`/`--limit`, ranking y degradación a cache (aunque stale) o salida vacía + exit 0; `npm test`/`doctor`/`/discover` NO dependen de red [topic: dx/skill-search-registry] review_after: 2027-04-06
+- El catálogo de autoskills (licencia CC-BY-NC-4.0) nunca se commitea ni empaqueta: solo se cachea local y gitignored; la búsqueda usa el registry JSON público porque el CLI de autoskills no expone `search`/`list`/`--json` [topic: dx/autoskills-registry-license] review_after: 2027-04-06
+- `/discover` sugiere skills de proyecto vía función pura `gaps` (match exacto normalizado deps→registry) + `skill-scaffold.mjs` (dry-run por stdout, `--write` atómico, `--force`), sin comando `/skill-new`: se reusa `/routine`→builder [topic: process/discover-gaps] review_after: 2027-04-06
 
 ---
 
@@ -57,6 +60,7 @@
 
 | Semana (lunes) | Archivo | Resumen |
 |----------------|---------|---------|
+| 2026-09-28 | 2026-09-28.md | rotación automática |
 | 2026-09-21 | 2026-09-21.md | rotación automática |
 | 2026-09-07 | 2026-09-07.md | rotación automática |
 

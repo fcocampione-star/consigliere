@@ -21,19 +21,31 @@ Lanza `task` a `explore` con prompt:
 ### 3. Mapeo de skills (delega en `planner` — read-only)
 Lanza `task` a `planner` con prompt:
 - **Contexto:** entrega el inventario de `explore` + contenido de `AGENTS.md` y `PROJECT_STATE.md §2/§5`.
-- **Objetivo:** mapear cada tech detectada a skill necesaria. Para ello el planner debe (via bash permitido `git status/diff/log` + `webfetch`): simular `node .opencode/skills/_skill-loader/loader.mjs list` y `loader.mjs search "<tech>"` (leyendo SKILL.md + frontmatter), y verificar `npx autoskills --dry-run` lógico (qué skills autoinstalables faltan según dependencias). No toques código.
-- **Retorno:** tabla `Tech | Skill esperada | Existe? (project/autoskill) | Acción` + gaps priorizados (faltantes, _project-docs URLs vacías, AGENTS.md desfasado).
+- **Objetivo:** mapear cada tech detectada a skill necesaria. El planner debe (via bash permitido `git status/diff/log` + `webfetch` + `skill-search.mjs`):
+  1. Listar y buscar lo YA instalado: `node .opencode/skills/_skill-loader/loader.mjs list` y `loader.mjs search "<tech>"` (proyecto + autoskills).
+  2. **Buscar de verdad** en el registry público de autoskills: `node .opencode/scripts/skill-search.mjs --json "<tech>"` (añade `--offline` si no hay red). No se simula nada: el script consulta el registry real y `--json` devuelve `name/source/skillPath/review.status`.
+  3. Considerar NO cubierta toda tech sin match **EXACTO normalizado** (lowercase, sin scope) en lo instalado ni en el registry. Nada de fuzzy.
+- **Retorno:** tabla `Tech | Skill esperada | Existe? (project/autoskill) | Registry? (sí/no + name) | Acción` + gaps priorizados (faltantes, _project-docs URLs vacías, AGENTS.md desfasado).
 
 ### 4. Veredicto y plan de mejora
 Con ambos retornos, sintetiza y entrega al usuario:
 
 1. **Contexto del proyecto:** fase actual, stack declarado vs real, estructura detectada (1-2 líneas).
 2. **Skills presentes:** lista `.opencode/skills/*` + `.agents/skills/*` (con `loader.mjs list` count).
-3. **Gaps:** `_project-docs` chunks vacíos, autoskills faltantes, AGENTS.md desactualizado.
+3. **Tabla de gaps** (una fila por tech detectada; cobertura por match EXACTO normalizado — lowercase, sin scope — contra lo instalado y el registry):
+
+   | Tech detectada | Cubierta por | Acción |
+   |----------------|--------------|--------|
+   | `<tech>` | `project:<skill>` / `autoskill:<skill>` / `registry:<name>` / — | ok · instalar autoskill · proponer skill nueva |
+
 4. **Plan de mejora priorizado:**
-   - `npx autoskills` si faltan autoskills (indica comando exacto `cd . && npx --yes autoskills`)
-   - Rellenar `.opencode/skills/_project-docs/SKILL.md` chunks `urls/patterns/shortcuts` (indica qué URLs oficiales añadir)
-   - Actualizar `AGENTS.md` tabla Stack si hay desfase
+   - **Tech con autoskill en el registry:** instalar con el comando exacto `cd . && npx --yes autoskills` (o el que corresponda al `name` encontrado).
+   - **Tech SIN cobertura (ni instalada ni en el registry):** proponer skill nueva con `name`, `description`, `chunks` y `motivo`, y entregar el comando de scaffold listo para `/routine` (dry-run; `/routine` añadirá `--write`):
+     ```bash
+     node .opencode/scripts/skill-scaffold.mjs <name> --description "<description>" --chunks <a,b,c>
+     ```
+   - Rellenar `.opencode/skills/_project-docs/SKILL.md` chunks `urls/patterns/shortcuts` (indica qué URLs oficiales añadir).
+   - Actualizar `AGENTS.md` tabla Stack si hay desfase.
    - Si builder/verifier necesitan nuevos `allow` por stack (ej. `python*`, `go*`), indicar que ya es `*: allow` (no acción).
 5. **Siguiente paso recomendado:** `/routine "<tarea>"` o `/record` si solo fue auditoría.
 

@@ -120,6 +120,7 @@ Nunca envíes un prompt que asuma que el subagente "recuerda" la conversación: 
 
 - Antes de que un subagente implemente con una tecnología, recuérdale en el prompt delegado que consulte las skills disponibles: `.opencode/skills/_project-docs/SKILL.md` (plantilla del proyecto) y `.agents/skills/*/SKILL.md` (autoskills). Usa `_skill-loader` para cargar solo los chunks relevantes.
 - No cargues tú las skills completas en tu ventana; deja que el subagente lo haga bajo demanda.
+- Para descubrir skills instalables que aún no están en el proyecto, delega la búsqueda real en el registry de autoskills con `node .opencode/scripts/skill-search.mjs "<tech>"` (`--offline` si no hay red; `/discover` lo usa en el paso de mapeo). Para proponer una skill de proyecto nueva, `node .opencode/scripts/skill-scaffold.mjs <name> --description ".." --chunks a,b` genera el esqueleto en dry-run (solo escribe con `--write`): úsalo como propuesta, no lo ejecutes tú.
 
 ## 5. Commits
 

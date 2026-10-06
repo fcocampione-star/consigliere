@@ -61,13 +61,16 @@ Ese es el día a día. Si tu carpeta **no está vacía**, el mismo comando abre 
 │   │   ├── memory-stats.mjs       # stats + extracción por secciones
 │   │   ├── memory-rotate.mjs      # motor canónico de rotación
 │   │   ├── routine-model.mjs      # overrides de modelo por agente
+│   │   ├── skill-search.mjs       # búsqueda real en el registry de autoskills
+│   │   ├── skill-scaffold.mjs     # scaffold de skills de proyecto (dry-run por defecto)
 │   │   ├── lib/                   # core.mjs / md.mjs / cache.mjs (compartido, sin deps)
 │   │   └── doctor.mjs             # health check
 │   └── hooks/                     # post-commit-memory-rotate.sh (opcional/gated; no hay hook de sync)
 ├── .advisor/                      # estado VIVO del harness
 │   ├── backups/                   # advisor-*.tgz keep 5 (backup previo a cualquier escritura)
 │   ├── chunks/                    # memoria sync local (git-tracked opcional)
-│   └── skill-registry.cache.json  # fingerprint cache v2
+│   ├── skill-registry.cache.json  # fingerprint cache v2
+│   └── autoskills-registry.cache.json  # catálogo autoskills (CC-BY-NC-4.0, local/gitignored)
 ├── AGENTS.md                      # instrucciones raíz + stack + comandos dev
 ├── opencode.json                  # default_agent, modelos cheap vs strong, bash harden
 ├── PROJECT_STATE.md               # CAPA 0 — siempre cargada + review_after
@@ -224,7 +227,7 @@ Lo que **no** es una solución: el harness solo valida la *forma* de un id de mo
 
 ### Comandos del harness
 
-- `/discover [foco]` — audita stack real vs declarado + skills presentes/faltantes.
+- `/discover [foco]` — audita stack real vs declarado + skills presentes/faltantes. Incluye **búsqueda real** en el registry público de autoskills (`skill-search.mjs`, no simulada) y propone crear skills de proyecto con `skill-scaffold.mjs`.
 - `/routine <tarea> [--parallel --skip-verify --skip-critic]` — enruta la tarea por sí solo: pocos archivos → directo; muchos → delega en subagentes (plan → revisión → implementación → verificación → registro). Para los detalles técnicos, ver *Notas de diseño v2.0*.
 - `/doctor` — diagnóstico del harness y la memoria: `opencode.json` (default agent, profundidad, harden bash), tamaños y `topic:` de la memoria, lock huérfano, hook post-commit, cache de skills, scripts, directorios de estado y artefactos derivados (manifest, índice, `review_after` vencidos). Los artefactos regenerables son ℹ️ y nunca rompen; el exit code es 0 (ok), 1 (warnings) o 2 (errores).
 - `/record <contexto>` — persiste con formato 6 campos `Goal/Discoveries/Accomplished/Next/Files/Verificación` (compat `Qué/Verificación`).
@@ -260,6 +263,30 @@ node .opencode/scripts/memory-sync.mjs export --all
 ```
 
 Cache fingerprint: `.advisor/skill-registry.cache.json` (v2: `path+mtime+size`), refresh con `loader.mjs refresh --force`.
+
+### Búsqueda real en el registry de autoskills
+
+El CLI de autoskills no expone `search`/`list`, así que el harness lee su registry JSON (pineado al tag `v0.3.6`, override `ADVISOR_AUTOSKILLS_REGISTRY`):
+
+```bash
+node .opencode/scripts/skill-search.mjs "vue" --json     # array name/source/skillPath/review.status
+node .opencode/scripts/skill-search.mjs "vue" --offline  # sin red: usa la cache local (aunque esté stale)
+node .opencode/scripts/skill-search.mjs --refresh        # regenera .advisor/autoskills-registry.cache.json
+```
+
+### Scaffold de skills de proyecto
+
+```bash
+node .opencode/scripts/skill-scaffold.mjs mi-skill --description "Qué hace" --chunks urls,patterns  # dry-run (stdout)
+node .opencode/scripts/skill-scaffold.mjs mi-skill --write                                          # escribe .opencode/skills/mi-skill/SKILL.md
+node .opencode/scripts/skill-scaffold.mjs mi-skill --write --force                                  # sobrescribe
+```
+
+Genera frontmatter válido para `_skill-loader` (`name` == directorio, `description` de una línea, `chunks: [...]` con un `<!-- CHUNK: x -->` por chunk).
+
+> **Red best-effort:** `npm test`, `/discover` y `doctor` **no dependen de red**. Si el registry no responde se usa la cache local; sin cache ni red, `skill-search.mjs` avisa por stderr, no imprime nada y sale con 0. La cache vive en `.advisor/autoskills-registry.cache.json` (TTL 7d, override `ADVISOR_REGISTRY_TTL_MS`) y está gitignored.
+
+> **Licencia del catálogo de autoskills:** el registry público de autoskills (`midudev/autoskills`) se distribuye bajo **CC-BY-NC-4.0** (no comercial). El harness **no** commitea ni empaqueta ese catálogo: solo cachea localmente el resultado (gitignored, regenerable). Úsalo para consulta y no lo redistribuyas comercialmente.
 
 ## Estructura de este repositorio
 

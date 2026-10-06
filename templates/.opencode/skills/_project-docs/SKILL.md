@@ -71,6 +71,8 @@ webfetch "https://www.gnu.org/software/bash/manual/" --format markdown
 | `/review` | stale review_after +90d | Listar decisiones caducadas |
 | `memory/search` | `node .opencode/scripts/memory-index.mjs search "query"` | Búsqueda md+grep |
 | `skill/load` | skill `_skill-loader` — `chunk "<skill>" urls,patterns` | Carga chunks bajo demanda |
+| `skill/search` | `node .opencode/scripts/skill-search.mjs "<tech>" --json` | Búsqueda REAL en el registry de autoskills (offline con cache) |
+| `skill/scaffold` | `node .opencode/scripts/skill-scaffold.mjs <name> --description ".." --chunks a,b` | Propone skill de proyecto (dry-run; `--write` escribe) |
 
 ---
 
@@ -162,3 +164,5 @@ Referencia rápida para builder/planner/critic: el advisor fija el modo de comun
 - Carga solo los chunks necesarios via `_skill-loader` para ahorrar tokens.
 
 **Related:** `.agents/skills/*/SKILL.md` (autoskills autoinstaladas).
+
+- **Licencia**: el catálogo de autoskills que consulta `skill-search.mjs` es **CC-BY-NC-4.0** (no comercial). El harness solo lo cachea localmente en `.advisor/autoskills-registry.cache.json` (gitignored, regenerable) y no lo commitea ni redistribuye.

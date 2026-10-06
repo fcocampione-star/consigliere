@@ -94,8 +94,15 @@ if (cache) {
   try { const j=JSON.parse(readFileSync(cache,'utf8')); add('skill cache', j.version===2?'✅':'ℹ️', `${j.entries?.length||0} skills cacheadas (vivo)`, j.version!==2?'node .opencode/skills/_skill-loader/loader.mjs refresh --force':''); } catch { add('skill cache','ℹ️','cache corrupta (regenerable)','node .opencode/skills/_skill-loader/loader.mjs refresh --force'); }
 } else add('skill cache','ℹ️','sin cache (se genera en /discover)','node .opencode/skills/_skill-loader/loader.mjs refresh');
 
+// 5b autoskills registry cache (catálogo CC-BY-NC-4.0: solo cache local gitignored)
+const regCache = join(ROOT,'.advisor','autoskills-registry.cache.json');
+if (existsSync(regCache)) {
+  try { const j=JSON.parse(readFileSync(regCache,'utf8')); add('autoskills registry cache','ℹ️',`${j.entries?.length||0} skills del registry (local, regenerable)`, j.version!==1?'node .opencode/scripts/skill-search.mjs --refresh':''); }
+  catch { add('autoskills registry cache','ℹ️','cache corrupta (regenerable)','node .opencode/scripts/skill-search.mjs --refresh'); }
+} else add('autoskills registry cache','ℹ️','sin cache (se genera en /discover)','node .opencode/scripts/skill-search.mjs --refresh');
+
 // 6 scripts
-for (const s of ['memory-index.mjs','memory-sync.mjs','memory-lock.mjs','memory-stats.mjs','memory-rotate.mjs','doctor.mjs']) {
+for (const s of ['memory-index.mjs','memory-sync.mjs','memory-lock.mjs','memory-stats.mjs','memory-rotate.mjs','skill-search.mjs','skill-scaffold.mjs','doctor.mjs']) {
   const p = join(ROOT,'.opencode','scripts',s);
   add(`script ${s}`, existsSync(p)?'✅':'ℹ️', existsSync(p)?'presente':'falta (regenerable con --upgrade)', existsSync(p)?'':'npx advisor-harness@latest . --upgrade');
 }

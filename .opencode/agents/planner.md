@@ -13,6 +13,11 @@ permission:
     "git status*": allow
     "git diff*": allow
     "git log*": allow
+    "node .opencode/scripts/skill-search.mjs": allow
+    "node .opencode/scripts/skill-search.mjs --json*": allow
+    "node .opencode/scripts/skill-search.mjs --offline*": allow
+    "node .opencode/scripts/skill-search.mjs --refresh*": allow
+    "node .opencode/scripts/skill-search.mjs --limit*": allow
   task:
     "*": deny
     explore: allow
