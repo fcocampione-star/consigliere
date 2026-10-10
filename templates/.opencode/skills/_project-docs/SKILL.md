@@ -73,6 +73,7 @@ webfetch "https://www.gnu.org/software/bash/manual/" --format markdown
 | `skill/load` | skill `_skill-loader` — `chunk "<skill>" urls,patterns` | Carga chunks bajo demanda |
 | `skill/search` | `node .opencode/scripts/skill-search.mjs "<tech>" --json` | Búsqueda REAL en el registry de autoskills (offline con cache) |
 | `skill/scaffold` | `node .opencode/scripts/skill-scaffold.mjs <name> --description ".." --chunks a,b` | Propone skill de proyecto (dry-run; `--write` escribe) |
+| `memory/tokens` | `node .opencode/scripts/memory-tokens.mjs compare --scenario spec-lite --json` | Ahorro potencial en tokens advisor vs plan+build (estimador chars/4) |
 
 ---
 
@@ -123,6 +124,7 @@ npx advisor-harness@latest . --upgrade                # backup previo obligatori
 node .opencode/scripts/doctor.mjs --json              # diagnóstico harness por capas (A proyecto / B regenerable / C adopción)
 node .opencode/scripts/memory-index.mjs search "query"      # búsqueda memoria md+grep
 node .opencode/scripts/memory-sync.mjs status         # estado sync local chunks
+node .opencode/scripts/memory-tokens.mjs compare --scenario spec-lite --json  # ahorro potencial en tokens (estimador chars/4)
 bash scripts/check-memory-limits.sh                   # límites 100/150 líneas (PROJECT_STATE/SUMMARY)
 powershell -NoProfile -File ./scripts/check-memory-limits.ps1   # límites 100/150 líneas (Windows)
 ```

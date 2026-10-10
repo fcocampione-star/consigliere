@@ -11,7 +11,7 @@ Ejecuta diagnóstico del harness Advisor 2.0. Revisa (read-only, sin editar):
 3. Hook post-commit: **opcional/backup gated** (`ADVISOR_ROTATE_HOOK=1`); informa si existe y es ejecutable. Su ausencia o desactivación por defecto **NO** es warning (la rotación canónica la dispara `/record` vía `memory-rotate.mjs`). Si existe `.advisor/rotation.log`, menciónalo.
 4. Skills: `node .opencode/skills/_skill-loader/loader.mjs list` (usa cache) + `.agents/skills` vs `AGENTS.md` stack declarado, reporta faltantes (comparativa vs stack = manual, no en `doctor.mjs`).
 5. Memoria lock: `.memory-lock` huérfano. Usa `node .opencode/scripts/memory-lock.mjs status` (umbral `LOCK_STALE_MS` del helper, default 5min); no borres el directorio a mano (libéralo con `release --force`).
-6. Scripts: presencia de `.opencode/scripts/{memory-index,memory-sync,memory-lock,memory-stats,memory-rotate,doctor}.mjs` (`node --check` de cada uno = manual, no en `doctor.mjs`).
+6. Scripts: presencia de `.opencode/scripts/{memory-index,memory-sync,memory-lock,memory-stats,memory-rotate,memory-tokens,skill-search,skill-scaffold,doctor}.mjs` (`node --check` de cada uno = manual, no en `doctor.mjs`). El check `tokens` (ℹ️) confirma que el estimador `memory-tokens.mjs` existe y apunta al comando `compare --scenario`.
 7. Directorio: `CHANGELOG/`, `.advisor/backups/`, `.advisor/chunks/` existen, `.advisor/skill-registry.cache.json` v2 válido si existe.
 8. Git: `git status` limpio, `git log --oneline -5` (manual, no en `doctor.mjs`).
 

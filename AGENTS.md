@@ -70,6 +70,7 @@ node .opencode/scripts/memory-index.mjs search "query"      # búsqueda memoria 
 node .opencode/scripts/memory-sync.mjs status         # estado sync local chunks
 node .opencode/scripts/skill-search.mjs "query" --json      # búsqueda real en el registry de autoskills (--offline usa cache)
 node .opencode/scripts/skill-scaffold.mjs <name> --description ".."  # scaffold de skill de proyecto (dry-run; --write escribe)
+node .opencode/scripts/memory-tokens.mjs compare --scenario spec-lite --json  # ahorro potencial en tokens advisor vs plan+build (estimador estático chars/4)
 bash scripts/check-memory-limits.sh                   # límites 100/150 líneas (Unix/macOS)
 powershell -NoProfile -File ./scripts/check-memory-limits.ps1   # límites 100/150 líneas (Windows)
 node init.mjs /tmp/demo --name demo                   # probar instalador universal

@@ -110,9 +110,15 @@ if (existsSync(regCache)) {
 } else add('autoskills registry cache','ℹ️','sin cache (se genera en /discover)','node .opencode/scripts/skill-search.mjs --refresh');
 
 // 7 scripts
-for (const s of ['memory-index.mjs','memory-sync.mjs','memory-lock.mjs','memory-stats.mjs','memory-rotate.mjs','skill-search.mjs','skill-scaffold.mjs','doctor.mjs']) {
+for (const s of ['memory-index.mjs','memory-sync.mjs','memory-lock.mjs','memory-stats.mjs','memory-rotate.mjs','memory-tokens.mjs','skill-search.mjs','skill-scaffold.mjs','doctor.mjs']) {
   const p = join(ROOT,'.opencode','scripts',s);
   add(`script ${s}`, existsSync(p)?'✅':'ℹ️', existsSync(p)?'presente':'falta (regenerable)', existsSync(p)?'':UPGRADE_FIX);
+}
+
+// 7b ahorro potencial en tokens (estimador estático, informativo: nunca degrada el exit)
+{
+  const tok = join(ROOT,'.opencode','scripts','memory-tokens.mjs');
+  add('tokens','ℹ️', existsSync(tok)?'estimador disponible: node .opencode/scripts/memory-tokens.mjs compare --scenario spec-lite --json':'falta memory-tokens.mjs (regenerable)', existsSync(tok)?'':UPGRADE_FIX);
 }
 
 // 8 manifest derivado (regenerable, nunca error)

@@ -39,6 +39,7 @@
 - Búsqueda real de skills instalables (`skill-search.mjs`): `fetch` best-effort del registry JSON público de autoskills (pineado al tag `v0.3.6`) con cache local `.advisor/autoskills-registry.cache.json` (TTL 7d, gitignored), flags `--json`/`--offline`/`--refresh`/`--limit`, ranking y degradación a cache (aunque stale) o salida vacía + exit 0; `npm test`/`doctor`/`/discover` NO dependen de red [topic: dx/skill-search-registry] review_after: 2027-04-06
 - El catálogo de autoskills (licencia CC-BY-NC-4.0) nunca se commitea ni empaqueta: solo se cachea local y gitignored; la búsqueda usa el registry JSON público porque el CLI de autoskills no expone `search`/`list`/`--json` [topic: dx/autoskills-registry-license] review_after: 2027-04-06
 - `/discover` sugiere skills de proyecto vía función pura `gaps` (match exacto normalizado deps→registry) + `skill-scaffold.mjs` (dry-run por stdout, `--write` atómico, `--force`), sin comando `/skill-new`: se reusa `/routine`→builder [topic: process/discover-gaps] review_after: 2027-04-06
+- Estimador estático del ahorro potencial en tokens (`memory-tokens.mjs`, ESM sin deps): `measure` (tokens por capa) y `compare` (advisor+memoria vs plan+build); heurística `TOKENS_PER_CHAR=4`, solo lectura, porque opencode no expone usage real por tarea (el ahorro puede salir negativo con contexto trivial) [topic: dx/memory-tokens-estimator] review_after: 2027-04-10
 
 ---
 

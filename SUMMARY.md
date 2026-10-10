@@ -7,6 +7,17 @@
 
 <!-- ADVISOR:ENTRIES:START -->
 
+## 2026-10-10 — Estimador estático del ahorro potencial en tokens (advisor+memoria vs plan+build)
+
+topic: dx/memory-tokens-estimator
+review_after: 2027-04-10
+**Goal:** calcular de forma determinista y sin dependencias el ahorro potencial en tokens del harness advisor con memoria frente a un flujo plan+build sin memoria.
+**Discoveries:** no existe contador real de tokens por sesión/tarea (opencode no expone usage por tarea), así que el estimador es estático, de solo lectura y por heurística `TOKENS_PER_CHAR=4`. Hallazgo del test: con contexto diminuto el ahorro sale NEGATIVO (el coste fijo del advisor supera al baseline); la memoria solo compensa con contexto no trivial, así que se usó un fixture de tamaño realista.
+**Accomplished:** nuevo `.opencode/scripts/memory-tokens.mjs` (ESM sin deps; reusa lib/core.mjs, lib/md.mjs y memory-stats.entriesRegion) con `measure [--json] [--root]` (tokens por capa: PROJECT_STATE/SUMMARY/CHANGELOG/skills+chunks) y `compare --scenario direct|delegated|spec-lite [--json]` (baseline=(1+hojas)*C_full+rework vs advisor=state+k*400+hojas*120+chunks*150(+867 spec-lite)); espejo byte-idéntico en `templates/`. Check ℹ️ `tokens` + `script memory-tokens.mjs` ✅ añadido a ambas copias de `doctor.mjs` (misma severidad, nunca degradan exit); nuevo `test/memory-tokens.test.mjs` (13 casos, fixtures en tmpdir); docs en AGENTS.md, `_project-docs/SKILL.md`, `commands/doctor.md` y README (sección `### Estimador de tokens (memory-tokens.mjs)`). Resultados sobre este repo: direct ~87.6%, delegated ~95%, spec-lite ~94.5%.
+**Next:** commit + push de la rama `feat/hardening-refactor-ci` (pendiente); opcional futuro: instrumentación por rutina para medir ahorro REAL (no potencial).
+**Files:** `git log --oneline -5` (detalle en git, no aquí).
+**Verificación:** PASS — `npm test` exit 0 (14/14 archivos, rotación 48/48, contrato ✅ 43 espejos/33 scripts, versión 2.0.0); `doctor --json` exit 0 (check `tokens` ℹ️, `script memory-tokens.mjs` ✅); `memory-tokens compare --scenario spec-lite --json` exit 0 → savingPct 94.5.
+
 ## 2026-10-06 — `/discover` con búsqueda real de skills instalables + sugerencia de skills de proyecto
 
 topic: dx/skill-search-registry

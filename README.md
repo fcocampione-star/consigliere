@@ -251,6 +251,28 @@ Lo que **no** es una solución: el harness solo valida la *forma* de un id de mo
 - **Session summary**: 6 campos `Goal/Discoveries/Accomplished/Next/Files/Verificación`.
 - **Stale**: `/review` lista `needs_review` si `review_after` pasado.
 
+### Estimador de tokens (`memory-tokens.mjs`)
+
+Estimador **estático** (heurística `chars/4`, sin dependencias, solo lectura) del ahorro **potencial** en tokens de usar el flujo advisor con memoria frente a un `plan+build` sin memoria. No factura ni mide una sesión real: proyecta sobre el tamaño actual de tu memoria.
+
+Tres escenarios de routing (hojas del pipeline que cada uno implica):
+
+| Escenario | Hojas | Representa |
+|-----------|-------|------------|
+| `direct` | 1 | tarea pequeña, sin delegación |
+| `delegated` | 5 | tarea delegada a subagentes (plan → build → verify…) |
+| `spec-lite` | 6 | delegada + spec Given/When/Then ≤650w |
+
+```bash
+node .opencode/scripts/memory-tokens.mjs measure                        # desglose de tokens por capa (PROJECT_STATE / SUMMARY / CHANGELOG / skills+chunks)
+node .opencode/scripts/memory-tokens.mjs compare --scenario direct
+node .opencode/scripts/memory-tokens.mjs compare --scenario delegated
+node .opencode/scripts/memory-tokens.mjs compare --scenario spec-lite
+node .opencode/scripts/memory-tokens.mjs compare --scenario spec-lite --json   # salida máquina
+```
+
+> **Honestidad del cálculo:** mide el ahorro **potencial** sobre el tamaño actual de la memoria, **no** tokens facturados de una sesión real. Los subagentes del escenario cuentan como *hojas*: cada uno recibe un delta en vez de recargar el contexto completo. Con `--skip-verify`/`--skip-critic` el ahorro real es algo menor. Los números concretos dependen de tu repo; trátalos como orientación, no como una cifra universal.
+
 ## Skills
 
 ```bash
