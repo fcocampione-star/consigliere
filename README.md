@@ -1,8 +1,8 @@
 # Consigliere 1.0 (Advisor Harness) — Harness de agentes + memoria persistente para opencode
 
-> **Solo por proyecto.** Un scaffold reutilizable que deja cada proyecto listo para trabajar con opencode: agentes orquestados, memoria que recuerda decisiones entre sesiones y comandos para auditar, registrar y revisar el progreso. Sin binarios globales, sin servicios: es Markdown + scripts que se instalan **dentro** del proyecto.
+> **Solo por proyecto.** Un scaffold reutilizable que deja cada proyecto listo para trabajar con opencode: agentes orquestados, memoria que recuerda decisiones entre sesiones y comandos para auditar, registrar y revisar el progreso. Sin dependencias globales de runtime, sin servicios: es Markdown + scripts que se instalan **dentro** del proyecto.
 
-> **✅ Disponibilidad de `npx`:** el paquete ya está publicado en npm (v1.0.0), así que `npx advisor-harness@latest` funciona directamente. También puedes usar las instrucciones locales (`git clone` + `node init.mjs` / `./init.sh` / `powershell -File init.ps1`).
+> **✅ Publicado en npm:** el paquete `advisor-harness` (v1.0.x) ya está en el registry, así que `npx advisor-harness@latest <dir>` funciona directamente. También puedes instalarlo global (`npm install -g advisor-harness`) o clonar el repo (`git clone` + `node init.mjs` / `./init.sh` / `powershell -File init.ps1`).
 
 ## Requisitos
 
@@ -12,10 +12,10 @@
 
 ## En 30 segundos
 
-1. En una carpeta **vacía**, ejecuta (desde el clon del repo):
+1. En una carpeta **vacía**, ejecuta (vía npm, sin clonar):
 
    ```bash
-   node init.mjs          # o: ./init.sh  /  powershell -File init.ps1
+   npx advisor-harness@latest .   # o, desde el clon: node init.mjs / ./init.sh / powershell -File init.ps1
    ```
 
    No necesitas responder nada: detecta que la carpeta está vacía y genera el harness directamente. Cero prompts, con un resumen de 3 líneas (destino, defaults aplicados — modelos heredados y sin stack — y opciones finales: autoskills omitido + git init).
@@ -85,11 +85,23 @@ Ese es el día a día. Si tu carpeta **no está vacía**, el mismo comando abre 
 
 ## Instalación
 
-Tres caminos, todos 100% por proyecto. El instalador decide solo: carpeta vacía → genera directo; carpeta con archivos → asistente.
+Primero, cómo ejecutar el instalador (todas las vías usan el mismo `init.mjs`); después, el camino según tu situación. Todo es 100% por proyecto y el instalador decide solo: carpeta vacía → genera directo; carpeta con archivos → asistente.
+
+| Vía | Comando | Cuándo |
+|-----|---------|--------|
+| **`npx` (recomendada)** | `npx advisor-harness@latest <dir>` | Usar el paquete publicado sin instalar nada |
+| **Global** | `npm install -g advisor-harness`, luego `advisor <dir>` (o `advisor-harness <dir>`) | Quieres el bin en el `PATH` para varios proyectos |
+| **Clon** | `git clone https://github.com/fcocampione-star/consigliere.git && cd consigliere` | Desarrollo o sin acceso a npm; luego `node init.mjs` / `./init.sh` / `powershell -File init.ps1` |
+
+> ⚠️ **`npx advisor` no es lo mismo:** resolvería el paquete `advisor` del registry, no el harness. Usa siempre `npx advisor-harness@latest` (o el bin `advisor` **solo** tras un `npm install -g advisor-harness`).
 
 ### Camino simple: happy path (0 prompts)
 
 ```bash
+# vía npm (sin clonar)
+npx advisor-harness@latest .   # en una carpeta vacía: genera directo, sin preguntar nada
+
+# vía clon
 git clone https://github.com/fcocampione-star/consigliere.git && cd <carpeta-del-clon>  # por defecto: consigliere
 node init.mjs            # en una carpeta vacía: genera directo, sin preguntar nada
 ```
@@ -111,6 +123,8 @@ node init.mjs --quick --dir /ruta/proyecto
 Sin ruta por adelantado: pregunta `📁 Ruta → Nombre → Stack → Modelos → Autoskills → Git`.
 
 ```bash
+npx advisor-harness@latest .   # cwd con archivos → asistente (o fuerza con --interactive/-i)
+
 git clone https://github.com/fcocampione-star/consigliere.git
 cd consigliere
 node init.mjs            # cwd con archivos → asistente (o fuerza con --interactive/-i)
@@ -127,30 +141,30 @@ init.cmd                     # CMD
 ### Camino avanzado: no-interactivo (CI / scripts)
 
 ```bash
-# Mismo CLI que ofrecerá el paquete npm cuando se publique (hoy: desde el clon del repo)
-node consigliere/init.mjs --dir /ruta/proyecto --name mi-app \
+# Mismo CLI en todas las vías (npx, global `advisor` o `node init.mjs` desde el clon):
+npx advisor-harness@latest --dir /ruta/proyecto --name mi-app \
   --stack-db postgresql --stack-backend node/express --stack-frontend react/vite \
   --stack-auth jwt --stack-validation zod --stack-deploy docker \
   --autoskills 1 --git yes
 
 # actualizar (backup completo keep 5 + preserva memoria/config; sin --force)
-node consigliere/init.mjs --dir /ruta/proyecto --upgrade
+npx advisor-harness@latest --dir /ruta/proyecto --upgrade
 
 # alcance modular: --upgrade monolítico = --part all
-node consigliere/init.mjs --dir /ruta/proyecto --upgrade --part harness
-node consigliere/init.mjs --dir /ruta/proyecto --upgrade --part memoria
-node consigliere/init.mjs --dir /ruta/proyecto --upgrade --part autoskills
+npx advisor-harness@latest --dir /ruta/proyecto --upgrade --part harness
+npx advisor-harness@latest --dir /ruta/proyecto --upgrade --part memoria
+npx advisor-harness@latest --dir /ruta/proyecto --upgrade --part autoskills
 
 # estado read-only (no escribe) / restaurar backup (acepta advisor- y harness-)
-node consigliere/init.mjs --dir /ruta/proyecto --status
-node consigliere/init.mjs --dir /ruta/proyecto --restore --from .advisor/backups/advisor-<ts>.tgz
+npx advisor-harness@latest --dir /ruta/proyecto --status
+npx advisor-harness@latest --dir /ruta/proyecto --restore --from .advisor/backups/advisor-<ts>.tgz
 
 # desinstalar alcance de --part (pide confirmación sin --force; memoria exige backup previo + --force)
-node consigliere/init.mjs --dir /ruta/proyecto --uninstall --part harness --force
+npx advisor-harness@latest --dir /ruta/proyecto --uninstall --part harness --force
 
 # simular sin escribir nada / sobrescribir un destino no vacío sin harness (a tu riesgo)
-node consigliere/init.mjs --dir /ruta/proyecto --dry-run
-node consigliere/init.mjs --dir /ruta/proyecto --force
+npx advisor-harness@latest --dir /ruta/proyecto --dry-run
+npx advisor-harness@latest --dir /ruta/proyecto --force
 ```
 
 ### Qué hace el instalador al escribir
@@ -180,12 +194,12 @@ Contrato estable (`init.mjs` `EXIT`, documentado en `--help`):
 
 ### Ayuda por capas
 
-`--help` / `-h` muestra primero un **Uso rápido** de 3 líneas (el 90% de los casos) y después el **Uso avanzado**: operaciones (`--upgrade`, `--status`, `--restore`, `--uninstall`, `--dry-run`, `--force`), flags completos, qué genera y el flujo recomendado.
+`--help` / `-h` muestra primero un **Uso rápido** de 3 líneas (el 90% de los casos) y después el **Uso avanzado**: operaciones (`--upgrade`, `--status`, `--restore`, `--uninstall`, `--dry-run`, `--force`), flags completos, qué genera y el flujo recomendado. `--version` / `-v` imprime la versión del harness.
 
 ## Compatibilidad rename (consigliere → Advisor)
 
 - **Display**: `Advisor`; **npm**: `advisor-harness` (`npx advisor-harness@latest`); **bin**: `advisor`, `advisor-harness` + alias `consigliere-harness` (1 versión de transición).
-- **Publicación**: `advisor-harness` nuevo + `consigliere-harness@final` como shim (warning + exec `advisor-harness`) con `npm deprecate` apuntando al nuevo nombre.
+- **Publicación**: solo `advisor-harness` está publicado en npm; incluye el bin alias `consigliere-harness` como puente. Un shim npm aparte `consigliere-harness@final` (con `npm deprecate`) **no está publicado**.
 - **Repo**: `https://github.com/fcocampione-star/consigliere.git`.
 - **Estado vivo**: solo `.advisor/` (backups, chunks, cache). Sin directorios legacy.
 - **Backups**: nuevos `advisor-<ts>.tgz`; restore/prune aceptan `^(harness|advisor)-` (keep 5 combinado). Skill-cache v2 (`refresh --force` invalida v1).
@@ -236,7 +250,7 @@ Lo que **no** es una solución: el harness solo valida la *forma* de un id de mo
 - `/compact-state` — compacta `PROJECT_STATE.md` §2 (dedup + archive).
 - `/modo <educador|practicante|copiloto|auto>` — fija el modo de comunicación del advisor (session-scoped, no persiste en memoria; sin arg muestra el actual).
 
-## Sistema de memoria (3 capas, inspirado Engram pero md+grep)
+## Sistema de memoria (3 capas, inspirado en Engram pero md+grep)
 
 | Capa | Archivo | Carga | Contenido |
 |------|---------|-------|-----------|
@@ -366,11 +380,11 @@ El repo tiene su propia suite, sin dependencias externas (nada de `npm ci`: no h
 
 ## Notas de diseño v1.0 (detalle técnico)
 
-- **Solo por proyecto**: cero `~/.local/bin`, cero `PATH`, cero drift.
+- **Solo por proyecto**: cero `~/.local/bin`, sin modificar el `PATH`, cero drift (una instalación global es opcional y la gestiona npm, no el harness).
 - **Routing orgánico**: el advisor decide por **clase de riesgo** (esquema/auth/contrato/migración/irreversible/arquitectura → delegated/spec-lite; bajo riesgo y pocos files → direct), con el **conteo de files como desempate**. Sin burocracia en tareas pequeñas.
 - **SDD-lite integrado en `routine`** (≤650w Given/When/Then), no 10 fases pesadas.
 - **Modelos cheap vs strong**: `{{MODEL_*}}` en `opencode.json` — cheap=verifier/summarizer/explore, strong=builder/planner/critic. El harness valida la forma del id, nunca el derecho a usarlo (ver § *Modelos del free tier*).
 - **Harden bash**: deny extendido `**/*.pem,**/*.key,**/.env*,~/.ssh/*,**/secrets/*`.
 - **Memoria md+grep**: topic upsert + stale + sync local, cero dependencias (inspirada en Engram, sin su base de datos).
 - **Ops**: `/doctor` + backup previo obligatorio keep 5 + `--upgrade` (preserva la memoria, regenera la config) + `--part/--status/--restore/--uninstall` modulares.
-- **Rename**: display `Advisor`, npm `advisor-harness` (shim `consigliere-harness@final` + deprecate), estado vivo solo en `.advisor/`, cache v2 (ver § Compatibilidad rename).
+- **Rename**: display `Advisor`, npm `advisor-harness` (con bin alias `consigliere-harness`), estado vivo solo en `.advisor/`, cache v2 (ver § Compatibilidad rename).
