@@ -27,7 +27,7 @@ import { homedir, platform, tmpdir } from 'node:os';
 import { createInterface } from 'node:readline';
 import { spawnSync } from 'node:child_process';
 
-const VERSION = '2.0.0';
+const VERSION = '1.0.0';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const IS_WIN = platform() === 'win32';
 
