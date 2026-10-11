@@ -7,6 +7,16 @@
 
 <!-- ADVISOR:ENTRIES:START -->
 
+## 2026-10-11 — Split dev/main: `dev` = repo completo, `main` = distribución reproducible (`scripts/strip-dev.mjs`)
+
+topic: repo/dev-main-split
+**Goal:** separar el desarrollo (`dev`) de la distribución (`main`) sin mantener dos historiales: `main` debe ser una proyección determinista y regenerable del repo completo, con el harness y la memoria intactos.
+**Discoveries:** no hace falta cherry-pick ni merge: el árbol de `main` se construye sobre un `GIT_INDEX_FILE` temporal (`read-tree dev^{tree}` + exclusión index-only + inyección del `opencode.json` de `templates/` + `write-tree` + `commit-tree` con parent = `main` + `update-ref` CAS), así que el working tree del usuario nunca se toca y el historial de `main` queda lineal. Idempotencia natural por comparación de tree hash (`main ya al día`). El `--push` usa `--force-with-lease`, nunca `--force`; las rutas dev-only son explícitas (nunca globs `**`) para que el borrado sea determinista.
+**Accomplished:** nuevo `scripts/strip-dev.mjs` (plumbing git, ESM sin deps, reusa `EXIT_CODES`/`isMain` de `lib/core.mjs`; flags `--dry-run`/`--push`/`--allow-dirty`/`--branch`/`--target`/`--remote`/`--message`; exit 0/1/3/5). Catalogado en `contract-tests.mjs` como `ROOT_ONLY_EXACT` (tool de dev del repo, no del harness instalado). El trigger de CI (`ci.yml`) pasa a la rama `dev` (el desarrollo vive ahí). Nota de asimetría dev vs distribución en README y AGENTS.md. 1 decisión nueva en §2 (`repo/dev-main-split`) y 2 ajustes de decisiones existentes (`architecture/harness-placement`, `tools/lint-sh-crossplatform`); 1 pendiente menor del critic cerrado (main incluye `opencode.json` inyectado y `.gitattributes` verbatim). `planner` diseñó, `critic` aprobó con cambios, `verifier` confirmó en sandbox.
+**Next:** `main` real aún no regenerado (primer `strip-dev.mjs` pendiente). Candidato siguiente: publicar release desde `dev` (tag `v*`, `release.yml`); `main` se regenera con `strip-dev.mjs`, nunca se mergea.
+**Files:** `git log --oneline -5` (detalle en git, no aquí).
+**Verificación:** PASS — `verifier` en sandbox: guardas + idempotencia (segunda corrida = "main ya al día", sin escritura), `init.mjs` ejecutado desde `main` exit 0, `npm run test:contract` PASS; `planner`/`critic` aprobaron con cambios incorporados.
+
 ## 2026-10-11 — CI real en verde: merge FF + fixes de portabilidad (YAML, tar, mapfile) y `isMain` symlink-safe
 
 topic: ci/portability-green
