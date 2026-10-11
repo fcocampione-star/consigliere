@@ -13,7 +13,7 @@
  * nada de disco dentro del repo (todo va a `tmpdir()` + `cleanup()`), y
  * `await runAll()` a nivel de módulo.
  */
-import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, utimesSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
@@ -41,6 +41,11 @@ function withTmp(prefix, fn) {
 }
 
 const write = (p, text) => { writeFileSync(p, text, 'utf8'); return p; };
+
+// Omitido (plataforma/herramienta ausente): mismo patrón que init.test.mjs.
+function omitir(motivo) {
+  console.log(`  [omitido] ${motivo}`);
+}
 
 // ¿El índice cae dentro de algún rango? (mismo criterio que el consumidor real)
 const inside = (spans, idx) => spans.some(([a, b]) => idx >= a && idx < b);
@@ -220,6 +225,29 @@ test('false con argv vacío o ausente', () => {
 test('isMain(import.meta.url, process.argv[1]) es true al ejecutar este archivo', () => {
   const self = pathToFileURL(join(REPO, 'test', 'lib.test.mjs')).href;
   eq(isMain(self, join(REPO, 'test', 'lib.test.mjs')), true, 'coincide con su propia ruta absoluta');
+});
+
+test('isMain: true al invocar un CLI por una ruta con symlink (macOS: /var -> /private/var)', () => {
+  // Node canonicaliza `import.meta.url` (realpath) pero deja `argv[1]` con la
+  // ruta tal cual: con un dir intermedio symlinkeado, la comparación literal
+  // fallaba y main() no corría. Aquí se corre un CLI real bajo un symlink.
+  const parent = tmpdir('lib-isMain-link-');
+  const link = join(parent, 'link');
+  try {
+    symlinkSync(REPO, link, 'dir');
+  } catch {
+    cleanup(parent);
+    omitir('no se pudo crear el symlink (Windows sin privilegios): se omite la regresión');
+    return;
+  }
+  try {
+    const cli = join(link, '.opencode', 'scripts', 'memory-index.mjs');
+    const r = spawnSync(process.execPath, [cli], { encoding: 'utf8' });
+    eq(r.status, EXIT_CODES.USO, 'main() corre bajo el symlink y sale con USO (1)');
+    assert(r.stdout.trim().length > 0, 'main() imprime el uso: stdout no vacío');
+  } finally {
+    cleanup(parent);
+  }
 });
 
 // ═════════════════════════════════════════════════════════════════════════════

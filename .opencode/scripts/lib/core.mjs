@@ -18,10 +18,10 @@
  *    (el nombre del temp sí usa azar, es interno y no se devuelve).
  */
 
-import { readFileSync, writeFileSync, renameSync, mkdirSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, renameSync, mkdirSync, rmSync, realpathSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { basename, dirname, join, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 
 // ── Rutas ───────────────────────────────────────────────────────────────────
 
@@ -69,6 +69,36 @@ function fileKey(value) {
   return s.trim().toLowerCase();
 }
 
+// `realpathSync.native` resuelve symlinks vía la primitiva del SO (sin JS de por
+// medio); se prefiere si existe, con `realpathSync` como respaldo.
+const REALPATH = realpathSync.native || realpathSync;
+
+/**
+ * Realpath tolerante: resuelve symlinks y cae al valor original ante cualquier
+ * error (ENOENT incluido). Hace falta porque `import.meta.url` llega YA
+ * canonicalizado por Node mientras que `argv[1]` conserva la ruta tal como la
+ * escribió el usuario; en macOS `/var` es symlink de `/private/var`, así que
+ * sin resolver ambos lados la comparación literal nunca casa.
+ */
+function realpathOr(path) {
+  try { return REALPATH(path); } catch { return path; }
+}
+
+/**
+ * Clave comparable de una URL de archivo o una ruta: primero resuelve symlinks
+ * y después aplica `fileKey`. Una URL no convertible a ruta degrada a
+ * `fileKey` del valor original (nunca lanza).
+ */
+function canonicalKey(value) {
+  const raw = String(value ?? '');
+  if (!raw) return '';
+  let path = raw;
+  if (/^file:\/\//i.test(raw)) {
+    try { path = fileURLToPath(raw); } catch { return fileKey(raw); }
+  }
+  return fileKey(realpathOr(path));
+}
+
 // Un shim de shell de Windows (init.cmd / init.bat) deja argv[1] con extensión
 // de shell, no de módulo. Solo se acepta como equivalente si TODO lo demás —
 // incluida la carpeta — coincide; comparar solo el basename haría que cualquier
@@ -94,8 +124,11 @@ export function isMain(importMetaUrl, argv1) {
   try {
     if (pathToFileURL(entry).href === String(importMetaUrl)) return true;
   } catch { /* argv[1] no es una ruta utilizable por pathToFileURL */ }
-  const mine = fileKey(importMetaUrl);
-  const theirs = fileKey(entry);
+  // Canonicaliza ambos lados resolviendo symlinks antes de comparar: cubre el
+  // caso real de macOS, donde la URL del módulo ya viene en `/private/var` pero
+  // argv[1] conserva `/var`.
+  const mine = canonicalKey(importMetaUrl);
+  const theirs = canonicalKey(entry);
   if (!mine || !theirs) return false;
   if (mine === theirs) return true;
   if (!SHIM_EXT_RE.test(theirs)) return false;
