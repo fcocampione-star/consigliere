@@ -12,7 +12,7 @@
 | Fase 0.5 Hardening — Refactor + CI (PR-0…PR-7) | Instalador Node-only con init.mjs como única implementación, suite de tests sin deps, `lib/` compartida, CI con matriz y release gateada, docs reales | ✅ Completada |
 | Fase 1 Validación en proyecto demo | Instalación real en temporal + `--upgrade` (backup de 11 ítems, memoria preservada con sha256 idéntico) + `doctor` 0❌/0⚠️ + suite y límites en verde | ✅ Completada |
 
-> Próximo hito: integrar `feat/hardening-refactor-ci` en `main` con la CI de 5 jobs + `pack-smoke` ejecutándose de verdad — es lo único que la validación local de Fase 1 no cubre. Ya NO es hito pendiente el PATH de `lint:sh` en Windows: se resolvió con el resolutor de intérprete (ver §2 `tools/lint-sh-crossplatform`).
+> Próximo hito: ninguno bloqueante — Fase 1 cerrada del todo tras integrar `feat/hardening-refactor-ci` en `main` por FF y ver la CI real (5 jobs + `pack-smoke`, 18/18) en verde (run 38120377887). Candidato siguiente: publicar release. Ya NO son hitos pendientes ni el PATH de `lint:sh` en Windows (resolutor de intérprete, §2 `tools/lint-sh-crossplatform`) ni la CI real (ver §2 `tools/tar-resolver-crossplatform` y `runtime/isMain-realpath`).
 
 ---
 
@@ -40,6 +40,8 @@
 - El catálogo de autoskills (licencia CC-BY-NC-4.0) nunca se commitea ni empaqueta: solo se cachea local y gitignored; la búsqueda usa el registry JSON público porque el CLI de autoskills no expone `search`/`list`/`--json` [topic: dx/autoskills-registry-license] review_after: 2027-04-06
 - `/discover` sugiere skills de proyecto vía función pura `gaps` (match exacto normalizado deps→registry) + `skill-scaffold.mjs` (dry-run por stdout, `--write` atómico, `--force`), sin comando `/skill-new`: se reusa `/routine`→builder [topic: process/discover-gaps] review_after: 2027-04-06
 - Estimador estático del ahorro potencial en tokens (`memory-tokens.mjs`, ESM sin deps): `measure` (tokens por capa) y `compare` (advisor+memoria vs plan+build); heurística `TOKENS_PER_CHAR=4`, solo lectura, porque opencode no expone usage real por tarea (el ahorro puede salir negativo con contexto trivial) [topic: dx/memory-tokens-estimator] review_after: 2027-04-10
+- `init.mjs` resuelve el `tar` internamente (inline, sin extraer a `lib/`): orden `ADVISOR_TAR` (autoritativo, vacío = sin override) → `%SystemRoot%\System32\tar.exe` en win32 → `'tar'` del PATH; sonda `--version` memoizada (no discrimina GNU vs bsdtar: la discriminación la hace el orden); sin `tar` = exit 3 (preflight) / 4 (backup). No se extrae a `lib/` porque `lib/` se espeja a `templates/` y se instalaría como código muerto; hermana de `tools/lint-sh-crossplatform`; el mismo orden se replica (test-only) en `test/init.test.mjs` [topic: tools/tar-resolver-crossplatform] review_after: 2027-03-30
+- `isMain` canonicaliza ambos lados con `realpathSync` (nativo con fallback) tolerando ENOENT, para que los CLI no sean no-op bajo rutas con symlink (macOS `/var`→`/private/var`); firma intacta; afecta a los 20 consumidores (10 scripts + 10 en `templates/`) [topic: runtime/isMain-realpath] review_after: 2027-03-30
 
 ---
 
@@ -49,7 +51,8 @@
 - [x] Completar `AGENTS.md` (stack, comandos dev) y `.opencode/skills/_project-docs/SKILL.md`. (Stack harness documentado)
 - [x] Configurar la estructura base del proyecto. (Templates sincronizados)
 - [x] Copia legacy `consigliere/` no commiteable (ignorada vía `/consigliere/` anclado en `.gitignore`). (Sunset F6: legacy eliminado, solo `.advisor/`; la decisión `repo/legacy-ignore` quedó superada y está archivada en `CHANGELOG/DECISIONS-ARCHIVE.md`)
-- [ ] Integrar `feat/hardening-refactor-ci` en `main` con la CI real (5 jobs + `pack-smoke`) en GitHub Actions: la validación local de Fase 1 no cubre CI ni el tarball instalado.
+- [x] Integrar `feat/hardening-refactor-ci` en `main` con la CI real (5 jobs + `pack-smoke`) en GitHub Actions. (Cerrado: merge FF `4eae0fb`; la CI nunca había arrancado por YAML inválido — fix `92b2c63`; bugs de portabilidad macOS/Windows `4854a4d` e `isMain` symlink `37fd72b`; run 38120377887 = 18/18 en verde. Ver §2 `tools/tar-resolver-crossplatform` y `runtime/isMain-realpath`.)
+- [ ] Menor: `contract-tests.mjs` debería respetar `.opencode/.gitignore` (hoy reporta `.opencode/package.json`/`package-lock.json` gitignored como "solo-raíz": falso negativo solo en máquina de desarrollo, ausente en CI).
 - [x] Documentar en `AGENTS.md` el requisito de PATH de `npm run lint:sh` en Windows (`bash` no está en el PATH de cmd.exe; existe en `C:\Program Files\Git\bin`), o el equivalente cross-platform. (Cerrado resolviendo, no documentando: `lint:sh` pasa a ser un script Node que resuelve el intérprete y mapea exit codes — §2 `tools/lint-sh-crossplatform`. Consecuencia: el `npm run lint:sh` de `AGENTS.md` ya no necesita requisito de PATH.)
 - [x] Menor cerrado: comandos de docs con `bash` a pelo (`bash scripts/check-memory-limits.sh` en Development commands y en `_project-docs/SKILL.md`) — cada uno tiene ya su par Unix/macOS · Windows (`check-memory-limits.ps1`), el ejemplo de init usa el canónico `node init.mjs` y la `SKILL.md` recupera el comentario del resolutor de `lint:sh`. Docs-only; no se añade decisión en §2 (ya la cubre `tools/lint-sh-crossplatform`).
 
@@ -81,6 +84,7 @@
 | shared-lib | `.opencode/scripts/lib/{core,md,cache}.mjs` | Núcleo sin deps (isMain, readText, sectionText, field, fenceSpans, listChangelog, todayUTC, writeAtomic, fingerprint/isFresh, EXIT_CODES): importar, nunca reimplementar |
 | lint/version | `npm run lint:sh` · `npm run lint:ps1` · `npm run version:check` | `lint-sh.mjs` resuelve el bash y mapea exit codes (0 ok / 1-2 de `bash -n` / 3 sin intérprete), parse AST de PowerShell y versión única (package.json == init.mjs/init.sh/init.ps1) |
 | installer | `node init.mjs <dir> --upgrade --quick` (exit 0/1/2/3/4/5) | Entrada única; los shims delegan; contrato de exit codes en `lib/core.mjs EXIT_CODES` |
+| tools/bin-resolver | `lint-sh.mjs` (`ADVISOR_BASH`) · `init.mjs` (`ADVISOR_TAR`) | Resolución cross-platform de un binario: override por env var autoritativo → ruta específica del SO → PATH; sonda memoizada; exit 3 si falta |
 
 ---
 

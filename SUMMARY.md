@@ -7,6 +7,28 @@
 
 <!-- ADVISOR:ENTRIES:START -->
 
+## 2026-10-11 — CI real en verde: merge FF + fixes de portabilidad (YAML, tar, mapfile) y `isMain` symlink-safe
+
+topic: ci/portability-green
+**Goal:** integrar `feat/hardening-refactor-ci` en `main` por fast-forward y conseguir que la CI (5 jobs + `pack-smoke`, 18 combinaciones) corra de verdad en verde — la validación local de Fase 1 no la cubría.
+**Discoveries:** la CI nunca había arrancado: `ci.yml` L489 tenía un `name:` sin comillas con `: ` → YAML inválido, GitHub rechazaba el workflow (runs previos `failure` en 0s). El primer run real destapó 2 bugs de portabilidad en `syntax-and-tests`: macOS usaba `mapfile` (bash 3.2 no lo tiene) y Windows usaba el GNU tar de Git, que lee `C:` como host remoto (`Cannot connect to C: resolve failed`). Un tercer run destapó un bug de PRODUCTO: `isMain` no resolvía symlinks; en macOS `/var`→`/private/var` hacía que `main()` no corriera (no-op silenciosa, exit 0, stdout vacío).
+**Accomplished:** merge FF de 21 commits (`4eae0fb`); fix YAML `92b2c63` (el push requirió re-auth `gh auth refresh -s workflow`); fix portabilidad `4854a4d` — `init.mjs` resuelve el `tar` internamente (opción robusta espejando `lint-sh.mjs`; el critic detectó que el propio test usaba `tar` con rutas `C:\`); fix `isMain` `37fd72b` — canonicaliza ambos lados con `realpathSync` tolerando ENOENT (helpers `realpathOr`/`canonicalKey`), espejo byte-idéntico en `templates/` + test de regresión con symlink. 2 decisiones nuevas en §2.
+**Next:** nada inmediato bloqueante; pendiente menor nuevo: que `contract-tests.mjs` respete `.opencode/.gitignore`. Candidato siguiente: publicar release.
+**Files:** `git log --oneline -5` (detalle en git, no aquí).
+**Verificación:** PASS — CI run 38120377887 = **18/18 success** en `main` @ `37fd72b`; local: `node test/init.test.mjs` 29/29, `node test/lib.test.mjs` 84/84, `lint:sh` 0, `version:check` 0, `npm test` exit 0 en copia limpia (los 2 fallos locales son ambientales).
+
+## 2026-10-11 — spec: ci-portability-fix (portabilidad macOS/Windows de `syntax-and-tests`)
+
+topic: sdd/ci-portability-fix/spec
+**Goal:** conservar la spec-lite que guió el fix de portabilidad de la CI (criterios MUST verificables) para que el build quede auditable (spec no persistida en su momento; reconstruida tras implementar).
+**MUST (RFC2119):**
+- MUST-1 macOS/bash 3.2: Given `syntax-and-tests` en macOS When corre el job Then no usa `mapfile` (no existe en bash 3.2) y el job pasa en verde.
+- MUST-2 Windows/tar: Given el instalador en Windows When empaqueta/extrae Then `tar` no interpreta `C:` como host remoto; se resuelve el binario con orden `ADVISOR_TAR` → `%SystemRoot%\System32\tar.exe` → PATH (espejando `lint-sh.mjs`), sin extraer a `lib/`.
+- MUST-3 no-vacuidad del test: Given el test del resolutor When valida rutas `C:\` Then el propio test no usa `tar` de forma que enmascare el bug (hallazgo del critic).
+**SHOULD:**
+- SHOULD-1 sonda `--version` memoizada como detección de existencia; sin `tar` = exit 3 (preflight) / 4 (backup).
+**Veredicto critic:** APROBADO CON CAMBIOS (detectó el uso de `tar` en el propio test); implementado y verificado en verde.
+
 ## 2026-10-10 — Estimador estático del ahorro potencial en tokens (advisor+memoria vs plan+build)
 
 topic: dx/memory-tokens-estimator
