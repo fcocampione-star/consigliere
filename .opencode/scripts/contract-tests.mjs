@@ -7,7 +7,7 @@
  * SOLO raíz (NO se espeja en templates/): es un test de desarrollo, como memory-rotate.test.mjs.
  * Sin dependencias externas. Los asserts son por PRESENCIA/INVARIANTE (no líneas exactas ni fechas).
  */
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
@@ -125,20 +125,35 @@ const TEMPLATE_ONLY_EXACT = {
 const LOCK_DEBRIS = '.memory-lock';
 // `.github/` son workflows de CI: raiz-only por definicion, nunca espejadas a templates/.
 const SKIP_WALK = new Set(['.git', 'node_modules', '.advisor', '.agents', '.github', LOCK_DEBRIS]);
-function walk(base, rel = '', skip = new Set()) {
-  const out = [];
-  let entries;
-  try { entries = readdirSync(join(base, rel), { withFileTypes: true }); } catch { return out; }
-  for (const e of entries) {
-    if (skip.has(e.name) || e.name.startsWith(LOCK_DEBRIS)) continue;
-    const r = rel ? `${rel}/${e.name}` : e.name;
-    if (e.isDirectory()) out.push(...walk(base, r, skip));
-    else out.push(r);
-  }
-  return out;
+// El conjunto candidato se enumera con git respetando `.gitignore` (`--cached`
+// = trackeados, `--others` = sin trackear, `--exclude-standard` = los que
+// .gitignore excluye): un walk del filesystem colaba artefactos gitignored
+// (.opencode/package*.json, deps locales) como si fueran contenido del repo y
+// los reportaba como solo-raíz no catalogado. Si no es un repo git, se reporta.
+function listCandidates() {
+  const res = spawnSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], { cwd: ROOT, encoding: 'utf8' });
+  if (res.error) throw new Error(`no se pudo ejecutar git: ${res.error.message}`);
+  if (res.status !== 0) throw new Error(`git ls-files falló (exit ${res.status}): ${(res.stderr || '').trim()}`);
+  return res.stdout.split('\0').filter(Boolean);
 }
-const rootFiles = walk(ROOT, '', new Set([...SKIP_WALK, 'templates'])).sort();
-const tplFiles = walk(TPL).sort();
+const skipCandidate = (rel) => {
+  const top = rel.split('/')[0];
+  return SKIP_WALK.has(top) || top.startsWith(LOCK_DEBRIS);
+};
+let rootFiles = [];
+let tplFiles = [];
+try {
+  const candidates = listCandidates();
+  // `templates/` queda fuera de la raíz (raíz y plantilla se comparan aparte).
+  rootFiles = candidates.filter((r) => !r.startsWith('templates/') && !skipCandidate(r)).sort();
+  tplFiles = candidates
+    .filter((r) => r.startsWith('templates/'))
+    .map((r) => r.slice('templates/'.length))
+    .filter((r) => !skipCandidate(r))
+    .sort();
+} catch (e) {
+  fail('espejo', `${e.message} (¿estás en la raíz de un repo git?)`);
+}
 const rootSet = new Set(rootFiles);
 const tplSet = new Set(tplFiles);
 

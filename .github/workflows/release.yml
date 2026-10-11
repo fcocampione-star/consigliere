@@ -116,6 +116,12 @@ jobs:
       # En dry-run (workflow_dispatch con la casilla marcada) este paso no corre.
       - name: publicar en npm (con provenance)
         if: github.event_name == 'push' || !inputs.dry-run
+        # `setup-node` con registry-url escribe un .npmrc con
+        # `${NODE_AUTH_TOKEN}`: sin definirlo aquí, el token va vacío → ENEEDAUTH.
+        # El secret `NPM_TOKEN` debe existir en GitHub (scope Automation si la
+        # cuenta tiene 2FA); nunca se escribe en claro.
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
           npm publish "${{ steps.pack.outputs.tarball }}" \
