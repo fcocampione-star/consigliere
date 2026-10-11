@@ -12,8 +12,9 @@
 | Fase 0.5 Hardening — Refactor + CI (PR-0…PR-7) | Instalador Node-only con init.mjs como única implementación, suite de tests sin deps, `lib/` compartida, CI con matriz y release gateada, docs reales | ✅ Completada |
 | Fase 1 Validación en proyecto demo | Instalación real en temporal + `--upgrade` (backup de 11 ítems, memoria preservada con sha256 idéntico) + `doctor` 0❌/0⚠️ + suite y límites en verde | ✅ Completada |
 | Repo split dev/main | `dev` desarrollo / `main` distribución reproducible (`strip-dev.mjs`) | ✅ Completada |
+| Release npm 1.0 público | Versión/branding a 1.0 + fixes de empaquetado (`.gitignore` en el tarball), contrato git-aware y `NPM_TOKEN`; `1.0.1` publicada y verificada desde npm (`latest` corregido) | ✅ Completada |
 
-> Próximo hito: ninguno bloqueante — Fase 1 cerrada del todo tras integrar `feat/hardening-refactor-ci` en `main` por FF y ver la CI real (5 jobs + `pack-smoke`, 18/18) en verde (run 38120377887). Candidato siguiente: publicar release desde `dev` (`main` se regenera con `strip-dev.mjs`). Ya NO son hitos pendientes ni el PATH de `lint:sh` en Windows (resolutor de intérprete, §2 `tools/lint-sh-crossplatform`) ni la CI real (ver §2 `tools/tar-resolver-crossplatform` y `runtime/isMain-realpath`).
+> Próximo hito: ninguno bloqueante — primer release público ya publicado (`advisor-harness@1.0.1` en npm, verificado instalando desde el registry) y Fase 1 cerrada. Pendientes menores no bloqueantes en §3. Ya NO son hitos pendientes ni el PATH de `lint:sh` en Windows (§2 `tools/lint-sh-crossplatform`), ni la CI real (§2 `tools/tar-resolver-crossplatform`, `runtime/isMain-realpath`), ni publicar el release.
 
 ---
 
@@ -44,18 +45,16 @@
 - `init.mjs` resuelve el `tar` internamente (inline, sin extraer a `lib/`): orden `ADVISOR_TAR` (autoritativo, vacío = sin override) → `%SystemRoot%\System32\tar.exe` en win32 → `'tar'` del PATH; sonda `--version` memoizada (no discrimina GNU vs bsdtar: la discriminación la hace el orden); sin `tar` = exit 3 (preflight) / 4 (backup). No se extrae a `lib/` porque `lib/` se espeja a `templates/` y se instalaría como código muerto; hermana de `tools/lint-sh-crossplatform`; el mismo orden se replica (test-only) en `test/init.test.mjs` [topic: tools/tar-resolver-crossplatform] review_after: 2027-03-30
 - `isMain` canonicaliza ambos lados con `realpathSync` (nativo con fallback) tolerando ENOENT, para que los CLI no sean no-op bajo rutas con symlink (macOS `/var`→`/private/var`); firma intacta; afecta a los 20 consumidores (10 scripts + 10 en `templates/`) [topic: runtime/isMain-realpath] review_after: 2027-03-30
 - Repo dev/main split: `dev` = repo completo (desarrollo: `test/`, `.github/`, `scripts/`, `CONTRIBUTING.md`, `.nvmrc` + 4 dev-tools de `.opencode/scripts/`); `main` = proyección de DISTRIBUCIÓN (harness + memoria, sin dev-only) regenerada desde `dev` por `scripts/strip-dev.mjs` (temp GIT_INDEX_FILE + read-tree dev^{tree} + exclusión index-only + inyección de opencode.json desde templates/ + write-tree + allowlist + commit-tree parent=main + update-ref CAS; idempotente por tree hash; historial lineal; --push opt-in con --force-with-lease, nunca --force). `main` NO se mergea desde `dev` (se regenera). El paquete npm se publica desde `dev` (release.yml, tag v*) y `package.json` queda intacto en `main` a propósito (prepublishOnly roto = guardarraíl). Ortogonal a `architecture/harness-placement` (esa rige proyectos instalados; esta rige el repo del harness) [topic: repo/dev-main-split] review_after: 2027-04-18
+- El paquete `advisor-harness` se publica en npm desde `dev` (tag `v*`); `release.yml` exige el secret `NPM_TOKEN` (`NODE_AUTH_TOKEN`) y `latest` DEBE apuntar a la versión buena (el stub `0.0.0-stage` quedó como latest por error → corregido con `dist-tag add`); npm prohíbe reutilizar `name@version` (despublicar no permite republicar la misma versión) [topic: release/npm-publish] review_after: 2027-04-18
+- npm excluye ficheros `.gitignore` de todo tarball: el template se guarda como `templates/gitignore` y `init.mjs` lo escribe como `.gitignore` en destino (tabla `TEMPLATE_RENAME`, fuera de `ALLOW_DIVERGENCE`); regresión en el job `pack-smoke` de `ci.yml` y en `test/init.test.mjs` [topic: installer/tarball-gitignore] review_after: 2027-03-30
+- `contract-tests.mjs` enumera ficheros vía git (`ls-files --cached --others --exclude-standard`) para respetar `.gitignore` (elimina el falso "solo-raíz" de `.opencode/package.json`/`package-lock.json`); mantiene la detección de drift real (drift probado) [topic: test/contract-git-aware] review_after: 2027-03-30
 
 ---
 
 ## 3. Pendientes inmediatos
 
-- [x] Bootstrap (cerrado): objetivo/alcance harness-only definido, `AGENTS.md` + `_project-docs/SKILL.md` documentados (stack harness) y estructura base con templates sincronizados.
-- [x] Copia legacy `consigliere/` no commiteable (ignorada vía `/consigliere/` anclado en `.gitignore`). (Sunset F6: legacy eliminado, solo `.advisor/`; la decisión `repo/legacy-ignore` quedó superada y está archivada en `CHANGELOG/DECISIONS-ARCHIVE.md`)
-- [x] Integrar `feat/hardening-refactor-ci` en `main` con la CI real (5 jobs + `pack-smoke`) en GitHub Actions. (Cerrado: merge FF `4eae0fb`; la CI nunca había arrancado por YAML inválido — fix `92b2c63`; bugs de portabilidad macOS/Windows `4854a4d` e `isMain` symlink `37fd72b`; run 38120377887 = 18/18 en verde. Ver §2 `tools/tar-resolver-crossplatform` y `runtime/isMain-realpath`.)
-- [ ] Menor: `contract-tests.mjs` debería respetar `.opencode/.gitignore` (hoy reporta `.opencode/package.json`/`package-lock.json` gitignored como "solo-raíz": falso negativo solo en máquina de desarrollo, ausente en CI).
-- [x] Documentar en `AGENTS.md` el requisito de PATH de `npm run lint:sh` en Windows (`bash` no está en el PATH de cmd.exe; existe en `C:\Program Files\Git\bin`), o el equivalente cross-platform. (Cerrado resolviendo, no documentando: `lint:sh` pasa a ser un script Node que resuelve el intérprete y mapea exit codes — §2 `tools/lint-sh-crossplatform`. Consecuencia: el `npm run lint:sh` de `AGENTS.md` ya no necesita requisito de PATH.)
-- [x] Menor cerrado: comandos de docs con `bash` a pelo (`bash scripts/check-memory-limits.sh` en Development commands y en `_project-docs/SKILL.md`) — cada uno tiene ya su par Unix/macOS · Windows (`check-memory-limits.ps1`), el ejemplo de init usa el canónico `node init.mjs` y la `SKILL.md` recupera el comentario del resolutor de `lint:sh`. Docs-only; no se añade decisión en §2 (ya la cubre `tools/lint-sh-crossplatform`).
-- [x] Menor cerrado (critic): `main` incluye `opencode.json` raíz (el script lo inyecta desde `templates/opencode.json`, blob idéntico) y `.gitattributes` viaja verbatim con el bloque `export-ignore` intacto (no se recorta); resuelto por diseño del `strip-dev.mjs`.
+- [x] Cerradas: Fases 0/0.5/1, bootstrap y sunset legacy (solo `.advisor/`), repo split `dev`/`main` (`strip-dev.mjs`), integración de `feat/hardening-refactor-ci` en `main` (FF `4eae0fb`; CI 18/18, run 38120377887; `lint:sh`/PATH resuelto por intérprete) y contrato git-aware (`contract-tests.mjs` respeta `.gitignore`, fix `13421b2`). Detalle en `CHANGELOG/` y §2; no se duplica aquí.
+- [ ] Menores no bloqueantes: (a) help de `init.mjs` dice "sin binario global" pero `package.json` expone bins — incoherencia de redacción; (b) `--autoskills 3` no ejecutó autoskills en una prueba (revisar parseo del valor); (c) `release.yml` sin guarda "saltar si `name@version` ya existe" (tag de versión ya publicada fallaría); (d) actualizar/limpiar el stub `0.0.0-stage` si procede.
 
 ---
 
@@ -87,6 +86,7 @@
 | installer | `node init.mjs <dir> --upgrade --quick` (exit 0/1/2/3/4/5) | Entrada única; los shims delegan; contrato de exit codes en `lib/core.mjs EXIT_CODES` |
 | tools/bin-resolver | `lint-sh.mjs` (`ADVISOR_BASH`) · `init.mjs` (`ADVISOR_TAR`) | Resolución cross-platform de un binario: override por env var autoritativo → ruta específica del SO → PATH; sonda memoizada; exit 3 si falta |
 | dist/split | `node scripts/strip-dev.mjs [--dry-run\|--push]` | Regenera `main` (distribución) desde `dev` sobre un índice temporal (no toca el working tree); idempotente por tree hash; CAS en el ref; `--push` con `--force-with-lease`; nunca merge |
+| release/npm | `npm dist-tag add advisor-harness@<v> latest` | Corregir el dist-tag `latest` tras publicar (npm); `publish` desde `dev` con `NPM_TOKEN` y tag `v*` |
 
 ---
 

@@ -7,6 +7,17 @@
 
 <!-- ADVISOR:ENTRIES:START -->
 
+## 2026-10-11 — Publicación npm: versión/branding a 1.0, fixes de empaquetado y `1.0.1` publicada
+
+topic: release/npm-publish
+review_after: 2027-04-18
+**Goal:** publicar el primer release público de `advisor-harness` (versión y branding a 1.0) dejando el paquete realmente instalable desde npm: `.gitignore` del proyecto instalado presente y CI de release cableada.
+**Discoveries:** npm prohíbe reutilizar `name@version` (despublicar `1.0.0` no permitió republicarla → hubo que subir a `1.0.1`). npm EXCLUYE cualquier `.gitignore` del tarball, así que `templates/.gitignore` no viajaba (proyecto instalado sin `.gitignore`). `release.yml` no pasaba `NODE_AUTH_TOKEN` → ENEEDAUTH. El dist-tag `latest` apuntaba al stub `0.0.0-stage` por error. `npx advisor` resuelve OTRO paquete.
+**Accomplished:** versión 2.0.0→1.0.0 y branding "2.0"→"1.0" en ~50 ficheros (+ "formato 2.0"→"formato 1.0" en SUMMARY/templates/fixtures); `contract-tests.mjs` enumera ficheros vía git (`ls-files --cached --others --exclude-standard`) respetando `.gitignore` (paridad 43→41/42); `env: NODE_AUTH_TOKEN` en `release.yml`; fix del tarball renombrando `templates/.gitignore`→`templates/gitignore` + `TEMPLATE_RENAME` en `init.mjs` (+ regresión en `pack-smoke`/`test/init.test.mjs`); README revisado a fondo (3 vías de instalación, aviso `npx advisor`, `--version`). Publicado `1.0.1` con `latest` corregido vía `dist-tag`. 3 decisiones nuevas en §2; ajustes en §1/§3/§5.
+**Next:** pendientes menores no bloqueantes en §3 (help "sin binario global", parseo `--autoskills 3`, guarda de versión ya publicada en `release.yml`, limpiar stub `0.0.0-stage`).
+**Files:** `git log --oneline -5` (detalle en git, no aquí).
+**Verificación:** PASS — instalación real desde npm (`npx advisor-harness@1.0.1`, global y `--upgrade`): `.gitignore` generado (677 B), estructura completa, `doctor` 0❌/0⚠️, memoria preservada con backup; `latest: 1.0.1`.
+
 ## 2026-10-11 — Split dev/main: `dev` = repo completo, `main` = distribución reproducible (`scripts/strip-dev.mjs`)
 
 topic: repo/dev-main-split
