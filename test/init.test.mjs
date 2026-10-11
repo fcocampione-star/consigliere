@@ -92,6 +92,7 @@ const ESPERADOS = [
   'PROJECT_STATE.md',
   'SUMMARY.md',
   'skills-lock.json',
+  '.gitignore',
   '.opencode/agents/advisor.md',
   '.opencode/scripts/doctor.mjs',
   '.opencode/scripts/routine-model.mjs',

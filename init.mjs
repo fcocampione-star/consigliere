@@ -33,6 +33,13 @@ const IS_WIN = platform() === 'win32';
 
 const HOME = homedir();
 const TEMPLATE_DIR = join(HERE, 'templates');
+// npm EXCLUYE del tarball cualquier fichero llamado `.gitignore` (lo trata como
+// ignore-file), así que la plantilla lo guarda con un nombre neutro y el render
+// lo restituye a su nombre real en el destino. Esta tabla es el ÚNICO punto de
+// traducción: la usan renderTree (nombre de destino) y el cálculo de REGENERATED
+// (qué se anuncia como regenerado de verdad). Ver contract-tests / CI pack-smoke.
+const TEMPLATE_RENAME = { gitignore: '.gitignore' };
+const dstName = (name) => TEMPLATE_RENAME[name] || name;
 // Nombre del paquete tal y como lo declara el repo del harness. Lo lee package.json
 // para que un renombrado del paquete no deje el guardián pointing a un nombre muerto.
 const HARNESS_PKG = (() => {
@@ -69,9 +76,16 @@ const PRESERVE_DATA = ['PROJECT_STATE.md', 'SUMMARY.md', 'CHANGELOG'];
 // Config del harness: sí se REGENERAN (de eso sirve un upgrade; si no, cualquier
 // cambio futuro en la plantilla sería un no-op silencioso). La excepción es
 // `agent.<nombre>.model` de opencode.json, que se funde aparte (mergeAgentModels).
-const REGENERATED = ['AGENTS.md', 'opencode.json', '.gitignore'];
+// La lista sale de la REALIDAD del paquete (fuente de plantilla presente), no de
+// un deseo: un fichero cuyo template no viaja en el tarball (p. ej. un .gitignore
+// que npm excluyó) NO se anuncia como regenerado, en vez de mentir.
+const REGENERATED = ['AGENTS.md', 'opencode.json', 'gitignore']
+  .filter((src) => existsSync(join(TEMPLATE_DIR, src)))
+  .map(dstName);
 // Subsets por --part (allowlist de primer nivel del render; null = árbol completo).
-const PART_HARNESS = ['.opencode', 'scripts', 'AGENTS.md', 'opencode.json', '.gitignore', 'skills-lock.json'];
+// OJO: la allowlist casa contra el nombre EN DISCO de la plantilla (`gitignore`),
+// no contra el nombre de destino (`.gitignore`).
+const PART_HARNESS = ['.opencode', 'scripts', 'AGENTS.md', 'opencode.json', 'gitignore', 'skills-lock.json'];
 const PART_MEMORIA = ['PROJECT_STATE.md', 'SUMMARY.md', 'CHANGELOG'];
 const PARTS = ['harness', 'memoria', 'autoskills', 'all'];
 const BACKUP_RE = /^(harness|advisor)-.*\.tgz$/;
@@ -488,11 +502,14 @@ function renderFile(src, dst, vars) {
 
 // Un único renderizador. `allow` filtra SOLO el primer nivel (así --part
 // harness/memoria incluye el .opencode/ entero, como siempre). `relBase` lleva
-// la ruta relativa del archivo para poder aplicar NO_SOBRESCRIBIR. `skip` es el
-// conjunto de rutas RELATIVAS que ya están respaldadas y son dato del usuario
-// (PRESERVE_DATA ∩ lo que el backup respaldó de verdad): no se tocan. Así la
-// memoria no pasa nunca por un estado vaciado, ni siquiera un instante, y el
-// restore deja de ser el mecanismo para pasar a ser la red de seguridad.
+// la ruta relativa del archivo (nombre de PLANTILLA) para poder aplicar
+// NO_SOBRESCRIBIR. `skip` es el conjunto de rutas RELATIVAS que ya están
+// respaldadas y son dato del usuario (PRESERVE_DATA ∩ lo que el backup respaldó
+// de verdad): no se tocan. Así la memoria no pasa nunca por un estado vaciado,
+// ni siquiera un instante, y el restore deja de ser el mecanismo para pasar a
+// ser la red de seguridad. El nombre de DESTINO pasa por `dstName` (TEMPLATE_RENAME):
+// un fichero que npm excluiría del tarball (p. ej. `.gitignore`) se guarda en la
+// plantilla con nombre neutro y aterriza con su nombre real en el proyecto.
 function renderTree(srcDir, dstDir, vars, allow = null, relBase = '', skip = null) {
   const entries = readdirSync(srcDir, { withFileTypes: true });
   for (const e of entries) {
@@ -505,7 +522,7 @@ function renderTree(srcDir, dstDir, vars, allow = null, relBase = '', skip = nul
       continue;
     }
     const src = join(srcDir, e.name);
-    const dst = join(dstDir, e.name);
+    const dst = join(dstDir, dstName(e.name));
     if (e.isDirectory()) {
       mkdirSync(dst, { recursive: true });
       renderTree(src, dst, vars, null, rel, skip);

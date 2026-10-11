@@ -399,6 +399,9 @@ jobs:
             templates/AGENTS.md
             templates/PROJECT_STATE.md
             templates/skills-lock.json
+            # npm excluye `.gitignore` del tarball (lo trata como ignore-file):
+            # la plantilla viaja con nombre neutro y el instalador la renombra.
+            templates/gitignore
             templates/scripts/check-memory-limits.sh
             templates/.opencode/scripts/doctor.mjs
             templates/.opencode/scripts/routine-model.mjs
@@ -444,13 +447,16 @@ jobs:
             --stack-db postgresql --stack-backend node/express \
             --autoskills 3 --git no
           for f in opencode.json AGENTS.md PROJECT_STATE.md SUMMARY.md \
+                   .gitignore \
                    .opencode/scripts/doctor.mjs \
                    .opencode/scripts/lib/core.mjs \
                    .opencode/skills/_skill-loader/loader.mjs \
                    .opencode/agents/advisor.md; do
             test -f "$target/$f" || { echo "::error::el proyecto generado no tiene $f"; exit 1; }
           done
-          echo "árbol generado completo"
+          # Regresión: npm excluía `.gitignore` del tarball y el proyecto nacía sin él.
+          test -s "$target/.gitignore" || { echo "::error::el .gitignore instalado está vacío o no existe"; exit 1; }
+          echo "árbol generado completo (incluido .gitignore)"
 
       - name: opencode.json generado es JSON válido
         run: |

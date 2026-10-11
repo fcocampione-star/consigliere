@@ -37,9 +37,10 @@ La suite de `test/` es un micro-framework propio sin dependencias: `test/harness
 
 El contrato anti-drift (`.opencode/scripts/contract-tests.mjs`) compara **bytes**:
 
-- Lo que existe en ambos lados debe ser **idéntico**, salvo lo que esté catalogado en `ALLOW_DIVERGENCE` (`AGENTS.md`, `.opencode/agents/advisor.md`, `.opencode/commands/doctor.md`, `.opencode/scripts/doctor.mjs`, `.opencode/skills/_project-docs/SKILL.md`, `opencode.json`, `.gitignore`, `PROJECT_STATE.md`, `SUMMARY.md`, `skills-lock.json`, `scripts/check-memory-limits.sh`).
+- Lo que existe en ambos lados debe ser **idéntico**, salvo lo que esté catalogado en `ALLOW_DIVERGENCE` (`AGENTS.md`, `.opencode/agents/advisor.md`, `.opencode/commands/doctor.md`, `.opencode/scripts/doctor.mjs`, `.opencode/skills/_project-docs/SKILL.md`, `opencode.json`, `PROJECT_STATE.md`, `SUMMARY.md`, `skills-lock.json`, `scripts/check-memory-limits.sh`).
 - Un archivo **solo en la raíz sin catalogar rompe el contrato** (no avisa: falla). Si creas uno, o lo espejas en `templates/`, o lo declaras en `ROOT_ONLY_EXACT` / `ROOT_ONLY_PREFIXES` con su motivo.
 - `test/` y `.github/` son desarrollo puro: nunca se instalan por proyecto ni se espejan.
+- `templates/gitignore` es un caso especial: npm **excluye del tarball** cualquier fichero llamado `.gitignore` (lo trata como ignore-file), así que la plantilla se guarda sin el punto y `init.mjs` (`TEMPLATE_RENAME`) la restituye a `.gitignore` en el proyecto. Por eso `.gitignore` (raíz) está en `ROOT_ONLY_EXACT` y `gitignore` en `TEMPLATE_ONLY_EXACT`, y **no** son un par espejo.
 
 Al tocar cualquier par, copia el fichero entero al otro lado en vez de editar los dos a mano: es la forma barata de que el hash siga coincidiendo.
 

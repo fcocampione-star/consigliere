@@ -63,8 +63,6 @@ checkHook('hook post-commit (template)', 'templates/.opencode/hooks/post-commit-
 //
 // Allowlist (divergencias POR DISEÑO — documentadas):
 const ALLOW_DIVERGENCE = {
-  '.gitignore':
-    'raíz añade ignores de runtime (.advisor/.migrated, manifest, chunks, .agents) + opencode.json anclado; la plantilla usa opciones comentadas.',
   '.opencode/agents/advisor.md':
     'raíz nombra "consigliere"; la plantilla usa el placeholder {{PROJECT_NAME}}.',
   '.opencode/commands/doctor.md':
@@ -89,6 +87,7 @@ const ALLOW_DIVERGENCE = {
 // Archivos presente solo en la raíz y no espejados a propósito:
 const ROOT_ONLY_EXACT = new Set([
   '.gitattributes',
+  '.gitignore', // npm EXCLUYE `.gitignore` del tarball (lo trata como ignore-file): la plantilla se llama `gitignore` y `init.mjs` la renombra a `.gitignore` en el destino. La raíz conserva su `.gitignore` (ignores de runtime + `/opencode.json` anclado), que no viaja al paquete.
   '.nvmrc',
   '.opencode/.gitignore',
   '.opencode/scripts/lint-sh.mjs', // `bash -n` de este repo resolviendo el intérprete: tool de dev, no del harness instalado
@@ -116,6 +115,8 @@ const ROOT_ONLY_PREFIXES = [
 // (igual que ALLOW_DIVERGENCE): un solo-template sin catalogar es drift silencioso
 // (nadie lo espeja, nadie lo comparó, nadie lo declaró excepción).
 const TEMPLATE_ONLY_EXACT = {
+  'gitignore':
+    'npm EXCLUYE del tarball cualquier fichero llamado `.gitignore` (lo trata como ignore-file), así que la plantilla se guarda como `gitignore` y `init.mjs` (TEMPLATE_RENAME) la restituye a `.gitignore` en el proyecto. La raíz no la espeja: su `.gitignore` es la config de este repo (runtime + `/opencode.json` anclado).',
   'opencode.json':
     'el opencode.json de la raíz es la config DEV del repo (gitignored, `{{MODEL_*}}` resueltos a cadena vacía, propia de esta máquina): no es la que se instala. La de templates/ es la que se compara contra la allowlist de arriba.',
 };
