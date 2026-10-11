@@ -1,6 +1,6 @@
 {
   "name": "advisor-harness",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Harness de agentes + memoria persistente para opencode — reusable scaffold con agentes orquestados y memoria de 3 capas (Consigliere 1.0 (Advisor Harness), solo por proyecto)",
   "type": "module",
   "bin": {
