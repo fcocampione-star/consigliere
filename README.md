@@ -312,6 +312,8 @@ Genera frontmatter válido para `_skill-loader` (`name` == directorio, `descript
 
 ## Estructura de este repositorio
 
+> **Ramas de este repositorio.** `dev` es la rama de **desarrollo** (repo completo: `test/`, `.github/`, `scripts/`, `CONTRIBUTING.md`, `.nvmrc` y los dev-tools de `.opencode/scripts/`). `main` es la **distribución**: el harness + la memoria, sin ficheros dev-only, y se **regenera** desde `dev` con `node scripts/strip-dev.mjs` (nunca se mergea `dev`→`main`). En `main`, los scripts de desarrollo (`npm test`, `test:contract`, `version:check`, `lint:sh`) no aplican. El paquete npm se publica desde `dev`.
+
 ```
 consigliere/
 ├── init.mjs                # instalador Node universal — ÚNICA implementación

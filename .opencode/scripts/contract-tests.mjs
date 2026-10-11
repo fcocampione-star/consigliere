@@ -95,6 +95,7 @@ const ROOT_ONLY_EXACT = new Set([
   '.opencode/scripts/memory-rotate.test.mjs',
   '.opencode/scripts/contract-tests.mjs',
   '.opencode/scripts/version-check.mjs',
+  'scripts/strip-dev.mjs', // regenerador de `main` desde `dev`: tool de dev del repo, no del harness instalado
   'CONTRIBUTING.md',
   'LICENSE',
   'README.md',
