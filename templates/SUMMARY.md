@@ -11,7 +11,7 @@
 
 <!-- ADVISOR:ENTRIES:END -->
 
-> Cuando registres progreso (via `/record` o `summarizer`), añade entradas al inicio, tras este bloque (formato 2.0 con topic + 6 campos, compat viejo `Qué/Verificación`):
+> Cuando registres progreso (via `/record` o `summarizer`), añade entradas al inicio, tras este bloque (formato 1.0 con topic + 6 campos, compat viejo `Qué/Verificación`):
 
 ```markdown
 ## YYYY-MM-DD — <Título corto>

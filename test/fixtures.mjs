@@ -137,7 +137,7 @@ function summaryOf(entries) {
     ...entries,
     ENTRIES_END,
     '',
-    `${FOOTER_MARK} progreso (via \`/record\` o \`summarizer\`), añade entradas al inicio, tras este bloque (formato 2.0 con topic + 6 campos):`,
+    `${FOOTER_MARK} progreso (via \`/record\` o \`summarizer\`), añade entradas al inicio, tras este bloque (formato 1.0 con topic + 6 campos):`,
     '',
     '```markdown',
     '## YYYY-MM-DD — <Título corto>',
