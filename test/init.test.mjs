@@ -106,8 +106,32 @@ function omitir(motivo) {
   console.log(`  [omitido] ${motivo}`);
 }
 
+// Resolutor de tar del test: MISMO orden que init.mjs (`ADVISOR_TAR` -> System32
+// en win32 -> PATH). El test invoca tar por su cuenta con rutas absolutas, y en
+// Windows el `tar` de GNU del PATH no entiende `C:\...`; resolverlo aquí mantiene
+// el test alineado con el instalador. `test/` es root-only: duplicar la lógica no
+// viola el contrato anti-drift (no se espeja en templates/).
+function resolveTarForTest() {
+  const override = (process.env.ADVISOR_TAR || '').trim();
+  const candidates = override
+    ? [override]
+    : process.platform === 'win32'
+      ? [join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe'), 'tar']
+      : ['tar'];
+  for (const bin of candidates) {
+    const r = spawnSync(bin, ['--version'], { encoding: 'utf8', timeout: 20000, windowsHide: true });
+    if (!r.error && r.status === 0) return bin;
+  }
+  return null;
+}
+function spawnTarForTest(args, opts) {
+  const bin = resolveTarForTest();
+  if (!bin) return { error: Object.assign(new Error('tar no disponible'), { code: 'ENOENT' }), status: null, stdout: '', stderr: '' };
+  return spawnSync(bin, args, { encoding: 'utf8', timeout: 60000, windowsHide: true, ...opts });
+}
+
 function toolVersion(cmd, args) {
-  const r = spawnSync(cmd, args, { encoding: 'utf8', timeout: 20000, windowsHide: true });
+  const r = cmd === 'tar' ? spawnTarForTest(args) : spawnSync(cmd, args, { encoding: 'utf8', timeout: 20000, windowsHide: true });
   if (r.error || r.status !== 0) return null;
   const txt = `${r.stdout || ''}${r.stderr || ''}`.trim();
   return txt.split('\n')[0] || cmd;
@@ -188,7 +212,7 @@ function backupsDe(dir) {
 }
 // Miembros de un .tgz (o null si tar no lo puede leer).
 function miembros(tgz) {
-  const r = spawnSync('tar', ['-tzf', tgz], { encoding: 'utf8', timeout: 60000, windowsHide: true });
+  const r = spawnTarForTest(['-tzf', tgz]);
   if (r.error || r.status !== 0) return null;
   return String(r.stdout || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
 }
@@ -196,7 +220,7 @@ function miembros(tgz) {
 // que habia antes del install.
 function extraerEn(tgz, dest) {
   mkdirSync(dest, { recursive: true });
-  const r = spawnSync('tar', ['-xzf', tgz, '-C', dest], { encoding: 'utf8', timeout: 60000, windowsHide: true });
+  const r = spawnTarForTest(['-xzf', tgz, '-C', dest]);
   assert(!r.error && r.status === 0, `no se pudo extraer ${tgz}: ${r.stderr || (r.error && r.error.message)}`);
   return dest;
 }
@@ -832,34 +856,89 @@ test('la poda de backups borra por EDAD (timestamp parseado), no por prefijo', (
 test('preflight: contenido ajeno al harness sin tar NO bloquea el install; con harness sí', () => {
   const base = tmpdir('advisor-init-preflight');
   const dir = join(base, 'proyecto');
-  const binVacio = join(base, 'bin-vacio');
   try {
-    mkdirSync(binVacio, { recursive: true });
+    // Sin tar resoluble, determinista en TODAS las plataformas: el override
+    // ADVISOR_TAR es autoritativo y apunta a una ruta inexistente, así que
+    // hasTar() es false. (Un PATH vacío no bastaba: en Windows el resolutor
+    // encuentra el `tar.exe` de System32 sin mirar el PATH.)
+    const sinTar = { ...process.env, ADVISOR_TAR: join(base, 'no-existe', 'tar') };
     mkdirSync(dir, { recursive: true });
     escribir(join(dir, 'notas.txt'), 'contenido del usuario, nada del harness\n');
     escribir(join(dir, 'main.js'), '// su codigo\n');
-    const sinTar = { ...process.env, PATH: binVacio };
 
     // No hay nada del harness que respaldar: doBackup no llamaría a tar, así que
     // exigirlo en el preflight sería contradecir su propia regla.
     const res = instalar([dir, '--force', ...SIN_RED], base, sinTar);
-    if (!/No encuentro 'tar'/.test(res.out)) {
-      omitir(`tar sigue resoluble pese al PATH vacío en ${process.platform}: el caso no probaría nada`);
-    } else {
-      eq(res.status, 0, salida(res, 'install forzado sin tar sobre un directorio con contenido ajeno'));
-      assert(existe(join(dir, 'AGENTS.md')), 'el harness debe generarse igualmente');
-      eq(leer(join(dir, 'notas.txt')), 'contenido del usuario, nada del harness\n', 'los archivos del usuario no se tocan');
-    }
+    eq(res.status, 0, salida(res, 'install forzado sin tar sobre un directorio con contenido ajeno'));
+    match(res.out, /No encuentro 'tar'/, salida(res, 'debe avisar de la ausencia de tar (no bloquear)'));
+    assert(existe(join(dir, 'AGENTS.md')), 'el harness debe generarse igualmente');
+    eq(leer(join(dir, 'notas.txt')), 'contenido del usuario, nada del harness\n', 'los archivos del usuario no se tocan');
 
     // Ahora sí hay algo que respaldar (AGENTS.md es un ítem de BACKUP_ITEMS):
     // sin tar el backup es imposible y el preflight debe cortar con exit 3.
-    mkdirSync(dir, { recursive: true });
     escribir(join(dir, 'AGENTS.md'), 'AGENTS PROPIO\n');
     const conHarness = instalar([dir, '--force', ...SIN_RED], base, sinTar);
-    if (/No encuentro 'tar'/.test(conHarness.out)) {
-      eq(conHarness.status, 3, salida(conHarness, 'install sobre un destino CON harness sin tar (DEPENDENCIA)'));
-      eq(leer(join(dir, 'AGENTS.md')), 'AGENTS PROPIO\n', 'sin backup no se puede escribir nada: AGENTS.md intacto');
-    }
+    eq(conHarness.status, 3, salida(conHarness, 'install sobre un destino CON harness sin tar (DEPENDENCIA)'));
+    eq(leer(join(dir, 'AGENTS.md')), 'AGENTS PROPIO\n', 'sin backup no se puede escribir nada: AGENTS.md intacto');
+  } finally {
+    cleanup(base);
+  }
+});
+
+test('ADVISOR_TAR bogus es autoritativo: preflight corta con 3 y nombra el override', () => {
+  const base = tmpdir('advisor-init-tar-bogus');
+  const dir = join(base, 'proyecto');
+  try {
+    mkdirSync(dir, { recursive: true });
+    escribir(join(dir, 'AGENTS.md'), 'AGENTS PROPIO\n');
+    const env = { ...process.env, ADVISOR_TAR: join(base, 'no-existe', 'tar') };
+
+    const res = instalar([dir, '--force', ...SIN_RED], base, env);
+    eq(res.status, 3, salida(res, 'ADVISOR_TAR bogus sobre un destino con harness debe salir con 3 (DEPENDENCIA)'));
+    match(res.out, /ADVISOR_TAR/, salida(res, 'el mensaje debe nombrar ADVISOR_TAR'));
+    eq(leer(join(dir, 'AGENTS.md')), 'AGENTS PROPIO\n', 'sin tar resoluble no se escribe nada');
+  } finally {
+    cleanup(base);
+  }
+});
+
+test('ADVISOR_TAR que pasa --version pero falla al usarse: doBackup sale con 4 (usa el resolutor)', () => {
+  const base = tmpdir('advisor-init-tar-roto');
+  const dir = join(base, 'proyecto');
+  try {
+    eq(instalar([dir, ...SIN_RED], base).status, 0, 'el install base (destino vacío, sin backup) debe salir con 0');
+    const antes = instantanea(dir);
+
+    // `process.execPath` (node) es un "tar" que existe en las tres plataformas,
+    // responde 0 a `--version` (así que el resolutor lo acepta) y falla con
+    // stderr distintivo ante los flags de tar. Si doBackup usara el literal
+    // 'tar', el backup saldría bien y el exit sería 0; con el resolutor, 4.
+    const env = { ...process.env, ADVISOR_TAR: process.execPath };
+    const res = instalar([dir, '--upgrade', ...SIN_RED], base, env);
+    eq(res.status, 4, salida(res, 'un ADVISOR_TAR que falla al usarse debe salir con 4 (BACKUP)'));
+    match(res.out, /Backup falló/, salida(res, 'debe reportar el fallo del backup'));
+    match(res.out, /bad option/, salida(res, 'el mensaje debe arrastrar el stderr distintivo del tar falso'));
+    eq(instantanea(dir), antes, 'un backup fallido no debe escribir nada en el destino');
+  } finally {
+    cleanup(base);
+  }
+});
+
+test('ADVISOR_TAR con la ruta real de tar: install con backup sale con 0', () => {
+  const base = tmpdir('advisor-init-tar-real');
+  const dir = join(base, 'proyecto');
+  try {
+    const bin = resolveTarForTest();
+    if (!bin) { omitir('tar ausente: no hay una ruta real que pasar por ADVISOR_TAR'); return; }
+    mkdirSync(dir, { recursive: true });
+    escribir(join(dir, 'AGENTS.md'), 'AGENTS PROPIO\n');
+    const env = { ...process.env, ADVISOR_TAR: bin };
+
+    const res = instalar([dir, '--force', ...SIN_RED], base, env);
+    eq(res.status, 0, salida(res, 'ADVISOR_TAR con un tar real debe permitir el backup'));
+    const backups = backupsDe(dir);
+    eq(backups.length, 1, `el override real debe dejar exactamente un backup (hay ${backups.length})`);
+    assert(esDir(join(dir, '.opencode')), 'el harness debe quedar instalado');
   } finally {
     cleanup(base);
   }

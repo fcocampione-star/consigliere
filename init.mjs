@@ -157,7 +157,41 @@ function hasTool(cmd, args) {
   toolCache.set(cmd, found);
   return found;
 }
-const hasTar = () => hasTool('tar', ['--version']);
+
+// Resolutor de tar (memoizado). En Windows el `tar` de GNU de Git for Windows va
+// primero en el PATH y lee una ruta `C:\...` como un host remoto, mientras que el
+// bsdtar de System32 sí entiende rutas Windows: la discriminación la hace el
+// ORDEN de candidatos, no la sonda (GNU y bsdtar soportan `--version`, así que
+// `--version` solo valida que el binario arranca). Orden: `ADVISOR_TAR` (override
+// explícito, autoritativo y ÚNICO candidato) -> `System32\tar.exe` en win32 ->
+// `tar` del PATH. Memoizado: `undefined` = sin resolver, `null` = ninguno.
+let tarResolved;
+function resolveTar() {
+  if (tarResolved !== undefined) return tarResolved;
+  const override = (process.env.ADVISOR_TAR || '').trim();
+  const candidates = override
+    ? [override]
+    : IS_WIN
+      ? [join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe'), 'tar']
+      : ['tar'];
+  tarResolved = null;
+  for (const bin of candidates) {
+    const r = spawnSync(bin, ['--version'], { stdio: 'ignore', windowsHide: true });
+    if (!r.error && r.status === 0) { tarResolved = bin; break; }
+  }
+  return tarResolved;
+}
+
+// Lanza tar con el binario resuelto. Sin tar disponible devuelve un resultado
+// sintético con `error` (nunca `spawnSync(null, ...)`, que revienta con TypeError):
+// así doBackup/listArchive/extractValidated fallan con su propio exit code.
+function spawnTar(args, opts) {
+  const bin = resolveTar();
+  if (!bin) return { error: Object.assign(new Error('tar no disponible'), { code: 'ENOENT' }), status: null, stderr: '' };
+  return spawnSync(bin, args, { encoding: 'utf8', windowsHide: true, ...opts });
+}
+
+const hasTar = () => resolveTar() !== null;
 const hasGit = () => hasTool('git', ['--version']);
 
 // Primera línea con texto de un stream de error. Es lo que hace accionable un
@@ -191,10 +225,10 @@ function preflight({ tar = false } = {}) {
   if (!hasTar()) {
     if (tar) {
       err(`Falta 'tar' y esta operación lo necesita (hay algo que respaldar en el destino: --upgrade / --restore / --uninstall memoria / escribir encima de un proyecto con harness o memoria).`);
-      err('Instala un tar funcional (GNU tar o bsdtar) y repite; sin él no hay backup ni restore.');
+      err('Instala un tar funcional (GNU tar o bsdtar) y repite, o define ADVISOR_TAR con la ruta al tar que quieras usar; sin él no hay backup ni restore.');
       die(EXIT.DEPENDENCIA);
     }
-    warn(`No encuentro 'tar': solo se necesita si hay algo que respaldar (--upgrade, --restore, o escribir encima de un destino con harness o memoria), así que aquí la operación sigue sin backup.`);
+    warn(`No encuentro 'tar': solo se necesita si hay algo que respaldar (--upgrade, --restore, o escribir encima de un destino con harness o memoria), así que aquí la operación sigue sin backup. Si el tar no está en el PATH, define ADVISOR_TAR con su ruta.`);
   }
   if (!hasGit()) warn(`No encuentro 'git': se omiten la inicialización del repo y el hook post-commit.`);
 }
@@ -259,11 +293,11 @@ function doBackup(target, items, dry) {
   mkdirSync(backupDir, { recursive: true });
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
   const backupFile = join(backupDir, `advisor-${ts}.tgz`);
-  const tar = spawnSync('tar', ['-czf', backupFile, '-C', target, `--exclude=${STATE_DIR}/backups`, '--exclude=.memory-lock', ...present], { encoding: 'utf8', windowsHide: true });
+  const tar = spawnTar(['-czf', backupFile, '-C', target, `--exclude=${STATE_DIR}/backups`, '--exclude=.memory-lock', ...present]);
   if (tar.error || tar.status !== 0) {
     // El backup previo es obligatorio: si falla, no se sobrescribe nada.
     err(`Backup falló (tar ${tarWhy(tar)}): ${backupFile}`);
-    err('Sin backup no se escribe nada. Si es Windows, el tar del PATH tiene que entender rutas Windows: anteponer System32 (bsdtar) al tar GNU de Git, que lee `C:` como host remoto.');
+    err('Sin backup no se escribe nada. Revisa el tar resuelto: define ADVISOR_TAR con la ruta a un tar que entienda rutas Windows (p. ej. el bsdtar de System32), porque el tar de GNU lee `C:` como host remoto.');
     die(EXIT.BACKUP);
   }
   ok(`Backup: ${backupFile} (${present.length} ítems)`);
@@ -311,7 +345,7 @@ function pruneBackups(backupDir) {
 // expandir (el de Windows es bsdtar: sin flags GNU); validar es 100% Node.
 // Devuelve el temporal ya validado, o null si el archivo se rechaza.
 function listArchive(archive) {
-  const r = spawnSync('tar', ['-tzf', archive], { encoding: 'utf8', windowsHide: true });
+  const r = spawnTar(['-tzf', archive]);
   if (r.error || r.status !== 0) {
     return { ok: false, motivo: `tar ${tarWhy(r)}` };
   }
@@ -363,7 +397,7 @@ function extractValidated(archive, target) {
   try {
     mkdirSync(join(target, STATE_DIR, 'backups'), { recursive: true });
     tmp = mkdtempSync(join(target, STATE_DIR, 'backups', '.extract-'));
-    const r = spawnSync('tar', ['-xzf', archive, '-C', tmp], { encoding: 'utf8', windowsHide: true });
+    const r = spawnTar(['-xzf', archive, '-C', tmp]);
     if (r.error || r.status !== 0) motivo = `tar ${tarWhy(r)}`;
     else {
       const bad = escapesIn(tmp);

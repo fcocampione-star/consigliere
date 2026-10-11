@@ -64,7 +64,10 @@ jobs:
       - name: node --check sobre cada .mjs (recuento visible)
         run: |
           set -euo pipefail
-          mapfile -t files < <(find . -name '*.mjs' \
+          # Bucle portable en vez de `mapfile`: el bash 3.2 de macOS no lo trae.
+          # `files=()` es obligatorio: sin él, `set -u` revienta con array vacío.
+          files=()
+          while IFS= read -r f; do files+=("$f"); done < <(find . -name '*.mjs' \
             -not -path './node_modules/*' \
             -not -path './.git/*' \
             -not -path './.advisor/*' | sort)
@@ -482,16 +485,14 @@ jobs:
       # en PROJECT_STATE.md (memoria: tiene que seguir ahí) y un marker en
       # AGENTS.md (config: tiene que desaparecer, porque se regenera).
       #
-      # Nota del tar: el backup usa rutas absolutas estilo `C:\...` y en windows
-      # el shell bash pone el tar de GNU (Git) antes que el bsdtar de System32;
-      # el de GNU interpreta `C:` como un host remoto. Anteponiendo System32 el
-      # `tar` resuelto es el de Windows, que sí entiende esas rutas.
+      # Nota del tar: en windows el shell bash pone el tar de GNU (Git) antes que
+      # el bsdtar de System32, y el de GNU interpreta `C:` como un host remoto.
+      # Ya NO se toca el PATH aquí: `init.mjs` resuelve el tar por sí mismo
+      # (`ADVISOR_TAR` -> System32 en win32 -> PATH) y lo usa en el backup, así
+      # que la elección del tar no depende de cómo quede el PATH del shell.
       - name: "segunda pasada (--upgrade): preserva memoria, regenera config y deja backup"
         run: |
           set -euo pipefail
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            export PATH="/c/Windows/System32:$PATH"
-          fi
           inst="$dest/node_modules/advisor-harness/init.mjs"
           target="$dest/target"
 
