@@ -486,7 +486,7 @@ jobs:
       # el shell bash pone el tar de GNU (Git) antes que el bsdtar de System32;
       # el de GNU interpreta `C:` como un host remoto. Anteponiendo System32 el
       # `tar` resuelto es el de Windows, que sí entiende esas rutas.
-      - name: segunda pasada (--upgrade): preserva memoria, regenera config y deja backup
+      - name: "segunda pasada (--upgrade): preserva memoria, regenera config y deja backup"
         run: |
           set -euo pipefail
           if [ "$RUNNER_OS" = "Windows" ]; then
