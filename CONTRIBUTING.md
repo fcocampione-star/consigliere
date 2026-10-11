@@ -13,6 +13,13 @@ Flujo de desarrollo del harness. Esto es un repo **sin dependencias**: no hay `p
 2. Recuerda el reparto de la memoria: `PROJECT_STATE.md`, `SUMMARY.md` y `CHANGELOG/` son del flujo de memoria (`/record`, agente `summarizer`); el resto de la documentación es de quien cambia el fichero.
 3. Ramas con nombre de feature. Los commits se **proponen**, nunca se empujan solos.
 
+## Política de ramas
+
+- `dev` es la rama de **integración** y `main` la rama **estable**: **ambas son el repo completo** (`test/`, `.github/`, `scripts/`, `CONTRIBUTING.md`, `.nvmrc` y los dev-tools). No hay proyección por contenido: `main` **no se regenera** desde `dev`.
+- Las ramas feature/bug salen de `dev` y mergean a `dev`.
+- La promoción `dev`→`main` es **`--ff-only`** (fast-forward): `main` queda idéntico a `dev`. Si no es fast-forward, `main` se movió por su cuenta y hay que revisarlo antes de tocar nada.
+- El canal de consumo limpio no es una rama: es el paquete **npm** (`files` de `package.json`) y el **source archive del tag** de GitHub (`export-ignore` de `.gitattributes`).
+
 ## Qué validar antes de dar por cerrada una tarea
 
 ```bash
@@ -73,7 +80,7 @@ Además, en la CI no se activa `cache: npm` a propósito: exigiría un lockfile 
 
 ## Publicación
 
-- El tag `v<version>` tiene que coincidir con la versión de `package.json` (lo comprueba `release.yml`).
+- El publish se origina desde **`main`**: el tag `v<version>` se crea sobre `main` y `release.yml` verifica que el commit del tag es ancestro de `origin/main` (con `fetch-depth: 0` + `git merge-base --is-ancestor`); además el tag tiene que coincidir con la versión de `package.json`.
 - `release.yml` invoca `ci.yml` con `workflow_call` y solo publica si pasan los cinco jobs; `npm publish --provenance` + GitHub Release con el tarball adjunto. Un `workflow_dispatch` con `dry-run` verifica sin publicar.
 - `package.json` `files` = `init.sh`, `init.ps1`, `init.cmd`, `init.mjs`, `templates/`, `README.md`, `LICENSE`. Si añades algo al paquete, actualiza también la lista must-have del job `pack-smoke` y la aserción de `git archive`.
 - `.gitattributes` marca con `export-ignore` lo que es desarrollo puro; sin eso, el zip de código de GitHub se lleva `.opencode/`, la memoria y los scripts.

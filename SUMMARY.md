@@ -7,6 +7,32 @@
 
 <!-- ADVISOR:ENTRIES:START -->
 
+## 2026-10-11 — Modelo de ramas D2: `dev`=integración / `main`=estable (repo completo, promoción `--ff-only`)
+
+topic: repo/dev-main-merge
+review_after: 2027-01-09
+**Goal:** abandonar el modelo "`dev` = repo completo / `main` = proyección dist regenerada por `strip-dev.mjs`" y adoptar **D2**: `dev` = integración, `main` = estable, **ambas repo completo**, promoción `dev`→`main` por **`--ff-only`**; el canal limpio es npm (asset) + source archive del tag (conservando `export-ignore`).
+**Discoveries:** la proyección por contenido era innecesaria: el filtrado dev-only ya vive en `files` de npm y en `export-ignore`, así que `main` puede ser idéntico a `dev` tras cada promoción. `release.yml` publicaba sin verificar ancestría → se añade `fetch-depth: 0` + guarda `git merge-base --is-ancestor "$GITHUB_SHA" origin/main`. Reserva del `verifier`: `main` (`4b789ee`) NO es ancestro de `dev` (`358a1ff`) → requiere **migración única** (tag de archivo + `update-ref`), ya planificada.
+**Accomplished:** borrado `scripts/strip-dev.mjs` (entrada fuera de `ROOT_ONLY_EXACT` en `contract-tests.mjs`); `ci.yml` con `push`/`pull_request` sobre `[dev, main]`; `release.yml` con `fetch-depth: 0` + guarda de ancestría sobre `origin/main`; docs `README`/`AGENTS`/`CONTRIBUTING`; `PROJECT_STATE §1/§2/§3/§5` (nueva decisión `repo/dev-main-merge`; `release/npm-publish` pasa a publicar desde `main`); `CHANGELOG/DECISIONS-ARCHIVE.md` (`repo/dev-main-split` superada); rama local `feat/npm` borrada.
+**Next:** migración única de refs en `main` (tag de archivo + `update-ref`, para que `main` sea ancestro de `dev`); después, commit de esta migración (**pendiente, NO ejecutado aquí**).
+**Files:** `git log --oneline -5` (`358a1ff` = /record previo; el commit de esta migración **AÚN NO existe**).
+**Verificación:** PASS (`verifier`) — `npm test`, `npm run test:contract` (41 espejos), `npm run test:unit`, `doctor --json` 0❌/0⚠️, `lint:sh`, `version:check`; `grep strip-dev` = 0 fuera del histórico.
+
+## 2026-10-11 — spec: repo-dev-main-merge (modelo de ramas D2)
+
+topic: sdd/repo-dev-main-merge/spec
+**Goal:** conservar la spec-lite (criterios MUST/SHOULD verificables) que guió la migración al modelo D2, para que el build quede auditable.
+**MUST (RFC2119):**
+- M1 reconciliación de refs: Given `main` (estable) no ancestro de `dev` When se promociona Then una migración única (tag de archivo + `update-ref`) deja `main` como ancestro, habilitando `--ff-only`.
+- M2 `main` repo completo sin `opencode.json`: Given el repo `main` When se inspecciona Then contiene `test/`/`.github/`/`scripts/`/`CONTRIBUTING.md`/`.nvmrc` y NO recibe `opencode.json` por proyección.
+- M3 eliminar `strip-dev`: Given el árbol When se busca `strip-dev` Then hay 0 referencias fuera del histórico y la entrada sale de `ROOT_ONLY_EXACT`.
+- M4 CI en `dev`+`main`: Given `ci.yml` When hay `push`/`pull_request` en `[dev, main]` Then los 5 jobs corren en ambas ramas.
+- M5 tag `v*` sobre `main`: Given un tag `v*` When `release.yml` publica Then exige ancestría (`fetch-depth: 0` + `merge-base --is-ancestor "$GITHUB_SHA" origin/main`).
+- M6 default `main` + canal limpio: Given el canal de consumo Then es npm (asset) + source archive del tag (`export-ignore`), no una rama distinta.
+- M7 superseder la decisión antigua: Given `repo/dev-main-split` When se consolida Then queda superada en `DECISIONS-ARCHIVE.md` y sustituida por `repo/dev-main-merge` en §2.
+**SHOULD:** proteger `main` (branch protection); declarar `pull_request.branches` explícitas; guarda de ancestría en release; conservar `export-ignore`.
+**Veredicto critic:** APROBADO (implementación verificada en verde por `verifier`).
+
 ## 2026-10-11 — Publicación npm: versión/branding a 1.0, fixes de empaquetado y `1.0.1` publicada
 
 topic: release/npm-publish

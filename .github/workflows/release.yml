@@ -62,7 +62,12 @@ jobs:
       run:
         shell: bash
     steps:
+      # Historial completo: la guarda de abajo comprueba ancestría con
+      # `git merge-base --is-ancestor`, que necesita los objetos del commit del
+      # tag y de `origin/main` (un checkout shallow no los trae).
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -91,6 +96,18 @@ jobs:
             exit 1
           fi
           echo "tag ${{ github.ref_name }} == package.json v$version"
+
+      # El publish se origina desde `main` (rama estable): un tag fuera de `main`
+      # no es un release publicable. Solo aplica al disparo por tag (en
+      # workflow_dispatch no hay tag que situar).
+      - name: el tag está sobre main
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "::error::el tag ${{ github.ref_name }} no está sobre main"; exit 1; }
+          echo "tag ${{ github.ref_name }} ($GITHUB_SHA) es ancestro de origin/main"
 
       # Las mismas validaciones que en el paso de release de la CI, por si este
       # workflow se lanza solo (workflow_dispatch).

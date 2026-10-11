@@ -56,7 +56,7 @@
 
 ## Development commands
 
-> Estos comandos viven en la rama `dev` (desarrollo). En `main` (distribución, regenerada con `node scripts/strip-dev.mjs`) no aplican.
+> Estos comandos aplican tanto a `dev` (integración) como a `main` (estable): ambas ramas son el repo completo. La promoción es `dev`→`main` con `--ff-only`; ya no hay rama dist.
 
 ```bash
 npm test                                              # suite completa: node --check + test/ + rotación + contrato + versión

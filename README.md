@@ -93,6 +93,8 @@ Primero, cómo ejecutar el instalador (todas las vías usan el mismo `init.mjs`)
 | **Global** | `npm install -g advisor-harness`, luego `advisor <dir>` (o `advisor-harness <dir>`) | Quieres el bin en el `PATH` para varios proyectos |
 | **Clon** | `git clone https://github.com/fcocampione-star/consigliere.git && cd consigliere` | Desarrollo o sin acceso a npm; luego `node init.mjs` / `./init.sh` / `powershell -File init.ps1` |
 
+> El clon trae el **repo completo** (rama estable o de integración: mismo árbol con `test/`, `.github/`, `scripts/` y el resto de dev-only). Eso no afecta a lo que genera el instalador en tu proyecto: `init.mjs` escribe solo el harness desde `templates/`.
+
 > ⚠️ **`npx advisor` no es lo mismo:** resolvería el paquete `advisor` del registry, no el harness. Usa siempre `npx advisor-harness@latest` (o el bin `advisor` **solo** tras un `npm install -g advisor-harness`).
 
 ### Camino simple: happy path (0 prompts)
@@ -102,7 +104,7 @@ Primero, cómo ejecutar el instalador (todas las vías usan el mismo `init.mjs`)
 npx advisor-harness@latest .   # en una carpeta vacía: genera directo, sin preguntar nada
 
 # vía clon
-git clone https://github.com/fcocampione-star/consigliere.git && cd <carpeta-del-clon>  # por defecto: consigliere
+git clone https://github.com/fcocampione-star/consigliere.git && cd <carpeta-del-clon>  # por defecto: consigliere (repo completo)
 node init.mjs            # en una carpeta vacía: genera directo, sin preguntar nada
 ```
 
@@ -136,7 +138,7 @@ init.cmd                     # CMD
 - **`--interactive` / `-i`**: fuerza el asistente aunque la carpeta esté vacía.
 - **Stack** (opcional, Enter = saltar): base de datos, backend, frontend, auth, validación, deploy — pre-rellena `AGENTS.md` y `SKILL.md`.
 - **Modelos**: un solo prompt — `¿Modelos por defecto (heredar todos)? [recomendado]/personalizar`. Si eliges *personalizar*, los 7 modelos se piden en una línea, coma-separados, en orden `advisor,planner,builder,critic,verifier,summarizer,explore` (vacío = heredar). Ya no hay 7 preguntas separadas.
-- Descarga ZIP: descomprime → `cd <carpeta-del-zip>` (nombre de carpeta del ZIP, normalmente `consigliere-main`) → mismo comando de arriba.
+- Descarga ZIP: descomprime → `cd <carpeta-del-zip>` (nombre de carpeta del ZIP, normalmente `consigliere-<rama>`) → mismo comando de arriba. El ZIP de código también trae el repo completo; el filtrado dev-only solo aplica al `source archive` del tag vía `export-ignore`.
 
 ### Camino avanzado: no-interactivo (CI / scripts)
 
@@ -326,7 +328,7 @@ Genera frontmatter válido para `_skill-loader` (`name` == directorio, `descript
 
 ## Estructura de este repositorio
 
-> **Ramas de este repositorio.** `dev` es la rama de **desarrollo** (repo completo: `test/`, `.github/`, `scripts/`, `CONTRIBUTING.md`, `.nvmrc` y los dev-tools de `.opencode/scripts/`). `main` es la **distribución**: el harness + la memoria, sin ficheros dev-only, y se **regenera** desde `dev` con `node scripts/strip-dev.mjs` (nunca se mergea `dev`→`main`). En `main`, los scripts de desarrollo (`npm test`, `test:contract`, `version:check`, `lint:sh`) no aplican. El paquete npm se publica desde `dev`.
+> **Ramas de este repositorio.** `dev` es la rama de **integración** y `main` la rama **estable**: **ambas son el repo completo** (`test/`, `.github/`, `scripts/`, `CONTRIBUTING.md`, `.nvmrc` y los dev-tools de `.opencode/scripts/`). La promoción es `dev`→`main` con **`--ff-only`** (fast-forward, sin regenerar): `main` queda idéntico a `dev` en cada promoción. El **canal de consumo limpio no es una rama** sino el paquete **npm** (`advisor-harness`, publicado con `files`) y el **source archive del tag** de GitHub (`git archive`, que respeta el `export-ignore` de `.gitattributes`); el filtrado de lo dev-only ocurre ahí, no en una rama distinta. El paquete npm se publica desde `main` (tag `v*`). Los scripts de desarrollo (`npm test`, `test:contract`, `version:check`, `lint:sh`) aplican igual en `dev` y en `main`.
 
 ```
 consigliere/
