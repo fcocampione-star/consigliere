@@ -2,7 +2,7 @@
 
 > **Solo por proyecto.** Un scaffold reutilizable que deja cada proyecto listo para trabajar con opencode: agentes orquestados, memoria que recuerda decisiones entre sesiones y comandos para auditar, registrar y revisar el progreso. Sin binarios globales, sin servicios: es Markdown + scripts que se instalan **dentro** del proyecto.
 
-> **⚠️ Disponibilidad de `npx`:** la vía `npx advisor-harness@latest` requiere que el paquete esté publicado en npm (hito futuro, aún no publicado). **Hoy usa las instrucciones locales** (`git clone` + `node init.mjs` / `./init.sh` / `powershell -File init.ps1`). Cuando se publique, `npx` funcionará igual sin cambiar nada.
+> **✅ Disponibilidad de `npx`:** el paquete ya está publicado en npm (v1.0.0), así que `npx advisor-harness@latest` funciona directamente. También puedes usar las instrucciones locales (`git clone` + `node init.mjs` / `./init.sh` / `powershell -File init.ps1`).
 
 ## Requisitos
 
