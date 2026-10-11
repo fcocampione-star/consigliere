@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Consigliere 2.0 (Advisor Harness) — shim bash: delega todo en init.mjs (única implementación).
+# Consigliere 1.0 (Advisor Harness) — shim bash: delega todo en init.mjs (única implementación).
 # Uso:
 #   ./init.sh                              # equivalente a: node init.mjs
 #   ./init.sh [ruta/proyecto] [flags...]   # flags de init.mjs (./init.sh --help)

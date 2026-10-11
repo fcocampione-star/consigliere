@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Consigliere 2.0 (Advisor Harness) — memory-tokens.mjs
+ * Consigliere 1.0 (Advisor Harness) — memory-tokens.mjs
  * Estimador ESTATICO del ahorro potencial en tokens entre un flujo
  * `plan+build` sin memoria y el agente advisor con memoria persistente.
  *

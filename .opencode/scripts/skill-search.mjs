@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Consigliere 2.0 (Advisor Harness) — skill-search.mjs
+ * Consigliere 1.0 (Advisor Harness) — skill-search.mjs
  * Uso: node .opencode/scripts/skill-search.mjs "<query>" [--json] [--refresh] [--offline] [--limit N]
  * Exit: 0 ok (también sin red y sin cache: aviso por stderr, stdout vacío, sin crash); 1 uso inválido.
  *

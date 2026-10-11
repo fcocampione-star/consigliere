@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Consigliere 2.0 (Advisor Harness) — memory-sync.mjs (sync local, sin cloud)
+ * Consigliere 1.0 (Advisor Harness) — memory-sync.mjs (sync local, sin cloud)
  * Estado vivo en .advisor/ (escritura y lectura).
  * Derivados: memory-manifest.json (<15 líneas, trackeable, SIN mtime
  * para evitar stale-on-clone) + memory-index.json (fingerprint completo,

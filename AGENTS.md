@@ -17,7 +17,7 @@
 - **Rule**: historical detail lives in `CHANGELOG/` + `git log`. Never duplicate archived entries back into `SUMMARY.md`.
 - **Anti-concurrency**: a `.memory-lock` directory guards concurrent memory writes; never leave it orphaned.
 
-## Agent pipeline (Consigliere 2.0 (Advisor Harness) — routing orgánico + SDD-lite)
+## Agent pipeline (Consigliere 1.0 (Advisor Harness) — routing orgánico + SDD-lite)
 
 - Custom agents live in `.opencode/agents/`; commands in `.opencode/commands/`.
 - `advisor` is the additional **primary** agent (Tab) que coordina: siempre lee `PROJECT_STATE.md` primero, luego aplica **routing orgánico** por **clase de riesgo**: esquema/auth/contrato/migración/irreversible/arquitectura → `delegated`/`spec-lite`; riesgo bajo → `direct`; el **conteo de files es solo desempate** (`spec-lite` ante ambigüedad duradera → spec ≤650w Given/When/Then).
@@ -80,7 +80,7 @@ node init.mjs /tmp/demo --name demo                   # probar instalador univer
 
 > CI (`.github/workflows/ci.yml`, 5 jobs): `node --check` de cada `.mjs` + `npm test` en 3 SO x Node 20/22/24, lint de shell y PowerShell, límites de memoria con aserción de paridad bash/PowerShell, drift + empaquetado, y `pack-smoke` (instala el tarball en un temporal y ejecuta el instalador). `release.yml` gatea la publicación en CI. Detalles y notas de mantenimiento en `CONTRIBUTING.md`.
 
-## Directory structure (2.0 solo por proyecto)
+## Directory structure (1.0 solo por proyecto)
 
 ```
 consigliere/

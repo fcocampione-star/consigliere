@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Consigliere 2.0 (Advisor Harness) — memory-rotate.mjs
+ * Consigliere 1.0 (Advisor Harness) — memory-rotate.mjs
  * Motor de rotación de memoria (F1b): mueve entradas antiguas de SUMMARY.md a
  * CHANGELOG/<lunes-de-cada-entrada>.md y actualiza el índice §4 de
  * PROJECT_STATE.md. Sin flock/sed/grep/perl/date externos: solo Node ESM

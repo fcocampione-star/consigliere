@@ -4,7 +4,7 @@ agent: explore
 subtask: true
 ---
 
-Ejecuta diagnóstico del harness Advisor 2.0. Revisa (read-only, sin editar):
+Ejecuta diagnóstico del harness Advisor 1.0. Revisa (read-only, sin editar):
 
 1. `opencode.json` — que exista y parsee como JSON, `default_agent: advisor`, `subagent_depth: 2` y harden bash (`agent.builder.permission.bash["cat **/.env*"] → ask`).
 2. Memoria: `PROJECT_STATE.md` <100 líneas, §2 <80, `SUMMARY.md` <150, entradas con `topic:`, índice §4 coherente con `CHANGELOG/` (índice §4 = manual). El `review_after` vencido / `stale[]` del manifest lo reporta `doctor.mjs` como ℹ️ informativo (no bloqueante); `/review` detalla y `/review --mark <topic>` extiende +90d.

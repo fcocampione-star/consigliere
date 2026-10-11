@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * contract-tests.mjs — Contract tests anti-drift + invariantes del harness Advisor 2.0.
+ * contract-tests.mjs — Contract tests anti-drift + invariantes del harness Advisor 1.0.
  * Uso: node .opencode/scripts/contract-tests.mjs
  * Exit: 0 = PASS, 1 = algún invariante roto.
  *

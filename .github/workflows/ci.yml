@@ -1,4 +1,4 @@
-# CI — Consigliere 2.0 (Advisor Harness)
+# CI — Consigliere 1.0 (Advisor Harness)
 #
 # Repo sin dependencias y sin lockfile a propósito: aquí NO hay `npm ci`.
 # Lo que se valida es el propio harness (plantillas, espejo raíz↔templates,

@@ -31,21 +31,21 @@ Reducir el desorden de contexto en sesiones largas delegando el trabajo en agent
 - **Orquestador estricto**: `permission` del orquestador con `edit/glob/grep/bash/webfetch: deny`. Su único mecanismo de acción es elaborar prompts autocontenidos y delegar vía `task`. Cada prompt delegado pasa **DELTAS, no estado completo**: Delta de contexto (tarea + archivos implicados + decisión §2 por `topic` + id de plan/spec) / Objetivo / Alcance-restricciones / Formato de retorno. Cada hoja lee la memoria que necesita (elimina la duplicación ×5-6 y el teléfono descompuesto).
 - **Modelos por subagente**: tag `model` en `opencode.json` (placeholders al generar; el usuario los rellena). Modelos baratos para verifier/summarizer/explore; caros para builder/planner/critic.
 - **Profundidad**: hojas (`planner/builder/verifier/critic/summarizer`) tienen `permission.task: deny`. Solo el advisor delega; `subagent_depth: 2` permite que planner delegue en explore si es estrictamente necesario.
-- **Routing por CLASE DE RIESGO 2.0** (Gentle AI trigger-rules inspirado, md+grep): la ruta la decide el riesgo (¿toca esquema/auth/contrato/migración/irreversible/arquitectura?), y el **conteo de files es desempate**, no criterio primario. `direct` = riesgo bajo (≤3 files) · `delegated` = riesgo medio (>3 files acoplados / 2+ writes no triviales) · `spec-lite` = riesgo alto o ambigüedad duradera. Integrado por defecto en `routine` y `planner` (§2 Routing).
+- **Routing por CLASE DE RIESGO 1.0** (Gentle AI trigger-rules inspirado, md+grep): la ruta la decide el riesgo (¿toca esquema/auth/contrato/migración/irreversible/arquitectura?), y el **conteo de files es desempate**, no criterio primario. `direct` = riesgo bajo (≤3 files) · `delegated` = riesgo medio (>3 files acoplados / 2+ writes no triviales) · `spec-lite` = riesgo alto o ambigüedad duradera. Integrado por defecto en `routine` y `planner` (§2 Routing).
 - **SDD-lite integrado**: `planner` genera spec ≤650w MUST/SHOULD + Given/When/Then + Tasks checklist cuando detecta ambigüedad; `summarizer` persiste como `topic: sdd/<name>/spec` con upsert. El `builder` **consume la spec persistida** (`node .opencode/scripts/memory-index.mjs get "sdd/<name>/spec"` o inline) antes de implementar.
-- **Bash harden 2.0**: `deny` irreparable + `ask` sensibles (`**/.env*`, `**/*.pem`, `**/*.key`, `**/secrets/*`, `~/.ssh/*`, `~/.aws/credentials`) + `ask` para `git commit/amend/push` (historia publicada/reescrita).
+- **Bash harden 1.0**: `deny` irreparable + `ask` sensibles (`**/.env*`, `**/*.pem`, `**/*.key`, `**/secrets/*`, `~/.ssh/*`, `~/.aws/credentials`) + `ask` para `git commit/amend/push` (historia publicada/reescrita).
 - **Critic**: revisor entre planner y builder para arquitectura/migraciones/refactor; invoca si la clase de riesgo es alta (esquema/contrato/migración/arquitectura), >3 files acoplados o spec-lite.
-- **Cuándo invocar `critic`** (2.0): antes de `builder` cuando plan/spec propone:
+- **Cuándo invocar `critic`** (1.0): antes de `builder` cuando plan/spec propone:
   - Cambio arquitectónico (tabla, esquema/RLS, patrón, refactor), migraciones/breaking/deuda, >3 files acoplados, tipos/APIs/contratos DB.
 
 - **Commits propuestos, no automáticos**: `git commit/push/amend → ask`.
-- **Memoria 2.0**: advisor SIEMPRE lee `PROJECT_STATE.md`; SUMMARY/CHANGELOG on-demand; topic upsert + stale `review_after` + búsqueda `memory-index.mjs` + sync local `memory-sync.mjs`. El `review_after` vencido / `stale[]` del manifest se surfacea en `/review` y en `/doctor` como ℹ️ informativo (nunca bloqueante).
+- **Memoria 1.0**: advisor SIEMPRE lee `PROJECT_STATE.md`; SUMMARY/CHANGELOG on-demand; topic upsert + stale `review_after` + búsqueda `memory-index.mjs` + sync local `memory-sync.mjs`. El `review_after` vencido / `stale[]` del manifest se surfacea en `/review` y en `/doctor` como ℹ️ informativo (nunca bloqueante).
 
-## Archivos 2.0
+## Archivos 1.0
 
 - `.opencode/agents/advisor.md` — primario, routing orgánico + SDD-lite.
 - `.opencode/agents/planner.md` — con spec Given/When/Then; `builder.md` harden; `summarizer.md` topic upsert; `verifier.md`/`critic.md`.
-- `opencode.json` — `default_agent: advisor`, `depth 2`, `model` cheap vs strong, `bash` harden v2.0.
+- `opencode.json` — `default_agent: advisor`, `depth 2`, `model` cheap vs strong, `bash` harden v1.0.
 - `.opencode/commands/routine.md` — `/routine` routing+spec-lite; `/discover`; `/doctor`; `/review`; `/record`; `/rotate-memory`; `/compact-state`.
 - `.opencode/skills/_skill-loader/loader.mjs` — con cache fingerprint `.advisor/skill-registry.cache.json` + `refresh`.
 - `.opencode/scripts/memory-index.mjs` — search/timeline/get (md+grep); `memory-sync.mjs` export/import; `doctor.mjs`.
@@ -64,9 +64,9 @@ Reducir el desorden de contexto en sesiones largas delegando el trabajo en agent
 - **NOTA (duda no resuelta):** la precedencia exacta entre `agent.<name>.permission` de `opencode.json` y el `permission` del frontmatter `agents/<name>.md` **no está documentada oficialmente**. Por eso ambos se mantienen **consistentes** (defensa en profundidad): `opencode.json` como enforcement real, frontmatter como espejo legible/portable. Si alguna vez divergen, tratar `opencode.json` como autoridad.
 - `verifier` mantiene `deny` (más fuerte) para `git commit/amend/push`; no se debilita a `ask`.
 
-## Estado 2.0
+## Estado 1.0
 
-Advisor 2.0 implementado: solo por proyecto (cero global), routing `direct/delegated/spec-lite`, harden sensibles, skill-cache, doctor, memoria topic+stale+sync. Solo `opencode`.
+Advisor 1.0 implementado: solo por proyecto (cero global), routing `direct/delegated/spec-lite`, harden sensibles, skill-cache, doctor, memoria topic+stale+sync. Solo `opencode`.
 
 ## Pendientes / posibles mejoras futuras
 

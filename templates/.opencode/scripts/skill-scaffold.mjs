@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Consigliere 2.0 (Advisor Harness) — skill-scaffold.mjs
+ * Consigliere 1.0 (Advisor Harness) — skill-scaffold.mjs
  * Uso: node .opencode/scripts/skill-scaffold.mjs <name> [--description ".."] [--chunks a,b] [--write] [--force]
  * Exit: 0 ok (dry-run imprime el esqueleto por stdout; `--write` lo escribe), 1 uso inválido o destino existente.
  *

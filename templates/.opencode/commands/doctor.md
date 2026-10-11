@@ -4,7 +4,7 @@ agent: explore
 subtask: true
 ---
 
-Ejecuta diagnóstico del harness Advisor 2.0. Revisa (read-only, sin editar) por capas:
+Ejecuta diagnóstico del harness Advisor 1.0. Revisa (read-only, sin editar) por capas:
 
 **A) Proyecto** (puede dar ✅/⚠️/❌):
 1. `opencode.json` — que exista y parsee como JSON, `default_agent: advisor`, `subagent_depth: 2` y harden bash (`agent.builder.permission.bash["cat **/.env*"] → ask`).

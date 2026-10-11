@@ -1,6 +1,6 @@
-# MEMORY-SYSTEM 2.0 — Sistema de memoria persistente de 3 capas (md+grep, topic upsert)
+# MEMORY-SYSTEM 1.0 — Sistema de memoria persistente de 3 capas (md+grep, topic upsert)
 
-> Documentación del sistema de contexto persistente generado por ADVISOR 2.0. Inspirado en Engram (SQLite+FTS5) pero **solo md+grep, sin SQLite**.
+> Documentación del sistema de contexto persistente generado por ADVISOR 1.0. Inspirado en Engram (SQLite+FTS5) pero **solo md+grep, sin SQLite**.
 
 ## Capas
 
@@ -10,7 +10,7 @@
 | 1 — Reciente | `SUMMARY.md` | on-demand | entradas última semana + `topic: family/kebab` + índice | < ~150 líneas |
 | 2 — Archivo | `CHANGELOG/YYYY-MM-DD.md` | rare/on-demand | historial semanal (lunes) + `DECISIONS-ARCHIVE.md` | ilimitado |
 
-## Principios 2.0
+## Principios 1.0
 
 - **Carga selectiva**: solo STATE siempre. SUMMARY on-demand. CHANGELOG raramente. Eficiente en tokens.
 - **Sin listas de archivos**: fuente `git log`.
@@ -19,7 +19,7 @@
 - **Un solo escritor**: `summarizer` es el único que escribe memoria.
 - **Review_after**: decisiones llevan `review_after: YYYY-MM-DD` (+90d). `/review` lista stale (`needs_review`).
 
-## Estructura de entradas (SUMMARY.md) 2.0
+## Estructura de entradas (SUMMARY.md) 1.0
 
 ```markdown
 ## YYYY-MM-DD — <Título corto>
@@ -90,7 +90,7 @@ Compat: viejo `**Qué:**/**Verificación:**` se migra a 6 campos.
 
 - `/doctor` — health check (doctor.mjs) + `/review` stale + `/record` 6 campos + topic
 
-## Archivos 2.0
+## Archivos 1.0
 
 - `PROJECT_STATE.md` — CAPA 0, con `review_after` + `topic:`
 - `SUMMARY.md` — CAPA 1, con `topic:` + 6 campos

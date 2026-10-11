@@ -1,5 +1,5 @@
 /**
- * Consigliere 2.0 (Advisor Harness) — lib/core.mjs
+ * Consigliere 1.0 (Advisor Harness) — lib/core.mjs
  * Biblioteca canónica de filesystem, proceso y CLI para los scripts del harness.
  *
  * Consolida las seis copias dispersas de estas utilidades (rutas, test de "soy el

@@ -1,5 +1,5 @@
 /**
- * Consigliere 2.0 (Advisor Harness) — lib/md.mjs
+ * Consigliere 1.0 (Advisor Harness) — lib/md.mjs
  * Biblioteca canónica de parseo de Markdown para los scripts del harness.
  *
  * Consolida las copias dispersas de: extracción de campos de metadatos

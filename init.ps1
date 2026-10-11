@@ -1,7 +1,7 @@
 ﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
-  Consigliere 2.0 (Advisor Harness) — shim PowerShell: delega todo en init.mjs (única implementación).
+  Consigliere 1.0 (Advisor Harness) — shim PowerShell: delega todo en init.mjs (única implementación).
 .DESCRIPTION
   Sin instalación global. Uso: npx advisor-harness@latest <ruta> o powershell -File init.ps1 <ruta>
 .NOTES

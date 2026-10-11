@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Consigliere 2.0 (Advisor Harness) — memory-stats.mjs
+ * Consigliere 1.0 (Advisor Harness) — memory-stats.mjs
  * Utilidades puras para rotación de memoria (F1b): fecha de lunes en UTC y
  * conteo de líneas de entradas delimitadas por marcadores. Sin dependencias.
  *

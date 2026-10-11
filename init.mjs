@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Consigliere 2.0 (Advisor Harness) — Harness de agentes + memoria persistente para opencode.
+ * Consigliere 1.0 (Advisor Harness) — Harness de agentes + memoria persistente para opencode.
  * Instalador/generador SOLO por proyecto (Node >=20.11). Sin instalación global.
  *
  * Estado vivo en `.advisor/` (sin ramas legacy).
@@ -663,7 +663,7 @@ function gitInitAndCommit(repo, templateDir, force) {
     warn(`git add falló (${spawnWhy(add)}): repo inicializado, archivos sin preparar. Usa git add -A a mano.`);
     return;
   }
-  const commit = spawnSync('git', ['-c', 'user.name=CONSIGLIERE', '-c', 'user.email=consigliere@local', 'commit', '-q', '-m', 'chore: scaffold harness ADVISOR 2.0'], { cwd: repo, stdio: 'inherit' });
+  const commit = spawnSync('git', ['-c', 'user.name=CONSIGLIERE', '-c', 'user.email=consigliere@local', 'commit', '-q', '-m', 'chore: scaffold harness ADVISOR 1.0'], { cwd: repo, stdio: 'inherit' });
   if (!gitOk(commit)) {
     warn(`git commit falló (${spawnWhy(commit)}): repo inicializado y staged, sin commit. Confirma a mano.`);
     return;
@@ -963,7 +963,7 @@ async function interactiveCreate() {
   requireInteractive();
   banner();
   console.log();
-  step('Nuevo proyecto — ADVISOR 2.0 (solo por proyecto)');
+  step('Nuevo proyecto — ADVISOR 1.0 (solo por proyecto)');
   const rawDir = (await ask('  📁 Ruta del directorio del proyecto: ')).trim();
   if (!rawDir) { err('Ruta vacía.'); die(EXIT.USO); }
   const targetDir = resolveTarget(rawDir);
@@ -1324,7 +1324,7 @@ function cwdEmpty() {
 function happyPath(targetDir = process.cwd()) {
   const projectName = basename(targetDir);
   banner();
-  step(`Happy path — generando ADVISOR 2.0 en '.' (${targetDir})`);
+  step(`Happy path — generando ADVISOR 1.0 en '.' (${targetDir})`);
   ok('Defaults aplicados (modelos heredados, sin stack).');
   ok('Autoskills: 3 (omitir) | Git init: Sí');
   installTail({

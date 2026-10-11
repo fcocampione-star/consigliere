@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Consigliere 2.0 (Advisor Harness) — doctor.mjs (health check programático, md+grep)
+ * Consigliere 1.0 (Advisor Harness) — doctor.mjs (health check programático, md+grep)
  * Uso: node .opencode/scripts/doctor.mjs [--json]
  * Códigos: 0 ok, 1 warnings, 2 errors
  *
@@ -34,7 +34,7 @@ try {
   else add('opencode.json','⚠️','default_agent/subagent_depth inesperado','Revisa templates/opencode.json');
   const b = j.agent?.builder?.permission?.bash;
   if (b && b['cat **/.env*']==='ask') add('bash harden','✅','deny+ask sensibles presentes');
-  else add('bash harden','⚠️','falta harden v2.0 (cat **/.env* -> ask)','Re-render init.mjs --upgrade');
+  else add('bash harden','⚠️','falta harden v1.0 (cat **/.env* -> ask)','Re-render init.mjs --upgrade');
 } catch(e){ add('opencode.json','❌',e.message,'npx advisor-harness@latest . --upgrade'); }
 
 // 2 memoria sizes

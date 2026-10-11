@@ -1,5 +1,5 @@
 /**
- * Consigliere 2.0 (Advisor Harness) — lib/cache.mjs
+ * Consigliere 1.0 (Advisor Harness) — lib/cache.mjs
  * Biblioteca canónica de validación por fingerprint para las cachés del harness.
  *
  * Las cachés derivadas (`.advisor/memory-index.json`,

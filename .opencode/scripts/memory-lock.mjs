@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Consigliere 2.0 (Advisor Harness) — memory-lock.mjs
+ * Consigliere 1.0 (Advisor Harness) — memory-lock.mjs
  * Lock cross-platform para escrituras de memoria (md+grep), sin flock/perl/sed/date/grep externos.
  *
  * Contrato:

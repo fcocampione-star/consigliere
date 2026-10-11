@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ADVISOR 2.0 — Hook post-commit: shim delgado del motor de rotación.
+# ADVISOR 1.0 — Hook post-commit: shim delgado del motor de rotación.
 # =============================================================================
 # DESACTIVADO POR DEFECTO. Es un BACKUP opcional, no el disparador canónico.
 # La rotación canónica la ejecuta `/record` → `summarizer` →
