@@ -56,6 +56,8 @@
 
 ## Development commands
 
+> Estos comandos viven en la rama `dev` (desarrollo). En `main` (distribución, regenerada con `node scripts/strip-dev.mjs`) no aplican.
+
 ```bash
 npm test                                              # suite completa: node --check + test/ + rotación + contrato + versión
 npm run test:unit                                    # solo la suite de test/ (micro-framework sin deps, un proceso por archivo)

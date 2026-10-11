@@ -1,0 +1,92 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "advisor",
+  "subagent_depth": 2,
+  "instructions": ["AGENTS.md"],
+  "agent": {
+    "advisor": {
+      "mode": "primary",
+      "model": "{{MODEL_ADVISOR}}"
+    },
+    "planner": {
+      "mode": "subagent",
+      "model": "{{MODEL_PLANNER}}"
+    },
+    "builder": {
+      "mode": "subagent",
+      "model": "{{MODEL_BUILDER}}",
+      "permission": {
+        "bash": {
+          "*": "allow",
+          "rm -rf /*": "deny",
+          "rm -rf ~*": "deny",
+          "sudo rm*": "deny",
+          "sudo dd*": "deny",
+          "dd if=* of=/dev/*": "deny",
+          "mkfs*": "deny",
+          "chmod -R 777 /*": "deny",
+          "chmod 777*": "deny",
+          "del /f /s C:\\*": "deny",
+          "rmdir /s* C:\\*": "deny",
+          "Remove-Item* C:\\*": "deny",
+          "Format-Volume*": "deny",
+          "diskpart*": "deny",
+          "cat **/.env*": "ask",
+          "cat **/*.pem": "ask",
+          "cat **/*.key": "ask",
+          "cat **/secrets/*": "ask",
+          "cat ~/.ssh/*": "ask",
+          "cat ~/.aws/credentials*": "ask",
+          "cat ~/.config/gh/hosts.yml": "ask",
+          "git commit*": "ask",
+          "git amend*": "ask",
+          "git push*": "ask"
+        }
+      }
+    },
+    "verifier": {
+      "mode": "subagent",
+      "model": "{{MODEL_VERIFIER}}"
+    },
+    "critic": {
+      "mode": "subagent",
+      "model": "{{MODEL_CRITIC}}"
+    },
+    "summarizer": {
+      "mode": "subagent",
+      "model": "{{MODEL_SUMMARIZER}}",
+      "permission": {
+        "bash": {
+          "*": "allow",
+          "rm -rf /*": "deny",
+          "rm -rf ~*": "deny",
+          "sudo rm*": "deny",
+          "sudo dd*": "deny",
+          "dd if=* of=/dev/*": "deny",
+          "mkfs*": "deny",
+          "chmod -R 777 /*": "deny",
+          "chmod 777*": "deny",
+          "del /f /s C:\\*": "deny",
+          "rmdir /s* C:\\*": "deny",
+          "Remove-Item* C:\\*": "deny",
+          "Format-Volume*": "deny",
+          "diskpart*": "deny",
+          "cat **/.env*": "ask",
+          "cat **/*.pem": "ask",
+          "cat **/*.key": "ask",
+          "cat **/secrets/*": "ask",
+          "cat ~/.ssh/*": "ask",
+          "cat ~/.aws/credentials*": "ask",
+          "cat ~/.config/gh/hosts.yml": "ask",
+          "git commit*": "ask",
+          "git amend*": "ask",
+          "git push*": "ask"
+        }
+      }
+    },
+    "explore": {
+      "mode": "subagent",
+      "model": "{{MODEL_EXPLORE}}"
+    }
+  }
+}
