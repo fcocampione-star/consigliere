@@ -7,6 +7,16 @@
 
 <!-- ADVISOR:ENTRIES:START -->
 
+## 2026-10-15 — Suite en verde 14/14: el fallo `opencode.json` era quirk ambiental documentado
+
+topic: dx/opencode-json-quirk
+**Goal:** llevar `npm test` de 13/14 a 14/14 (fallaba `doctor.test.mjs` "ningún check en error" por `❌ opencode.json` ENOENT).
+**Discoveries:** no era bug de diseño: `CONTRIBUTING.md:75` lo documenta como quirk deliberado (raíz gitignorada en `.gitignore:51`, CI la siembra desde `templates/`); la propuesta de Plan mode (doctor dual-context) habría violado el diseño — las dos copias de `doctor.mjs` divergen a propósito (SKILL.md:70 del skill-loader).
+**Accomplished:** sembrada `opencode.json` desde `templates/` (gitignored, idéntico a CI); cero cambios de código; `doctor --json` 25 checks / 0 errores.
+**Next:** nada; el seeding ya vive en `ci.yml`/`release.yml` como paso de setup.
+**Files:** `git log --oneline -5` (no listas manuales)
+**Verificación:** PASS — `npm test` 14/14 ✓ (`doctor` 0 errores).
+
 ## 2026-10-15 — Compactación capa 0: PROJECT_STATE.md 14,5 KB→8 KB (−45% tokens fijos)
 
 topic: memory/compact-state
