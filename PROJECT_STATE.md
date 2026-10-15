@@ -8,52 +8,47 @@
 
 | Fase | Descripción | Estado |
 |------|-------------|--------|
-| Fase 0 Bootstrap — Harness CLI por proyecto | Harness-only: Node >=20.11 ESM (usa `import.meta.dirname`) + Bash 4+ / PowerShell 5.1+ + git/tar; memoria 3 capas md+grep (PROJECT_STATE/SUMMARY/CHANGELOG), routing orgánico y SDD-lite integrados | ✅ Completada |
-| Fase 0.5 Hardening — Refactor + CI (PR-0…PR-7) | Instalador Node-only con init.mjs como única implementación, suite de tests sin deps, `lib/` compartida, CI con matriz y release gateada, docs reales | ✅ Completada |
-| Fase 1 Validación en proyecto demo | Instalación real en temporal + `--upgrade` (backup de 11 ítems, memoria preservada con sha256 idéntico) + `doctor` 0❌/0⚠️ + suite y límites en verde | ✅ Completada |
-| Modelo de ramas dev/main (D2) | `dev` = integración / `main` = estable, **ambas repo completo**; promoción `dev`→`main` con `--ff-only`, sin proyección por contenido (regenerador eliminado) | ✅ Completada |
-| Release npm 1.0 público | Versión/branding a 1.0 + fixes de empaquetado (`.gitignore` en el tarball), contrato git-aware y `NPM_TOKEN`; `1.0.1` publicada y verificada desde npm (`latest` corregido) | ✅ Completada |
+| Fases 0/0.5/1 — Bootstrap/hardening/validación demo | Harness CLI Node-only + suite sin deps + `doctor` 0❌/0⚠️ + límites en verde | ✅ Completadas |
+| Modelo D2 + release npm 1.0 | `dev` = integración / `main` = estable (ambas repo completo, promoción `--ff-only`); `advisor-harness@1.0.1` en npm, contrato git-aware, `lint:sh`/PATH resuelto | ✅ Completadas |
 
-> Próximo hito: ninguno bloqueante — primer release público ya publicado (`advisor-harness@1.0.1` en npm, verificado instalando desde el registry) y Fase 1 cerrada. Pendientes menores no bloqueantes en §3. Ya NO son hitos pendientes ni el PATH de `lint:sh` en Windows (§2 `tools/lint-sh-crossplatform`), ni la CI real (§2 `tools/tar-resolver-crossplatform`, `runtime/isMain-realpath`), ni publicar el release.
+> Próximo hito: ninguno bloqueante — `1.0.1` publicada y verificada desde el registry, Fase 1 cerrada. Pendientes menores no bloqueantes en §3.
 
 ---
 
 ## 2. Decisiones de diseño (append-only, consolidadas, con review_after)
 
-- Harness-only sin runtime de app: Node >=20.11 ESM (usa `import.meta.dirname`) + Bash/PowerShell + git/tar; sin DB/app server, scaffolding por proyecto vía init.mjs/init.sh/init.ps1 [topic: architecture/harness-scope] review_after: 2026-12-03
-- Memoria 3 capas md+grep (PROJECT_STATE/SUMMARY/CHANGELOG) con búsqueda md+grep y cache fingerprint; sin base de datos ni fallback SQLite (no existe en el código) [topic: architecture/stack-md-grep] review_after: 2026-12-03
-- Skill loader con cache fingerprint `.advisor/skill-registry.cache.json` (path+mtime+size) y chunks urls/patterns/shortcuts/examples/commands bajo demanda [topic: dx/skill-loader-cache] review_after: 2026-12-03
+- Harness-only sin app server: Node >=20.11 ESM + Bash/PowerShell + git/tar; scaffolding vía init.mjs/sh/ps1 [topic: architecture/harness-scope] review_after: 2026-12-03
+- Memoria 3 capas md+grep (STATE/SUMMARY/CHANGELOG) con fingerprint path+mtime+size; sin DB ni SQLite [topic: architecture/stack-md-grep] review_after: 2026-12-03
+- Skill loader con cache fingerprint `.advisor/skill-registry.cache.json` y chunks bajo demanda [topic: dx/skill-loader-cache] review_after: 2026-12-03
 - Sunset legacy: solo `.advisor/` vivo, fallback read-only `.consigliere/` eliminado de instaladores/scripts y `.gitignore` (F6) [topic: repo/legacy-sunset] review_after: 2026-12-03
 - Advisor-only routing orgánico + SDD-lite ≤650w [topic: sdd/routing-organico] review_after: 2026-12-21
-- Lock canónico `memory-lock.mjs` (mkdir atómico + owner.json/token, takeover por rename, stale configurable `ADVISOR_LOCK_STALE_MS`) — sin `flock` [topic: memory/lock-canonico] review_after: 2026-12-21
+- Lock `memory-lock.mjs` (mkdir atómico + owner.json/token, takeover por rename, stale `ADVISOR_LOCK_STALE_MS`); sin `flock` [topic: memory/lock-canonico] review_after: 2026-12-21
 - `mondayOf` UTC único (memory-sync importa de memory-stats); rotación por lunes de cada entrada [topic: memory/utc-mondayof] review_after: 2026-12-21
-- Marcadores `ADVISOR:ENTRIES` + motor único `memory-rotate.mjs`; rotación canónica en `/record`; hook `post-commit` opcional gated [topic: memory/markers-motor] review_after: 2026-12-21
+- Marcadores `ADVISOR:ENTRIES` + motor `memory-rotate.mjs`; rotación en `/record`; hook post-commit gated [topic: memory/markers-motor] review_after: 2026-12-21
 - Routing por clase de riesgo (conteo = desempate); advisor delega deltas; spec-lite persistida y consumida por builder [topic: process/routing-risk-deltas] review_after: 2026-12-21
-- Contract tests en `npm test` (paridad espejo raíz↔templates con allowlist, invariantes) [topic: test/contracts-antidrift] review_after: 2026-12-21
-- Suelo de runtime real Node >=20.11 (15 scripts usan `import.meta.dirname`); `engines: >=18` mentía y la matriz de CI fija la versión [topic: runtime/node-floor] review_after: 2027-03-30
-- Instalador Node-only: `init.mjs` es la única implementación y `init.sh`/`init.ps1`/`init.cmd` son lanzadores (~20 líneas) — Node es requisito duro de toda vía de instalación [topic: installer/node-only] review_after: 2027-03-30
-- `--upgrade` separa memoria PRESERVADA (PROJECT_STATE/SUMMARY/CHANGELOG) de config REGENERADA (AGENTS.md/opencode.json/.gitignore) y conserva los `model:` por agente; antes la config se restauraba del backup y no se actualizaba nunca [topic: installer/upgrade-split] review_after: 2027-03-30
-- Backup previo obligatorio antes de CUALQUIER escritura en destino no vacío (antes solo al actualizar); `--dry-run` no escribe ni anuncia éxito [topic: installer/backup-previo] review_after: 2027-03-30
-- Suite propia sin dependencias (`test/run.mjs`) + CI de 5 jobs con matriz 3 SO × Node 20/22/24 y publicación gateada en CI; cero dependencias en runtime [topic: test/ci-gate] review_after: 2027-03-30
-- El gate de free tier de opencode (`{{MODEL_*}}` sin entitlement) se documenta y no se sortea en código: el harness valida la forma del id, nunca el entitlement [topic: dx/free-tier-doc] review_after: 2027-03-30
-- `npm run lint:sh` es un script Node ESM sin deps que resuelve el intérprete (`ADVISOR_BASH` → `bash` del PATH → rutas de Git for Windows) y sale con exit 3 + arreglo accionable si no hay ninguno — en linux/macos el PATH gana siempre, así que no hay divergencia cross-platform; vive SOLO en raíz, sin espejo en `templates/`, catalogado en `ROOT_ONLY_EXACT` como "presente solo en raíz a propósito" (tool de dev del repo, no del harness instalado), igual que `contract-tests.mjs` / `version-check.mjs` / `memory-rotate.test.mjs` [topic: tools/lint-sh-crossplatform] review_after: 2027-03-30
-- El harness vive en la **raíz** del repo del proyecto y se commitea con él (un repo = un harness+memoria compartidos); se excluye del **artefacto de producción** (build/`.dockerignore`/`export-ignore`), no del repositorio; app recomendada en **subcarpeta** porque `--upgrade` regenera `AGENTS.md`/`opencode.json`/`.gitignore` en la raíz; para el repo del propio harness, la separación dev/estable es por rama (`dev` integración / `main` estable, **ambas repo completo**) y el **canal de consumo limpio es npm + el source archive del tag** (`export-ignore`), no una rama distinta; `main` sigue siendo un repo con el harness y la memoria commiteados, así que no contradice esta decisión [topic: architecture/harness-placement] review_after: 2027-03-30
-- Búsqueda real de skills instalables (`skill-search.mjs`): `fetch` best-effort del registry JSON público de autoskills (pineado al tag `v0.3.6`) con cache local `.advisor/autoskills-registry.cache.json` (TTL 7d, gitignored), flags `--json`/`--offline`/`--refresh`/`--limit`, ranking y degradación a cache (aunque stale) o salida vacía + exit 0; `npm test`/`doctor`/`/discover` NO dependen de red [topic: dx/skill-search-registry] review_after: 2027-04-06
-- El catálogo de autoskills (licencia CC-BY-NC-4.0) nunca se commitea ni empaqueta: solo se cachea local y gitignored; la búsqueda usa el registry JSON público porque el CLI de autoskills no expone `search`/`list`/`--json` [topic: dx/autoskills-registry-license] review_after: 2027-04-06
-- `/discover` sugiere skills de proyecto vía función pura `gaps` (match exacto normalizado deps→registry) + `skill-scaffold.mjs` (dry-run por stdout, `--write` atómico, `--force`), sin comando `/skill-new`: se reusa `/routine`→builder [topic: process/discover-gaps] review_after: 2027-04-06
-- Estimador estático del ahorro potencial en tokens (`memory-tokens.mjs`, ESM sin deps): `measure` (tokens por capa) y `compare` (advisor+memoria vs plan+build); heurística `TOKENS_PER_CHAR=4`, solo lectura, porque opencode no expone usage real por tarea (el ahorro puede salir negativo con contexto trivial) [topic: dx/memory-tokens-estimator] review_after: 2027-04-10
-- `init.mjs` resuelve el `tar` internamente (inline, sin extraer a `lib/`): orden `ADVISOR_TAR` (autoritativo, vacío = sin override) → `%SystemRoot%\System32\tar.exe` en win32 → `'tar'` del PATH; sonda `--version` memoizada (no discrimina GNU vs bsdtar: la discriminación la hace el orden); sin `tar` = exit 3 (preflight) / 4 (backup). No se extrae a `lib/` porque `lib/` se espeja a `templates/` y se instalaría como código muerto; hermana de `tools/lint-sh-crossplatform`; el mismo orden se replica (test-only) en `test/init.test.mjs` [topic: tools/tar-resolver-crossplatform] review_after: 2027-03-30
-- `isMain` canonicaliza ambos lados con `realpathSync` (nativo con fallback) tolerando ENOENT, para que los CLI no sean no-op bajo rutas con symlink (macOS `/var`→`/private/var`); firma intacta; afecta a los 20 consumidores (10 scripts + 10 en `templates/`) [topic: runtime/isMain-realpath] review_after: 2027-03-30
-- Repo dev/main merge (D2): `dev` = **integración** y `main` = **estable**, **ambas repo completo** (`test/`, `.github/`, `scripts/`, `CONTRIBUTING.md`, `.nvmrc` + dev-tools de `.opencode/scripts/`); la promoción es `dev`→`main` con **`--ff-only`** (fast-forward, `main` idéntico a `dev`), SIN proyección por contenido (el regenerador por proyección se eliminó). El **canal de consumo limpio es npm + el source archive del tag** (`git archive` respeta `export-ignore`), no una rama distinta. El paquete npm se publica desde `main` (tag `v*`). Ortogonal a `architecture/harness-placement` (esa rige proyectos instalados; esta rige el repo del harness) [topic: repo/dev-main-merge] review_after: 2027-01-09
-- El paquete `advisor-harness` se publica en npm desde `main` (tag `v*` creado sobre `main`; `release.yml` con `fetch-depth: 0` + guarda `git merge-base --is-ancestor "$GITHUB_SHA" origin/main` exige que el tag sea ancestro de `main`); `release.yml` exige el secret `NPM_TOKEN` (`NODE_AUTH_TOKEN`) y `latest` DEBE apuntar a la versión buena (el stub `0.0.0-stage` quedó como latest por error → corregido con `dist-tag add`); npm prohíbe reutilizar `name@version` (despublicar no permite republicar la misma versión) [topic: release/npm-publish] review_after: 2027-04-18
-- npm excluye ficheros `.gitignore` de todo tarball: el template se guarda como `templates/gitignore` y `init.mjs` lo escribe como `.gitignore` en destino (tabla `TEMPLATE_RENAME`, fuera de `ALLOW_DIVERGENCE`); regresión en el job `pack-smoke` de `ci.yml` y en `test/init.test.mjs` [topic: installer/tarball-gitignore] review_after: 2027-03-30
-- `contract-tests.mjs` enumera ficheros vía git (`ls-files --cached --others --exclude-standard`) para respetar `.gitignore` (elimina el falso "solo-raíz" de `.opencode/package.json`/`package-lock.json`); mantiene la detección de drift real (drift probado) [topic: test/contract-git-aware] review_after: 2027-03-30
+- Contract tests en `npm test` (paridad raíz↔templates con allowlist; `ls-files` respeta `.gitignore`, incl. test/contract-git-aware) [topic: test/contracts-antidrift] review_after: 2026-12-21
+- Runtime real Node >=20.11 (`import.meta.dirname` en 15 scripts); `engines: >=18` mentía; CI fija versión [topic: runtime/node-floor] review_after: 2027-03-30
+- Instalador Node-only: `init.mjs` implementación única, sh/ps1/cmd lanzadores; Node requisito duro [topic: installer/node-only] review_after: 2027-03-30
+- `--upgrade` separa memoria PRESERVADA de config REGENERADA y conserva `model:` por agente [topic: installer/upgrade-split] review_after: 2027-03-30
+- Backup previo obligatorio antes de escribir en destino no vacío; `--dry-run` no escribe [topic: installer/backup-previo] review_after: 2027-03-30
+- Suite propia sin deps (`test/run.mjs`) + CI 5 jobs (3 SO × Node 20/22/24); cero deps runtime [topic: test/ci-gate] review_after: 2027-03-30
+- Free tier opencode (`{{MODEL_*}}` sin entitlement) solo se documenta; se valida forma, no entitlement [topic: dx/free-tier-doc] review_after: 2027-03-30
+- `lint:sh` resuelve bash (`ADVISOR_BASH`→PATH→Git for Windows); exit 3 sin intérprete; solo raíz (`ROOT_ONLY_EXACT`) [topic: tools/lint-sh-crossplatform] review_after: 2027-03-30
+- Harness en raíz commiteado (un repo = harness+memoria); excluir de artefacto prod; app en subcarpeta [topic: architecture/harness-placement] review_after: 2027-03-30
+- `skill-search.mjs`: registry JSON autoskills (tag `v0.3.6`) best-effort, cache 7d gitignored; tests/doctor sin red [topic: dx/skill-search-registry] review_after: 2027-04-06
+- Catálogo autoskills (CC-BY-NC-4.0) nunca commiteado/empaquetado; solo cache local (CLI sin search/list) [topic: dx/autoskills-registry-license] review_after: 2027-04-06
+- `/discover` vía `gaps` pura (match exacto deps→registry) + `skill-scaffold.mjs`; sin `/skill-new` [topic: process/discover-gaps] review_after: 2027-04-06
+- Estimador `memory-tokens.mjs` (`measure`/`compare`, chars/4, solo lectura; opencode sin usage real) [topic: dx/memory-tokens-estimator] review_after: 2027-04-10
+- `init.mjs` resuelve `tar` inline (`ADVISOR_TAR`→System32→PATH, sonda `--version`); sin `tar` exit 3/4 [topic: tools/tar-resolver-crossplatform] review_after: 2027-03-30
+- `isMain` con `realpathSync` tolerante a ENOENT (symlinks macOS `/var`); firma intacta, 20 consumidores [topic: runtime/isMain-realpath] review_after: 2027-03-30
+- D2: `dev`=integración/`main`=estable (ambas repo completo), promoción `--ff-only`; consumo vía npm + source archive [topic: repo/dev-main-merge] review_after: 2027-01-09
+- Publicación npm desde `main` (tag `v*`, guarda ancestría, `NPM_TOKEN`); `latest` apunta a versión buena [topic: release/npm-publish] review_after: 2027-04-18
+- Template `templates/gitignore`→`.gitignore` en destino (`TEMPLATE_RENAME`); npm excluye `.gitignore` [topic: installer/tarball-gitignore] review_after: 2027-03-30
 
 ---
 
 ## 3. Pendientes inmediatos
 
-- [x] Cerradas: Fases 0/0.5/1, bootstrap y sunset legacy (solo `.advisor/`), modelo de ramas `dev`/`main` D2 (ambas repo completo + promoción `--ff-only`; regenerador por proyección eliminado), integración de `feat/hardening-refactor-ci` en `main` (FF `4eae0fb`; CI 18/18, run 38120377887; `lint:sh`/PATH resuelto por intérprete) y contrato git-aware (`contract-tests.mjs` respeta `.gitignore`, fix `13421b2`). Detalle en `CHANGELOG/` y §2; no se duplica aquí.
 - [ ] Menores no bloqueantes: (a) help de `init.mjs` dice "sin binario global" pero `package.json` expone bins — incoherencia de redacción; (b) `--autoskills 3` no ejecutó autoskills en una prueba (revisar parseo del valor); (c) `release.yml` sin guarda "saltar si `name@version` ya existe" (tag de versión ya publicada fallaría); (d) actualizar/limpiar el stub `0.0.0-stage` si procede.
 
 ---
@@ -64,6 +59,7 @@
 
 | Semana (lunes) | Archivo | Resumen |
 |----------------|---------|---------|
+| 2026-10-05 | 2026-10-05.md | rotación automática |
 | 2026-09-28 | 2026-09-28.md | rotación automática |
 | 2026-09-21 | 2026-09-21.md | rotación automática |
 | 2026-09-07 | 2026-09-07.md | rotación automática |
@@ -80,18 +76,14 @@
 |--------|-----------------|-------------|
 | memory/search | `node .opencode/scripts/memory-index.mjs search "query"` → `timeline <id>` → `get <id>` | Búsqueda md+grep progresiva, cero dependencias (sin DB) |
 | skill/chunk-load | `node .opencode/skills/_skill-loader/loader.mjs chunk "_project-docs" urls,patterns` | Carga solo chunks necesarios para ahorrar tokens |
-| test/suite | `npm test` · `npm run test:unit` (agregador `node test/run.mjs`, 1 proceso por fichero) · `npm run test:contract` | Micro-framework sin deps en `test/harness.mjs`; `test:contract` = anti-drift (falla en raíz no catalogada) |
+| test/suite | `npm test` · `npm run test:unit` (`node test/run.mjs`) · `npm run test:contract` · `lint:sh`/`lint:ps1`/`version:check` | Micro-framework sin deps; `test:contract` = anti-drift; `lint-sh.mjs` resuelve bash (exit 3 sin intérprete) |
 | shared-lib | `.opencode/scripts/lib/{core,md,cache}.mjs` | Núcleo sin deps (isMain, readText, sectionText, field, fenceSpans, listChangelog, todayUTC, writeAtomic, fingerprint/isFresh, EXIT_CODES): importar, nunca reimplementar |
-| lint/version | `npm run lint:sh` · `npm run lint:ps1` · `npm run version:check` | `lint-sh.mjs` resuelve el bash y mapea exit codes (0 ok / 1-2 de `bash -n` / 3 sin intérprete), parse AST de PowerShell y versión única (package.json == init.mjs/init.sh/init.ps1) |
-| installer | `node init.mjs <dir> --upgrade --quick` (exit 0/1/2/3/4/5) | Entrada única; los shims delegan; contrato de exit codes en `lib/core.mjs EXIT_CODES` |
-| tools/bin-resolver | `lint-sh.mjs` (`ADVISOR_BASH`) · `init.mjs` (`ADVISOR_TAR`) | Resolución cross-platform de un binario: override por env var autoritativo → ruta específica del SO → PATH; sonda memoizada; exit 3 si falta |
-| release/npm | `npm dist-tag add advisor-harness@<v> latest` | Corregir el dist-tag `latest` tras publicar (npm); `publish` desde `main` (tag `v*` sobre `main`) con `NPM_TOKEN` |
+| installer | `node init.mjs <dir> --upgrade --quick` (exit 0/1/2/3/4/5) | Entrada única; shims delegan; `EXIT_CODES` en `lib/core.mjs`; binarios por env→SO→PATH (`ADVISOR_BASH`/`ADVISOR_TAR`), sonda memoizada |
+| release/npm | `npm dist-tag add advisor-harness@<v> latest` | Corregir `latest` tras publicar; `publish` desde `main` (tag `v*`) con `NPM_TOKEN` |
 
 ---
 
 ## 6. Índices de búsqueda
 
-- **Decisiones**: `PROJECT_STATE.md §2` + `CHANGELOG/DECISIONS-ARCHIVE.md`.
-- **Patrones**: `§5` arriba.
-- **Features completadas**: `SUMMARY.md` + `CHANGELOG/*.md`.
-- **Comandos dev**: `AGENTS.md` sección Development commands + `CONTRIBUTING.md` (flujo, quirks de CI).
+- **Decisiones y patrones**: `PROJECT_STATE.md §2/§5` + `CHANGELOG/DECISIONS-ARCHIVE.md`.
+- **Historial y comandos**: `SUMMARY.md` + `CHANGELOG/*.md`; `AGENTS.md` + `CONTRIBUTING.md`.

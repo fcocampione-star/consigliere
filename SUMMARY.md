@@ -7,112 +7,15 @@
 
 <!-- ADVISOR:ENTRIES:START -->
 
-## 2026-10-11 — Modelo de ramas D2: `dev`=integración / `main`=estable (repo completo, promoción `--ff-only`)
+## 2026-10-15 — Compactación capa 0: PROJECT_STATE.md 14,5 KB→8 KB (−45% tokens fijos)
 
-topic: repo/dev-main-merge
-review_after: 2027-01-09
-**Goal:** abandonar el modelo "`dev` = repo completo / `main` = proyección dist regenerada por `strip-dev.mjs`" y adoptar **D2**: `dev` = integración, `main` = estable, **ambas repo completo**, promoción `dev`→`main` por **`--ff-only`**; el canal limpio es npm (asset) + source archive del tag (conservando `export-ignore`).
-**Discoveries:** la proyección por contenido era innecesaria: el filtrado dev-only ya vive en `files` de npm y en `export-ignore`, así que `main` puede ser idéntico a `dev` tras cada promoción. `release.yml` publicaba sin verificar ancestría → se añade `fetch-depth: 0` + guarda `git merge-base --is-ancestor "$GITHUB_SHA" origin/main`. Reserva del `verifier`: `main` (`4b789ee`) NO es ancestro de `dev` (`358a1ff`) → requiere **migración única** (tag de archivo + `update-ref`), ya planificada.
-**Accomplished:** borrado `scripts/strip-dev.mjs` (entrada fuera de `ROOT_ONLY_EXACT` en `contract-tests.mjs`); `ci.yml` con `push`/`pull_request` sobre `[dev, main]`; `release.yml` con `fetch-depth: 0` + guarda de ancestría sobre `origin/main`; docs `README`/`AGENTS`/`CONTRIBUTING`; `PROJECT_STATE §1/§2/§3/§5` (nueva decisión `repo/dev-main-merge`; `release/npm-publish` pasa a publicar desde `main`); `CHANGELOG/DECISIONS-ARCHIVE.md` (`repo/dev-main-split` superada); rama local `feat/npm` borrada.
-**Next:** migración única de refs en `main` (tag de archivo + `update-ref`, para que `main` sea ancestro de `dev`); después, commit de esta migración (**pendiente, NO ejecutado aquí**).
-**Files:** `git log --oneline -5` (`358a1ff` = /record previo; el commit de esta migración **AÚN NO existe**).
-**Verificación:** PASS (`verifier`) — `npm test`, `npm run test:contract` (41 espejos), `npm run test:unit`, `doctor --json` 0❌/0⚠️, `lint:sh`, `version:check`; `grep strip-dev` = 0 fuera del histórico.
-
-## 2026-10-11 — spec: repo-dev-main-merge (modelo de ramas D2)
-
-topic: sdd/repo-dev-main-merge/spec
-**Goal:** conservar la spec-lite (criterios MUST/SHOULD verificables) que guió la migración al modelo D2, para que el build quede auditable.
-**MUST (RFC2119):**
-- M1 reconciliación de refs: Given `main` (estable) no ancestro de `dev` When se promociona Then una migración única (tag de archivo + `update-ref`) deja `main` como ancestro, habilitando `--ff-only`.
-- M2 `main` repo completo sin `opencode.json`: Given el repo `main` When se inspecciona Then contiene `test/`/`.github/`/`scripts/`/`CONTRIBUTING.md`/`.nvmrc` y NO recibe `opencode.json` por proyección.
-- M3 eliminar `strip-dev`: Given el árbol When se busca `strip-dev` Then hay 0 referencias fuera del histórico y la entrada sale de `ROOT_ONLY_EXACT`.
-- M4 CI en `dev`+`main`: Given `ci.yml` When hay `push`/`pull_request` en `[dev, main]` Then los 5 jobs corren en ambas ramas.
-- M5 tag `v*` sobre `main`: Given un tag `v*` When `release.yml` publica Then exige ancestría (`fetch-depth: 0` + `merge-base --is-ancestor "$GITHUB_SHA" origin/main`).
-- M6 default `main` + canal limpio: Given el canal de consumo Then es npm (asset) + source archive del tag (`export-ignore`), no una rama distinta.
-- M7 superseder la decisión antigua: Given `repo/dev-main-split` When se consolida Then queda superada en `DECISIONS-ARCHIVE.md` y sustituida por `repo/dev-main-merge` en §2.
-**SHOULD:** proteger `main` (branch protection); declarar `pull_request.branches` explícitas; guarda de ancestría en release; conservar `export-ignore`.
-**Veredicto critic:** APROBADO (implementación verificada en verde por `verifier`).
-
-## 2026-10-11 — Publicación npm: versión/branding a 1.0, fixes de empaquetado y `1.0.1` publicada
-
-topic: release/npm-publish
-review_after: 2027-04-18
-**Goal:** publicar el primer release público de `advisor-harness` (versión y branding a 1.0) dejando el paquete realmente instalable desde npm: `.gitignore` del proyecto instalado presente y CI de release cableada.
-**Discoveries:** npm prohíbe reutilizar `name@version` (despublicar `1.0.0` no permitió republicarla → hubo que subir a `1.0.1`). npm EXCLUYE cualquier `.gitignore` del tarball, así que `templates/.gitignore` no viajaba (proyecto instalado sin `.gitignore`). `release.yml` no pasaba `NODE_AUTH_TOKEN` → ENEEDAUTH. El dist-tag `latest` apuntaba al stub `0.0.0-stage` por error. `npx advisor` resuelve OTRO paquete.
-**Accomplished:** versión 2.0.0→1.0.0 y branding "2.0"→"1.0" en ~50 ficheros (+ "formato 2.0"→"formato 1.0" en SUMMARY/templates/fixtures); `contract-tests.mjs` enumera ficheros vía git (`ls-files --cached --others --exclude-standard`) respetando `.gitignore` (paridad 43→41/42); `env: NODE_AUTH_TOKEN` en `release.yml`; fix del tarball renombrando `templates/.gitignore`→`templates/gitignore` + `TEMPLATE_RENAME` en `init.mjs` (+ regresión en `pack-smoke`/`test/init.test.mjs`); README revisado a fondo (3 vías de instalación, aviso `npx advisor`, `--version`). Publicado `1.0.1` con `latest` corregido vía `dist-tag`. 3 decisiones nuevas en §2; ajustes en §1/§3/§5.
-**Next:** pendientes menores no bloqueantes en §3 (help "sin binario global", parseo `--autoskills 3`, guarda de versión ya publicada en `release.yml`, limpiar stub `0.0.0-stage`).
-**Files:** `git log --oneline -5` (detalle en git, no aquí).
-**Verificación:** PASS — instalación real desde npm (`npx advisor-harness@1.0.1`, global y `--upgrade`): `.gitignore` generado (677 B), estructura completa, `doctor` 0❌/0⚠️, memoria preservada con backup; `latest: 1.0.1`.
-
-## 2026-10-11 — Split dev/main: `dev` = repo completo, `main` = distribución reproducible (`scripts/strip-dev.mjs`)
-
-topic: repo/dev-main-split
-**Goal:** separar el desarrollo (`dev`) de la distribución (`main`) sin mantener dos historiales: `main` debe ser una proyección determinista y regenerable del repo completo, con el harness y la memoria intactos.
-**Discoveries:** no hace falta cherry-pick ni merge: el árbol de `main` se construye sobre un `GIT_INDEX_FILE` temporal (`read-tree dev^{tree}` + exclusión index-only + inyección del `opencode.json` de `templates/` + `write-tree` + `commit-tree` con parent = `main` + `update-ref` CAS), así que el working tree del usuario nunca se toca y el historial de `main` queda lineal. Idempotencia natural por comparación de tree hash (`main ya al día`). El `--push` usa `--force-with-lease`, nunca `--force`; las rutas dev-only son explícitas (nunca globs `**`) para que el borrado sea determinista.
-**Accomplished:** nuevo `scripts/strip-dev.mjs` (plumbing git, ESM sin deps, reusa `EXIT_CODES`/`isMain` de `lib/core.mjs`; flags `--dry-run`/`--push`/`--allow-dirty`/`--branch`/`--target`/`--remote`/`--message`; exit 0/1/3/5). Catalogado en `contract-tests.mjs` como `ROOT_ONLY_EXACT` (tool de dev del repo, no del harness instalado). El trigger de CI (`ci.yml`) pasa a la rama `dev` (el desarrollo vive ahí). Nota de asimetría dev vs distribución en README y AGENTS.md. 1 decisión nueva en §2 (`repo/dev-main-split`) y 2 ajustes de decisiones existentes (`architecture/harness-placement`, `tools/lint-sh-crossplatform`); 1 pendiente menor del critic cerrado (main incluye `opencode.json` inyectado y `.gitattributes` verbatim). `planner` diseñó, `critic` aprobó con cambios, `verifier` confirmó en sandbox.
-**Next:** `main` real aún no regenerado (primer `strip-dev.mjs` pendiente). Candidato siguiente: publicar release desde `dev` (tag `v*`, `release.yml`); `main` se regenera con `strip-dev.mjs`, nunca se mergea.
-**Files:** `git log --oneline -5` (detalle en git, no aquí).
-**Verificación:** PASS — `verifier` en sandbox: guardas + idempotencia (segunda corrida = "main ya al día", sin escritura), `init.mjs` ejecutado desde `main` exit 0, `npm run test:contract` PASS; `planner`/`critic` aprobaron con cambios incorporados.
-
-## 2026-10-11 — CI real en verde: merge FF + fixes de portabilidad (YAML, tar, mapfile) y `isMain` symlink-safe
-
-topic: ci/portability-green
-**Goal:** integrar `feat/hardening-refactor-ci` en `main` por fast-forward y conseguir que la CI (5 jobs + `pack-smoke`, 18 combinaciones) corra de verdad en verde — la validación local de Fase 1 no la cubría.
-**Discoveries:** la CI nunca había arrancado: `ci.yml` L489 tenía un `name:` sin comillas con `: ` → YAML inválido, GitHub rechazaba el workflow (runs previos `failure` en 0s). El primer run real destapó 2 bugs de portabilidad en `syntax-and-tests`: macOS usaba `mapfile` (bash 3.2 no lo tiene) y Windows usaba el GNU tar de Git, que lee `C:` como host remoto (`Cannot connect to C: resolve failed`). Un tercer run destapó un bug de PRODUCTO: `isMain` no resolvía symlinks; en macOS `/var`→`/private/var` hacía que `main()` no corriera (no-op silenciosa, exit 0, stdout vacío).
-**Accomplished:** merge FF de 21 commits (`4eae0fb`); fix YAML `92b2c63` (el push requirió re-auth `gh auth refresh -s workflow`); fix portabilidad `4854a4d` — `init.mjs` resuelve el `tar` internamente (opción robusta espejando `lint-sh.mjs`; el critic detectó que el propio test usaba `tar` con rutas `C:\`); fix `isMain` `37fd72b` — canonicaliza ambos lados con `realpathSync` tolerando ENOENT (helpers `realpathOr`/`canonicalKey`), espejo byte-idéntico en `templates/` + test de regresión con symlink. 2 decisiones nuevas en §2.
-**Next:** nada inmediato bloqueante; pendiente menor nuevo: que `contract-tests.mjs` respete `.opencode/.gitignore`. Candidato siguiente: publicar release.
-**Files:** `git log --oneline -5` (detalle en git, no aquí).
-**Verificación:** PASS — CI run 38120377887 = **18/18 success** en `main` @ `37fd72b`; local: `node test/init.test.mjs` 29/29, `node test/lib.test.mjs` 84/84, `lint:sh` 0, `version:check` 0, `npm test` exit 0 en copia limpia (los 2 fallos locales son ambientales).
-
-## 2026-10-11 — spec: ci-portability-fix (portabilidad macOS/Windows de `syntax-and-tests`)
-
-topic: sdd/ci-portability-fix/spec
-**Goal:** conservar la spec-lite que guió el fix de portabilidad de la CI (criterios MUST verificables) para que el build quede auditable (spec no persistida en su momento; reconstruida tras implementar).
-**MUST (RFC2119):**
-- MUST-1 macOS/bash 3.2: Given `syntax-and-tests` en macOS When corre el job Then no usa `mapfile` (no existe en bash 3.2) y el job pasa en verde.
-- MUST-2 Windows/tar: Given el instalador en Windows When empaqueta/extrae Then `tar` no interpreta `C:` como host remoto; se resuelve el binario con orden `ADVISOR_TAR` → `%SystemRoot%\System32\tar.exe` → PATH (espejando `lint-sh.mjs`), sin extraer a `lib/`.
-- MUST-3 no-vacuidad del test: Given el test del resolutor When valida rutas `C:\` Then el propio test no usa `tar` de forma que enmascare el bug (hallazgo del critic).
-**SHOULD:**
-- SHOULD-1 sonda `--version` memoizada como detección de existencia; sin `tar` = exit 3 (preflight) / 4 (backup).
-**Veredicto critic:** APROBADO CON CAMBIOS (detectó el uso de `tar` en el propio test); implementado y verificado en verde.
-
-## 2026-10-10 — Estimador estático del ahorro potencial en tokens (advisor+memoria vs plan+build)
-
-topic: dx/memory-tokens-estimator
-review_after: 2027-04-10
-**Goal:** calcular de forma determinista y sin dependencias el ahorro potencial en tokens del harness advisor con memoria frente a un flujo plan+build sin memoria.
-**Discoveries:** no existe contador real de tokens por sesión/tarea (opencode no expone usage por tarea), así que el estimador es estático, de solo lectura y por heurística `TOKENS_PER_CHAR=4`. Hallazgo del test: con contexto diminuto el ahorro sale NEGATIVO (el coste fijo del advisor supera al baseline); la memoria solo compensa con contexto no trivial, así que se usó un fixture de tamaño realista.
-**Accomplished:** nuevo `.opencode/scripts/memory-tokens.mjs` (ESM sin deps; reusa lib/core.mjs, lib/md.mjs y memory-stats.entriesRegion) con `measure [--json] [--root]` (tokens por capa: PROJECT_STATE/SUMMARY/CHANGELOG/skills+chunks) y `compare --scenario direct|delegated|spec-lite [--json]` (baseline=(1+hojas)*C_full+rework vs advisor=state+k*400+hojas*120+chunks*150(+867 spec-lite)); espejo byte-idéntico en `templates/`. Check ℹ️ `tokens` + `script memory-tokens.mjs` ✅ añadido a ambas copias de `doctor.mjs` (misma severidad, nunca degradan exit); nuevo `test/memory-tokens.test.mjs` (13 casos, fixtures en tmpdir); docs en AGENTS.md, `_project-docs/SKILL.md`, `commands/doctor.md` y README (sección `### Estimador de tokens (memory-tokens.mjs)`). Resultados sobre este repo: direct ~87.6%, delegated ~95%, spec-lite ~94.5%.
-**Next:** commit + push de la rama `feat/hardening-refactor-ci` (pendiente); opcional futuro: instrumentación por rutina para medir ahorro REAL (no potencial).
-**Files:** `git log --oneline -5` (detalle en git, no aquí).
-**Verificación:** PASS — `npm test` exit 0 (14/14 archivos, rotación 48/48, contrato ✅ 43 espejos/33 scripts, versión 2.0.0); `doctor --json` exit 0 (check `tokens` ℹ️, `script memory-tokens.mjs` ✅); `memory-tokens compare --scenario spec-lite --json` exit 0 → savingPct 94.5.
-
-## 2026-10-06 — `/discover` con búsqueda real de skills instalables + sugerencia de skills de proyecto
-
-topic: dx/skill-search-registry
-review_after: 2027-04-06
-**Goal:** que `/discover` deje de simular el mapeo de skills: buscar de verdad en el registry de autoskills las skills instalables que faltan y proponer, para cada gap, una skill de proyecto scaffoldable; todo sin volver la red un requisito de runtime.
-**Discoveries:** el CLI de autoskills no expone `search`/`list`/`--json`, así que la única vía es el registry JSON público (pineado al tag `v0.3.6`); su licencia CC-BY-NC-4.0 impide commitear/empaquetar el catálogo (solo cache local gitignored). El harness no tenía ninguna dependencia de red en runtime: se acotó a best-effort/offline para no romper `npm test`/`doctor`/`/discover`. El match de gaps es determinista (exacto normalizado deps→registry), no heurístico.
-**Accomplished:** nuevo `skill-search.mjs` (fetch best-effort del registry, cache `.advisor/autoskills-registry.cache.json` TTL 7d gitignored, flags `--json`/`--offline`/`--refresh`/`--limit`, ranking, fallback a cache stale o salida vacía + exit 0, y función pura `gaps`) y nuevo `skill-scaffold.mjs` (dry-run por stdout, `--write` atómico, `--force`) que genera `.opencode/skills/<name>/SKILL.md` válido para `loader.mjs`. `/discover` paso 3 ejecuta búsqueda real y emite tabla de gaps + comando scaffold listo para `/routine` (sin comando `/skill-new`: se reusa `/routine`→builder). `planner.md` gana allow bash acotado a `skill-search.mjs` por flag. 3 decisiones nuevas en §2.
-**Next:** commit propuesto (no ejecutado); el único pendiente real sigue siendo integrar `feat/hardening-refactor-ci` en `main` y ver la CI real.
-**Files:** `git log --oneline -5` (detalle en git, no aquí).
-**Verificación:** PASS — `npm test` exit 0 (13/13 archivos, contrato ✅, versión 2.0.0 en 5 ficheros); `npm run test:contract` ✅ (42 espejos, 31 scripts `node --check`); `lint:sh`/`lint:ps1` ✅; `doctor --json` exit 0 (0❌/0⚠️/3ℹ️); espejo SHA256 idéntico en `discover.md`/`planner.md`/`skill-search.mjs`/`skill-scaffold.mjs`; tests sin red (fixture sintético, sin `fetch`).
-
-## 2026-10-06 — spec: discover-real-skills (búsqueda real + scaffold de skills)
-
-topic: sdd/discover-real-skills/spec
-review_after: 2027-04-06
-**Goal:** conservar la spec-lite que guió la implementación (criterios MUST verificables) para que el build sea auditable.
-**MUST (RFC2119):**
-- MUST-1 búsqueda real: Given `/discover` paso 3 When hay red Then consulta el registry público de autoskills y muestra resultados rankeados; When no hay red Then degrada a cache local (aunque stale) o salida vacía + exit 0, sin fallar.
-- MUST-2 CI sin red: Given `npm test`/`doctor`/`/discover` When corren sin red Then pasan en verde (tests con fixture sintético, sin `fetch`).
-- MUST-3 gaps determinista: Given deps del proyecto y registry When se calculan gaps Then el match es exacto normalizado y determinista (misma entrada → misma salida).
-- MUST-4 scaffold válido: Given `skill-scaffold.mjs <name> --description ".."` When dry-run Then imprime el `SKILL.md` por stdout sin escribir; When `--write` Then escribe atómico en `.opencode/skills/<name>/SKILL.md` y `loader.mjs` lo reconoce.
-- MUST-5 licencia: Given el catálogo CC-BY-NC-4.0 When se instala/empaqueta Then nunca se commitea ni empaqueta; solo cache local gitignored.
-**SHOULD:**
-- SHOULD-1 `--json`/`--offline`/`--refresh`/`--limit` y fallback offline en `skill-search.mjs`.
-- SHOULD-2 `/discover` emite tabla de gaps y propone comando scaffold listo para `/routine`, sin comando `/skill-new`.
-**Veredicto critic:** APROBADO (implementación verificada en verde).
+topic: memory/compact-state
+**Goal:** reducir el coste fijo de contexto (capa 0, siempre cargada) sin perder decisiones vigentes ni trazabilidad por topic.
+**Discoveries:** §2 concentraba el 65% del archivo con 16 líneas >220 chars que duplicaban AGENTS.md/skills/SUMMARY; `field()` solo extrae un topic por línea, así que las fusiones multi-topic habrían dejado topics huérfanos (hallazgo del critic).
+**Accomplished:** recorte-sin-fusión (variante aprobada por critic): §1 5→2 filas, §2 28→27 líneas todas ≤220 chars (solo fusión permitida: contracts+git-aware con alias), §3 sin viñeta histórica, §5 8→6 filas, §6 4→2 líneas; cero archivados, `templates/` intacto.
+**Next:** `/review` diciembre decide sobre las 4 decisiones con `review_after: 2026-12-03` (fusionar/archivar con señal real).
+**Files:** `git log --oneline -5` (no listas manuales)
+**Verificación:** PASS — `doctor` PROJECT_STATE ✅ 89 líneas (<100), `test:contract` ✅, `npm test` 13/14 (fallo pre-existente `opencode.json` ausente, reproducido en limpio), `search "tar"`/`"contract-git-aware"` resuelven `state--*`, `measure` 3.582→1.980 tok, `compare spec-lite` ahorro 95,0→95,9%.
 
 <!-- ADVISOR:ENTRIES:END -->
 
