@@ -376,7 +376,9 @@ test('v2 normaliza permission.bash{} → permissions[] SIN perder ninguna regla 
   const { docs } = v2ConfigConReintentos(PROYECTO);
   const cfg = JSON.parse(leer(OPCFG)); // fuente de verdad: lo que escribió el harness
   const info = docProyecto(docs, PROYECTO);
-  for (const id of ['builder', 'summarizer']) {
+  // Wiring fix 2026-10-18: advisor/explore/planner ahora llevan allowlist bash
+  // en el JSON (espejo del frontmatter) → entraron al loop de normalización.
+  for (const id of ['advisor', 'planner', 'builder', 'summarizer', 'explore']) {
     const esperado = Object.entries(cfg.agent[id].permission.bash)
       .map(([resource, effect]) => `shell|${resource}|${effect}`).sort();
     const resuelto = (info.agents[id].permissions || [])
@@ -385,7 +387,7 @@ test('v2 normaliza permission.bash{} → permissions[] SIN perder ninguna regla 
   }
 });
 
-test('debug agents: 7 agentes del pipeline + permisos resueltos (hojas task: deny, advisor sin edit/shell)', () => {
+test('debug agents: 7 agentes del pipeline + permisos resueltos (hojas task: deny, advisor shell: deny general + allow routine-model)', () => {
   if (!gate()) return;
   const agentes = v2AgentsConReintentos(PROYECTO);
   const de = (id) => agentes.find((a) => a.id === id);
@@ -401,6 +403,14 @@ test('debug agents: 7 agentes del pipeline + permisos resueltos (hojas task: den
   assert(permiso(de('advisor'), 'edit', '*', 'deny'), 'advisor coordinador puro: edit deny');
   assert(permiso(de('advisor'), 'shell', '*', 'deny'), 'advisor coordinador puro: shell deny');
   assert(permiso(de('summarizer'), 'shell', 'git push*', 'ask'), 'summarizer: bash harden aplicado también en frontmatter');
+  // Wiring comando→agente→capacidad (/doctor /routine /discover): los allows
+  // puntuales que hacen ejecutables los comandos sin abrir shell general.
+  assert(permiso(de('advisor'), 'shell', 'node .opencode/scripts/routine-model.mjs*', 'allow'), 'advisor: allow puntual routine-model.mjs (wiring /routine)');
+  assert(permiso(de('advisor'), 'shell', '*', 'deny'), 'advisor: sigue SIN shell general');
+  assert(permiso(de('explore'), 'shell', 'node .opencode/scripts/doctor.mjs*', 'allow'), 'explore: allow read-only doctor.mjs (wiring /doctor)');
+  assert(permiso(de('explore'), 'shell', '*', 'deny'), 'explore: sigue SIN shell general');
+  assert(permiso(de('planner'), 'shell', 'node .opencode/skills/_skill-loader/loader.mjs list*', 'allow'), 'planner: loader.mjs list (wiring /discover)');
+  assert(permiso(de('planner'), 'shell', 'node .opencode/skills/_skill-loader/loader.mjs search*', 'allow'), 'planner: loader.mjs search (wiring /discover)');
 });
 
 test('v2 tolera claves extrañas: strip silencioso, sin ERROR ni stderr', () => {

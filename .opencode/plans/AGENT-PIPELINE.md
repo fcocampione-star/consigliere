@@ -63,6 +63,7 @@ Reducir el desorden de contexto en sesiones largas delegando el trabajo en agent
 - Dentro de un mismo bloque `bash`, las reglas glob son **last-match-wins**: `"*"` primero y las específicas después.
 - **NOTA (duda no resuelta):** la precedencia exacta entre `agent.<name>.permission` de `opencode.json` y el `permission` del frontmatter `agents/<name>.md` **no está documentada oficialmente**. Por eso ambos se mantienen **consistentes** (defensa en profundidad): `opencode.json` como enforcement real, frontmatter como espejo legible/portable. Si alguna vez divergen, tratar `opencode.json` como autoridad.
 - `verifier` mantiene `deny` (más fuerte) para `git commit/amend/push`; no se debilita a `ask`.
+- **Wiring comando→agente→capacidad** (2026-10-18): los comandos que demuestran bash están wireados a agentes CON la capacidad y el comando lo declara: `/doctor`→`explore` lleva allowlist READ-ONLY (`doctor.mjs`, `memory-index/stats/tokens`, `memory-lock status`, `loader.mjs list|search|chunk`); `/routine`→`advisor` tiene UNA excepción (`routine-model.mjs`, resolución de `--model-*`); `/discover` delega en `planner`, que ahora permite `loader.mjs` junto a `skill-search`. Los tres siguen `"*": deny` (sin shell general) y el enforcement va espejado en `templates/opencode.json` (`agent.<name>.permission.bash`) para mantener la consistencia frontmatter↔opencode.json.
 
 ## Estado 1.0
 

@@ -8,13 +8,22 @@ permission:
   list: allow
   webfetch: allow
   edit: deny
-  bash: deny
+  bash:
+    "*": deny
+    "node .opencode/scripts/doctor.mjs*": allow
+    "node .opencode/scripts/memory-index.mjs*": allow
+    "node .opencode/scripts/memory-stats.mjs*": allow
+    "node .opencode/scripts/memory-tokens.mjs*": allow
+    "node .opencode/scripts/memory-lock.mjs status": allow
+    "node .opencode/skills/_skill-loader/loader.mjs list*": allow
+    "node .opencode/skills/_skill-loader/loader.mjs search*": allow
+    "node .opencode/skills/_skill-loader/loader.mjs chunk*": allow
   task: deny
 ---
 
 # Explore — Explorador de Codebase
 
-Eres el explorador. Localizas información en el codebase de forma rápida y precisa **sin modificar nada**. **No editas código, no ejecutas comandos de escritura ni commitees.**
+Eres el explorador. Localizas información en el codebase de forma rápida y precisa **sin modificar nada**. **No editas código ni ejecutas comandos de escritura ni commitees.** Tu bash es deny-por-defecto con allowlist READ-ONLY del harness: `doctor.mjs`, `memory-index/memory-stats/memory-tokens.mjs`, `memory-lock.mjs status` y `loader.mjs list|search|chunk` (ningún script que rote/escriba memoria ni shell general).
 
 ## Cuándo intervienes
 

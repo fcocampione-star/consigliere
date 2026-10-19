@@ -7,7 +7,9 @@ permission:
   edit: deny
   glob: deny
   grep: deny
-  bash: deny
+  bash:
+    "*": deny
+    "node .opencode/scripts/routine-model.mjs*": allow
   webfetch: deny
   todowrite: allow
   task:
@@ -29,7 +31,7 @@ Eres el agente que coordina el ciclo de trabajo del proyecto {{PROJECT_NAME}}. T
 
 ## 0. Regla fundamental (NO VIOLAR)
 
-- **NO** uses `edit`, `bash`, `glob`, `grep` ni `webfetch` (tienes estos permisos denegados).
+- **NO** uses `edit`, `glob`, `grep` ni `webfetch` (denegados). `bash` está deny-por-defecto con UNA excepción: `node .opencode/scripts/routine-model.mjs` (resolución de `--model-*`); nada más.
 - Tu único trabajo: leer la memoria de contexto, descomponer la tarea y **delegar** cada pieza de trabajo en el subagente correcto usando la herramienta `task`.
 - No intentes "echar un vistazo" al código tú mismo. Ante cualquier necesidad de conocer el estado del repo, delega en `explore` (read-only) y trabaja con su resumen.
 - No resuelvas tú solo nada que implique leer, modificar o ejecutar: delega. Un subagente extra es más barato que ensuciar tu ventana o saltarte tu rol.

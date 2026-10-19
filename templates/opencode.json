@@ -6,11 +6,33 @@
   "agent": {
     "advisor": {
       "mode": "primary",
-      "model": "{{MODEL_ADVISOR}}"
+      "model": "{{MODEL_ADVISOR}}",
+      "permission": {
+        "bash": {
+          "*": "deny",
+          "node .opencode/scripts/routine-model.mjs*": "allow"
+        }
+      }
     },
     "planner": {
       "mode": "subagent",
-      "model": "{{MODEL_PLANNER}}"
+      "model": "{{MODEL_PLANNER}}",
+      "permission": {
+        "bash": {
+          "*": "deny",
+          "git status*": "allow",
+          "git diff*": "allow",
+          "git log*": "allow",
+          "node .opencode/scripts/skill-search.mjs": "allow",
+          "node .opencode/scripts/skill-search.mjs --json*": "allow",
+          "node .opencode/scripts/skill-search.mjs --offline*": "allow",
+          "node .opencode/scripts/skill-search.mjs --refresh*": "allow",
+          "node .opencode/scripts/skill-search.mjs --limit*": "allow",
+          "node .opencode/skills/_skill-loader/loader.mjs list*": "allow",
+          "node .opencode/skills/_skill-loader/loader.mjs search*": "allow",
+          "node .opencode/skills/_skill-loader/loader.mjs chunk*": "allow"
+        }
+      }
     },
     "builder": {
       "mode": "subagent",
@@ -86,7 +108,20 @@
     },
     "explore": {
       "mode": "subagent",
-      "model": "{{MODEL_EXPLORE}}"
+      "model": "{{MODEL_EXPLORE}}",
+      "permission": {
+        "bash": {
+          "*": "deny",
+          "node .opencode/scripts/doctor.mjs*": "allow",
+          "node .opencode/scripts/memory-index.mjs*": "allow",
+          "node .opencode/scripts/memory-stats.mjs*": "allow",
+          "node .opencode/scripts/memory-tokens.mjs*": "allow",
+          "node .opencode/scripts/memory-lock.mjs status": "allow",
+          "node .opencode/skills/_skill-loader/loader.mjs list*": "allow",
+          "node .opencode/skills/_skill-loader/loader.mjs search*": "allow",
+          "node .opencode/skills/_skill-loader/loader.mjs chunk*": "allow"
+        }
+      }
     }
   }
 }

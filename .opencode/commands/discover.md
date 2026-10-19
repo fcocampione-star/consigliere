@@ -31,7 +31,7 @@ Lanza `task` a `planner` con prompt:
 Con ambos retornos, sintetiza y entrega al usuario:
 
 1. **Contexto del proyecto:** fase actual, stack declarado vs real, estructura detectada (1-2 líneas).
-2. **Skills presentes:** lista `.opencode/skills/*` + `.agents/skills/*` (con `loader.mjs list` count).
+2. **Skills presentes:** lista `.opencode/skills/*` + `.agents/skills/*` (con el count del `loader.mjs list` que corrió `planner` en el paso 3 — tú no puedes ejecutar bash, usa su retorno).
 3. **Tabla de gaps** (una fila por tech detectada; cobertura por match EXACTO normalizado — lowercase, sin scope — contra lo instalado y el registry):
 
    | Tech detectada | Cubierta por | Acción |

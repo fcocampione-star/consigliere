@@ -18,6 +18,9 @@ permission:
     "node .opencode/scripts/skill-search.mjs --offline*": allow
     "node .opencode/scripts/skill-search.mjs --refresh*": allow
     "node .opencode/scripts/skill-search.mjs --limit*": allow
+    "node .opencode/skills/_skill-loader/loader.mjs list*": allow
+    "node .opencode/skills/_skill-loader/loader.mjs search*": allow
+    "node .opencode/skills/_skill-loader/loader.mjs chunk*": allow
   task:
     "*": deny
     explore: allow
