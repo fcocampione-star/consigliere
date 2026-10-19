@@ -29,8 +29,7 @@
 - Contract tests en `npm test` (paridad raíz↔templates con allowlist; `ls-files` respeta `.gitignore`, incl. test/contract-git-aware) [topic: test/contracts-antidrift] review_after: 2026-12-21
 - Runtime real Node >=20.11 (`import.meta.dirname` en 15 scripts); `engines: >=18` mentía; CI fija versión [topic: runtime/node-floor] review_after: 2027-03-30
 - Instalador Node-only: `init.mjs` implementación única, sh/ps1/cmd lanzadores; Node requisito duro [topic: installer/node-only] review_after: 2027-03-30
-- `--upgrade` separa memoria PRESERVADA de config REGENERADA y conserva `model:` por agente [topic: installer/upgrade-split] review_after: 2027-03-30
-- Backup previo obligatorio antes de escribir en destino no vacío; `--dry-run` no escribe [topic: installer/backup-previo] review_after: 2027-03-30
+- `--upgrade` separa memoria PRESERVADA de config REGENERADA (conserva `model:` por agente) y exige backup previo si el destino tiene contenido; `--dry-run` no escribe [topic: installer/upgrade-backup] review_after: 2027-03-30
 - Suite propia sin deps (`test/run.mjs`) + CI 5 jobs (3 SO × Node 20/22/24); cero deps runtime [topic: test/ci-gate] review_after: 2027-03-30
 - Free tier opencode (`{{MODEL_*}}` sin entitlement) solo se documenta; se valida forma, no entitlement [topic: dx/free-tier-doc] review_after: 2027-03-30
 - `lint:sh` resuelve bash (`ADVISOR_BASH`→PATH→Git for Windows); exit 3 sin intérprete; solo raíz (`ROOT_ONLY_EXACT`); en win32 args RELATIVOS porque el PATH puede exponer WSL-bash que destruye rutas `C:\` [topic: tools/lint-sh-crossplatform] review_after: 2027-03-30
@@ -46,13 +45,15 @@
 - Template `templates/gitignore`→`.gitignore` en destino (`TEMPLATE_RENAME`); npm excluye `.gitignore` [topic: installer/tarball-gitignore] review_after: 2027-03-30
 - Gate 0 V2 empírico automatizado en `test/e2e-harness-v2.test.mjs` (21 tests instalación→memoria→skills→upgrade contra CLI v2 real): pines `permissions[]` sin pérdida, `subagent_depth` strippado, claves desconocidas sin warnings; reintentos por race del servicio global (`debug agents`/`config`) [topic: test/e2e-v2-empirico] review_after: 2027-01-16
 - EOL canónico aplicado AL ESCRIBIR en el destino (`canonicalEol` en init.mjs, espejo del `.gitattributes`: LF puro, CRLF solo `ps1|cmd|bat`); el proyecto instalado recibe su propio `.gitattributes` (TEMPLATE_RENAME) y el instalador fija `core.autocrlf=false` LOCAL en repos fresh; hook post-commit normalizado a LF (no `copyFileSync` ciego); contrato `eol templates` custodia la fuente [topic: installer/eol-canonical] review_after: 2027-01-16
+- Config dev del repo gitignored generada por `dev-config.mjs` (`npm run dev:config`): `templates/opencode.json` con `{{MODEL_*}}`→`""`, `--check`/`--force` y no-op si existe; `doctor` SIN fallback a `templates/` (config raíz = prerequisito duro, CI la invoca igual) [topic: dx/dev-config-gitignored] review_after: 2027-04-18
+- Frontmatter de agentes con escalares YAML de comillas dobles válidos (`C:\\*`): `\*` NO es escape válido y hacía que opencode no parseara `builder`/`summarizer` (paridad byte a byte raíz↔templates en las 4 copias) [topic: agents/frontmatter-yaml-escape] review_after: 2027-04-18
 
 ---
 
 ## 3. Pendientes inmediatos
 
-- [x] **Gate 0 empírico V2: validado** en `test/e2e-harness-v2.test.mjs` contra CLI 2.0.32 (sin warnings por claves del harness, `default_agent`/`instructions` resueltos, reglas `deny`/`ask` aplicadas). La migración V2-nativa sigue la spec `sdd/v2-compat/spec` (ver SUMMARY, topic `test/e2e-v2-empirico` y `sdd/v2-compat/spec`).
-- [ ] Menores no bloqueantes: (a) help de `init.mjs` dice "sin binario global" pero `package.json` expone bins — incoherencia de redacción; (b) `--autoskills 3` no ejecutó autoskills en una prueba (revisar parseo del valor); (c) `release.yml` sin guarda "saltar si `name@version` ya existe" (tag de versión ya publicada fallaría); (d) actualizar/limpiar el stub `0.0.0-stage` si procede; (e) `debug agents` en el REPO DEV (sin `opencode.json` raíz, prohibido instalar el propio harness) no resuelve `builder`/`summarizer` — preexistente y reproducido con control git-stash (los 5 del wiring sí resuelven solo con frontmatter); posiblemente ligado a la migración V2 o al fallback de doctor; revisar si el repo dev debe llevar un `opencode.json` gitignored.
+- [x] **Gate 0 empírico V2: validado** en `test/e2e-harness-v2.test.mjs` contra CLI 2.0.32 (sin warnings por claves del harness, `default_agent`/`instructions` resueltos, reglas `deny`/`ask` aplicadas). La migración V2-nativa sigue la spec `sdd/v2-compat/spec` (ambas ya archivadas en `CHANGELOG/2026-10-12.md`, topics `test/e2e-v2-empirico` y `sdd/v2-compat/spec`).
+- [ ] Menores no bloqueantes: (a) help de `init.mjs` dice "sin binario global" pero `package.json` expone bins — incoherencia de redacción; (b) `--autoskills 3` no ejecutó autoskills en una prueba (revisar parseo del valor); (c) `release.yml` sin guarda "saltar si `name@version` ya existe" (tag de versión ya publicada fallaría); (d) actualizar/limpiar el stub `0.0.0-stage` si procede · **(e) cerrado (2026-10-18):** `debug agents` no resolvía `builder`/`summarizer` por el escape YAML inválido del frontmatter (`C:\*`) — causa en §2 `agents/frontmatter-yaml-escape`.
 
 ---
 
@@ -85,6 +86,8 @@
 | installer | `node init.mjs <dir> --upgrade --quick` (exit 0/1/2/3/4/5) | Entrada única; shims delegan; `EXIT_CODES` en `lib/core.mjs`; binarios por env→SO→PATH (`ADVISOR_BASH`/`ADVISOR_TAR`), sonda memoizada |
 | installer/eol | `canonicalEol()` en `init.mjs` + `.opencode/scripts/contract-tests.mjs §3a-bis` | Render normaliza EOL al escribir (LF, CRLF en ps1/cmd/bat); `test/eol-canonical.test.mjs` verif. el DESTINO con fixture envenenado; el contrato `eol templates` verif. la FUENTE |
 | release/npm | `npm dist-tag add advisor-harness@<v> latest` | Corregir `latest` tras publicar; `publish` desde `main` (tag `v*`) con `NPM_TOKEN` |
+| dev-config | `npm run dev:config` (`.opencode/scripts/dev-config.mjs`, root-only) | Genera la `opencode.json` dev gitignored desde `templates/opencode.json` (`{{MODEL_*}}`→`""`); `--check`/`--force`; no-op si existe. Prerequisito de `npm test` en clon limpio · **orden**: `dev:config` ANTES de `routine-model --persist` (si no, `--persist` edita `.opencode/opencode.json`, que NO está ignorado) |
+| test/wiring | `test/wiring-basic.test.mjs` (4 suites / 18 asserts) | Wiring estático comando→agente→script SIN CLI: paridad semántica frontmatter↔`templates/opencode.json`, invariante repo-dev con `opencode.json` raíz presente (7 agentes, cero `{{`, `--check` de frescura), ciclo memoria en tmpdir; complementa e2e-v2, contract-tests y dev-config.test.mjs |
 
 ---
 
