@@ -7,6 +7,16 @@
 
 <!-- ADVISOR:ENTRIES:START -->
 
+## 2026-10-18 — Wiring comando→agente→capacidad (P0/P1) + higiene CLI (P2) ✓
+
+topic: agents/wiring-permissions
+**Goal:** cerrar los 3 wiring rotos detectados en el audit (/doctor→explore, /routine→advisor, /discover→planner pedían bash que los agentes tenían denegado) y la higiene CLI de 3 scripts (`--help` exit 0, error de uso exit 1 en una línea sin stack, éxito falso eliminado).
+**Discoveries:** resolver el wiring requiere espejo en DOS sitios: los permisos viven en frontmatter y en `templates/opencode.json` (regla del repo: consistencia frontmatter↔opencode.json, "enforcement real = opencode.json"); el CLI v2 resuelve y normaliza los mapas de ambos (e2e 21/21 lo pina). Además, 4 repros de éxito falso: `routine-model --help`/sin-args → exit 0 SILENCIO (había test pineado del comportamiento viejo — se actualizó deliberadamente); `memory-stats monday <inválida>` soltaba TypeError con stack; `memory-tokens compare --scenario <inválida>` igual; `memory-stats lines <ruta explícita inexistente>` → exit 0 como "count 0" (un typo haría pasar los límites de memoria).
+**Accomplished:** (1) explore: `bash: deny` → `"*": deny` + allowlist READ-ONLY (doctor/memory-index/stats/tokens, `memory-lock status`, `loader list|search|chunk`; FUERA rotate/sync/lock acquire-release/loader refresh); (2) advisor: `"*": deny` + UNA excepción `routine-model.mjs*` (resolución de `--model-*`); (3) planner: + `loader.mjs list|search|chunk` junto a skill-search (discover.md reatribuye el conteo al retorno de planner); (4) los 3 espejados en `templates/opencode.json` (`agent.<name>.permission.bash`); (5) P2: los 3 scripts con `--help/-h` exit 0, uso por stdout, `fail()` una línea sin stack (exit 1), flags/args desconocidos ya no se tragan en silencio; (6) AGENT-PIPELINE.md con la nota de wiring; (7) pines e2e nuevos (allow puntuales + loop de normalización extendido a los 3 agentes) y suites CLI nuevas en los 3 tests.
+**Next:** fase 2 anotada: `general` `task` de `ask`→`deny`; contrato "wiring comando→scripts→executor" en contract-tests; encaje con la migración V2 a `permissions[]` en opencode.json.
+**Files:** `git log --oneline -5` (no listas manuales)
+**Verificación:** `node test/e2e-harness-v2.test.mjs` 21/21 contra CLI v2 real (normalización advisor/planner/explore + allows llegan a la config resuelta); `contract-tests.mjs` PASS (espejo 41 + eol 44 + node --check 33); `npm test` "harness ok" 16/16 / 48 passed; `lint:sh`/`lint:ps1` exit 0; repros manuales: `--help`→0, desconocido→1 con una línea, `monday zz`→1 sin stack, `lines <inexistente>`→1, `lines` default→0 (tolerante, pin del conservado).
+
 ## 2026-10-18 — EOL canónico al instalar (.gitattributes + render normalizado) ✓
 
 topic: installer/eol-canonical

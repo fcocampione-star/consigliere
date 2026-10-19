@@ -52,7 +52,7 @@
 ## 3. Pendientes inmediatos
 
 - [x] **Gate 0 empírico V2: validado** en `test/e2e-harness-v2.test.mjs` contra CLI 2.0.32 (sin warnings por claves del harness, `default_agent`/`instructions` resueltos, reglas `deny`/`ask` aplicadas). La migración V2-nativa sigue la spec `sdd/v2-compat/spec` (ver SUMMARY, topic `test/e2e-v2-empirico` y `sdd/v2-compat/spec`).
-- [ ] Menores no bloqueantes: (a) help de `init.mjs` dice "sin binario global" pero `package.json` expone bins — incoherencia de redacción; (b) `--autoskills 3` no ejecutó autoskills en una prueba (revisar parseo del valor); (c) `release.yml` sin guarda "saltar si `name@version` ya existe" (tag de versión ya publicada fallaría); (d) actualizar/limpiar el stub `0.0.0-stage` si procede.
+- [ ] Menores no bloqueantes: (a) help de `init.mjs` dice "sin binario global" pero `package.json` expone bins — incoherencia de redacción; (b) `--autoskills 3` no ejecutó autoskills en una prueba (revisar parseo del valor); (c) `release.yml` sin guarda "saltar si `name@version` ya existe" (tag de versión ya publicada fallaría); (d) actualizar/limpiar el stub `0.0.0-stage` si procede; (e) `debug agents` en el REPO DEV (sin `opencode.json` raíz, prohibido instalar el propio harness) no resuelve `builder`/`summarizer` — preexistente y reproducido con control git-stash (los 5 del wiring sí resuelven solo con frontmatter); posiblemente ligado a la migración V2 o al fallback de doctor; revisar si el repo dev debe llevar un `opencode.json` gitignored.
 
 ---
 
