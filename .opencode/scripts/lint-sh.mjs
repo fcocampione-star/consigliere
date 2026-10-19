@@ -14,6 +14,13 @@
  *
  * En linux/macos el primer candidato (el `bash` del PATH) siempre gana y las
  * rutas de Windows ni se miran: el comportamiento es idéntico al de antes.
+ *
+ * Ojo (hallazgo empírico win32): el `bash` del PATH puede ser el de WSL
+ * (WindowsApps\bash.exe), que NO es MSYS2 — no convierte rutas Windows y se
+ * come los backslashes como escapes. Por eso a bash nunca se le pasan rutas
+ * absolutas: el spawn ya nace con cwd=ROOT y los .sh van relativos, así que el
+ * idioma de rutas del intérprete resuelto es irrelevante (idéntico para
+ * Git-Bash, WSL y POSIX).
  */
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
@@ -31,7 +38,10 @@ const override = (process.env.ADVISOR_BASH || '').trim();
 // Un override explícito es una orden, no una sugerencia: si no arranca se dice,
 // no se pasa al siguiente candidato en silencio.
 const candidates = override ? [override] : ['bash', ...(process.platform === 'win32' ? winRoots() : [])];
-const args = ['-n', ...SH_FILES.map((rel) => join(ROOT, rel))];
+// Rutas RELATIVAS a propósito (ver el hallazgo empírico del header): WSL-bash
+// destruye `C:\...\init.sh` y Git-Bash lo reescribiría; con cwd=ROOT, un simple
+// `init.sh` lo resuelve cualquiera de los dos, y en unix también.
+const args = ['-n', ...SH_FILES];
 const tried = [];
 
 for (const bash of candidates) {
