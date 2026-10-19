@@ -109,7 +109,16 @@ const die = (code) => process.exit(code);
 
 function requireNode() {
   const cur = process.versions.node.split('.').map(Number);
-  const tooOld = MIN_NODE.some((min, i) => (cur[i] || 0) !== min && (cur[i] || 0) < min);
+  // Comparación semver componente a componente, cortando en la PRIMERA
+  // diferencia: si cur[0] > MIN_NODE[0], cualquier minor (p. ej. `26.4.0`,
+  // cuyo `.4 < .11`) es válido. Comparar índices por separado sin el corte
+  // daba falsos positivos (26.4/25.x/23.x → "requerido" erróneo).
+  let tooOld = false;
+  for (let i = 0; i < MIN_NODE.length; i++) {
+    const c = cur[i] || 0, m = MIN_NODE[i];
+    if (c > m) break;
+    if (c < m) { tooOld = true; break; }
+  }
   if (tooOld) { err(`Node >=${MIN_NODE.join('.')} requerido (usa import.meta.dirname). Actual: ${process.versions.node}`); die(EXIT.USO); }
 }
 
