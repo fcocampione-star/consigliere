@@ -17,6 +17,7 @@
  * global vs por-agente, validaciones con entradas limite y el merge atomico.
  */
 
+import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { suite, test, assert, eq, neq, match, includes, throws, tmpdir, cleanup, runAll } from './harness.mjs';
@@ -154,10 +155,15 @@ test('parseArgs nunca lanza: acumula errores y conserva los flags validos', () =
   eq(p.persist, true, 'los flags de control se conservan');
 });
 
-test('los argumentos posicionales y los flags desconocidos se ignoran sin error', () => {
-  const p = parseArgs(['refactorizar', '--skip-verify', '--parallel', '--critic', '--model-verifier=v/m1']);
-  eq(p.errors, [], 'ningun error por flags no relacionados con modelos');
-  eq(p.overrides, { verifier: 'v/m1' }, 'el unico flag de modelo se aplica');
+test('los argumentos posicionales se ignoran; los flags desconocidos ahora SON error', () => {
+  // Convención fijada con el usuario (higiene CLI): --help exit 0, flag
+  // desconocido exit 1. Antes TODO se tragaba en silencio con exit 0
+  // (falso éxito — el hallazgo del audit de wiring).
+  const p = parseArgs(['refactorizar', '--model-verifier=v/m1']);
+  eq(p.errors, [], 'los posicionales no son órdenes y se ignoran');
+  eq(p.overrides, { verifier: 'v/m1' }, 'el único flag de modelo se aplica');
+  const q = parseArgs(['--skip-verify', '--parallel', '--critic']);
+  eq(q.errors, ['Flag desconocido: --skip-verify', 'Flag desconocido: --parallel', 'Flag desconocido: --critic'], 'flag no soportado = error de uso');
 });
 
 test('el ultimo valor gana cuando el mismo flag se repite', () => {
@@ -377,6 +383,40 @@ test('includes documenta que el nombre del agente aparece en el archivo escrito'
     mergeAtomically(ctx.path, { verifier: 'vendor/v1' });
     includes(ctx.raw(), 'verifier', 'el nombre del agente queda en el JSON');
   } finally { cleanupAll(ctx); }
+});
+
+// ─── CLI (como hijo: mismo perfil del resto del harness) ────────────────────
+suite('routine-model CLI');
+
+const SCRIPT_RM = join(import.meta.dirname, '..', '.opencode', 'scripts', 'routine-model.mjs');
+const cliRm = (args) => spawnSync(process.execPath, [SCRIPT_RM, ...args], { encoding: 'utf8', timeout: 60000, windowsHide: true });
+
+test('--help / -h: uso por stdout y exit 0', () => {
+  for (const a of [['--help'], ['-h']]) {
+    const r = cliRm(a);
+    eq(r.status, 0, `${a[0]} sale 0`);
+    includes(r.stdout, 'Uso:', `${a[0]} imprime el uso`);
+    includes(r.stdout, 'agentes:', `${a[0]} lista los agentes`);
+  }
+});
+
+test('sin args: uso y exit 1 (nunca el exit 0 silencioso de antes)', () => {
+  const r = cliRm([]);
+  eq(r.status, 1, 'sin args sale 1');
+  includes(r.stdout, 'Uso:', 'imprime el uso');
+});
+
+test('flag desconocido: error de uso por stderr, una línea, exit 1', () => {
+  const r = cliRm(['--skip-verify']);
+  eq(r.status, 1, 'desconocido sale 1');
+  includes(r.stderr, 'Flag desconocido: --skip-verify', 'nombra el flag');
+  assert(!/\bat .+\.mjs:\d+/.test(r.stderr), 'sin stack: solo la línea del error');
+});
+
+test('--model-bogus=x sigue siendo error (gate de agentes intacto)', () => {
+  const r = cliRm(['--model-bogus=x']);
+  eq(r.status, 1, 'agente no permitido sale 1');
+  includes(r.stderr, 'Agente no permitido', 'lista los permitidos');
 });
 
 await runAll();

@@ -23,7 +23,8 @@
  *   node .opencode/scripts/memory-stats.mjs lines [ruta/SUMMARY.md]
  */
 import { join } from 'node:path';
-import { exitUsage, isMain, readText } from './lib/core.mjs';
+import { existsSync } from 'node:fs';
+import { exitUsage, fail, isMain, readText } from './lib/core.mjs';
 import { todayUTC } from './lib/md.mjs';
 
 export const ENTRIES_START = '<!-- ADVISOR:ENTRIES:START -->';
@@ -111,19 +112,41 @@ export function invalidateCaches() {
   }
 }
 
+const USO = `Uso:
+  node .opencode/scripts/memory-stats.mjs monday <YYYY-MM-DD>
+  node .opencode/scripts/memory-stats.mjs lines [ruta/SUMMARY.md]`;
+
 function main() {
   const cmd = process.argv[2];
+  // Conveniencia de descubrimiento: `--help`/`-h` SIEMPRE uso por stdout y
+  // exit 0 (convención del harness: exit 1 solo en error de uso real).
+  if (cmd === '--help' || cmd === '-h') {
+    console.log(USO);
+    return;
+  }
   switch (cmd) {
     case 'monday': {
       const arg = process.argv[3];
       if (!arg) exitUsage('Uso: memory-stats.mjs monday <YYYY-MM-DD>');
-      console.log(mondayOf(arg));
+      // La validación vive en mondayOf (TypeError con mensaje claro), pero el
+      // CLI no debe soltar stack: una línea por stderr y exit 1 (USO).
+      try {
+        console.log(mondayOf(arg));
+      } catch (e) {
+        fail('memory-stats', e.message);
+      }
       break;
     }
     case 'lines': {
       // Raíz del repo = dos niveles por encima de scripts/; NO es
       // core.REPO_ROOT, que desde lib/ resuelve en `.opencode/` (un nivel más).
       const p = process.argv[3] || join(import.meta.dirname, '..', '..', 'SUMMARY.md');
+      // Tolerante a la ausencia SOLO del default (SUMMARY aún no existe en un
+      // repo recién clonado): una ruta EXPLÍCITA inexistente es un error de uso
+      // — "count: 0, exit 0" silencioso por un typo haría pasar límites.
+      if (process.argv[3] && !existsSync(p)) {
+        fail('memory-stats', `ruta inexistente (usa el default o una ruta real): ${p}`);
+      }
       const res = contentLines(readText(p));
       console.log(JSON.stringify({ file: p, ...res }, null, 2));
       break;
@@ -131,9 +154,7 @@ function main() {
     default: {
       // El uso sin comando sigue saliendo por STDOUT como siempre: aquí
       // core.exitUsage escribiría a stderr y cambiaría un stream observable.
-      console.log(`Uso:
-  node .opencode/scripts/memory-stats.mjs monday <YYYY-MM-DD>
-  node .opencode/scripts/memory-stats.mjs lines [ruta/SUMMARY.md]`);
+      console.log(USO);
       process.exit(1);
     }
   }

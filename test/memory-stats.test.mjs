@@ -15,6 +15,8 @@
  * Solo se leen/escriben ficheros dentro de `tmpdir()`; nada toca el repo.
  */
 import { suite, test, assert, eq, match, includes, throws, tmpdir, cleanup, runAll } from './harness.mjs';
+import { spawnSync } from 'node:child_process';
+import { join } from 'node:path';
 import { summaryWithEntries, readIfExists, countLines } from './fixtures.mjs';
 import {
   mondayOf,
@@ -444,6 +446,47 @@ test('una entrada que no es funcion no se registra y devuelve un no-op', () => {
     eq(baja(), undefined, 'el no-op no hace nada ni devuelve nada');
     invalidateCaches();
   }
+});
+
+// ─── CLI (como hijo) — higiene CLI 2026-10-18 ────────────────────────────────
+suite('memory-stats CLI');
+
+const SCRIPT_MS = join(import.meta.dirname, '..', '.opencode', 'scripts', 'memory-stats.mjs');
+const cliMs = (args) => spawnSync(process.execPath, [SCRIPT_MS, ...args], { encoding: 'utf8', timeout: 60000, windowsHide: true });
+
+test('--help / -h: uso por stdout y exit 0', () => {
+  for (const a of [['--help'], ['-h']]) {
+    const r = cliMs(a);
+    eq(r.status, 0, `${a[0]} sale 0`);
+    includes(r.stdout, 'Uso:', `${a[0]} imprime el uso`);
+  }
+});
+
+test('monday <fecha inválida>: UNA línea por stderr, sin stack, exit 1', () => {
+  const r = cliMs(['monday', 'no-es-fecha']);
+  eq(r.status, 1, 'fecha inválida sale 1');
+  includes(r.stderr, 'fecha inválida', 'nombra el problema');
+  assert(!/\bat .+\.mjs:\d+/.test(r.stderr), 'sin stack (antes soltaba TypeError)');
+  eq(r.stdout, '', 'nada de salida útil por stdout');
+});
+
+test('monday <fecha válida> sigue imprimiendo la fecha (exit 0)', () => {
+  const r = cliMs(['monday', '2026-10-18']);
+  eq(r.status, 0, 'fecha válida sale 0');
+  eq(r.stdout.trim(), '2026-10-12', 'lunes de la semana en UTC');
+});
+
+test('lines con ruta EXPLÍCITA inexistente: exit 1 (ya no pasa como count 0)', () => {
+  const r = cliMs(['lines', join(import.meta.dirname, 'no-existe-ni-por-casualidad.txt')]);
+  eq(r.status, 1, 'ruta explícita inexistente sale 1');
+  includes(r.stderr, 'ruta inexistente', 'nombra el problema');
+  assert(!/\bat .+\.mjs:\d+/.test(r.stderr), 'sin stack');
+});
+
+test('lines SIN ruta (default): tolerante, exit 0 (pin del comportamiento que se conserva)', () => {
+  const r = cliMs(['lines', join(import.meta.dirname, '..', 'SUMMARY.md')]);
+  eq(r.status, 0, 'default existente sale 0');
+  includes(r.stdout, '"count"', 'JSON con el conteo');
 });
 
 await runAll();

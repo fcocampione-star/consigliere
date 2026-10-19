@@ -101,6 +101,14 @@ export function parseArgs(argv) {
       i++;
       continue;
     }
+    // Los flags desconocidos ya NO se ignoran en silencio (antes un --help o un
+    // typo corría sin hacer NADA y salía 0 = éxito falso): error de uso. Los
+    // posicionales sí se ignoran — este CLI resuelve solo flags de modelo y
+    // las /routine le pasan su texto como $ARGUMENTS por separado.
+    if (arg.startsWith('--')) {
+      errors.push(`Flag desconocido: ${arg}`);
+      continue;
+    }
   }
 
   return { globalModel, overrides, persist, dryRun, errors };
@@ -146,8 +154,23 @@ function resolveConfigPath() {
   return p2;
 }
 
+const USO = [
+  'Uso:',
+  '  node .opencode/scripts/routine-model.mjs [--dry-run] [--persist]',
+  '    --model=<id> | --model <id>                      override global',
+  '    --model-<agente>=<id> | --model-<agente> <id>    override por agente',
+  `    agentes: ${ALLOWED_AGENTS.join(', ')}`,
+].join('\n');
+
 function main() {
   const argv = process.argv.slice(2);
+  // Antes: sin args o con --help salía exit 0 en SILENCIO (falso éxito). Ahora
+  // el uso se imprime siempre; `--help`/`-h` (uso solicitado) sale 0 y sin
+  // args sale 1 (no hay nada que resolver).
+  if (argv.length === 0 || argv.includes('--help') || argv.includes('-h')) {
+    console.log(USO);
+    process.exit(argv.length === 0 ? 1 : 0);
+  }
   const parsed = parseArgs(argv);
   if (parsed.errors.length > 0) {
     for (const e of parsed.errors) console.error(`❌ ${e}`);

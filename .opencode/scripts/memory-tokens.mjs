@@ -23,7 +23,7 @@
  */
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { exitUsage, isMain, readText } from './lib/core.mjs';
+import { exitUsage, fail, isMain, readText } from './lib/core.mjs';
 import { listChangelog } from './lib/md.mjs';
 import { entriesRegion } from './memory-stats.mjs';
 
@@ -150,9 +150,19 @@ function parseArgs(argv) {
   return out;
 }
 
+const USO = `Uso:
+  node .opencode/scripts/memory-tokens.mjs measure [--json] [--root <dir>]
+  node .opencode/scripts/memory-tokens.mjs compare --scenario direct|delegated|spec-lite [--json] [--root <dir>]`;
+
 function main() {
   const { cmd, json, root, scenario } = parseArgs(process.argv);
   const base = root ?? join(import.meta.dirname, '..', '..');
+  // `--help`/`-h` por stdout y exit 0 (convención del harness: el uso por
+  // decisión propia no es un error; exit 1 queda para error de uso real).
+  if (cmd === '--help' || cmd === '-h') {
+    console.log(USO);
+    return;
+  }
   if (cmd === 'measure') {
     const m = measureRoot(base);
     if (json) console.log(JSON.stringify({ root: base, ...m }, null, 2));
@@ -168,7 +178,17 @@ function main() {
   }
   if (cmd === 'compare') {
     if (!scenario) exitUsage('memory-tokens: compare exige --scenario direct|delegated|spec-lite');
-    const r = compare(scenario, measureRoot(base));
+    // El mensaje del escenario desconocido lista los válidos (útil), pero el
+    // CLI no debe soltar stack: una línea por stderr y exit 1 (USO). La función
+    // `compare()` sigue lanzando: el pineo a nivel de unidad no cambia.
+    let r;
+    try {
+      r = compare(scenario, measureRoot(base));
+    } catch (e) {
+      // compare() ya antepone su scope al mensaje; fail() añadiría el otro:
+      // se normaliza para no imprimir "memory-tokens: memory-tokens: ...".
+      fail('memory-tokens', String(e.message).replace(/^memory-tokens:\s*/, ''));
+    }
     if (json) console.log(JSON.stringify({ root: base, ...r }, null, 2));
     else {
       console.log(`memory-tokens compare --scenario ${r.scenario} (heurística chars/${TOKENS_PER_CHAR})`);
@@ -178,7 +198,7 @@ function main() {
     }
     return;
   }
-  exitUsage('Uso:\n  node .opencode/scripts/memory-tokens.mjs measure [--json] [--root <dir>]\n  node .opencode/scripts/memory-tokens.mjs compare --scenario direct|delegated|spec-lite [--json] [--root <dir>]');
+  exitUsage(USO);
 }
 
 if (isMain(import.meta.url, process.argv[1])) main();

@@ -218,4 +218,22 @@ test('sin comando y compare sin escenario salen con exit 1 por stderr', () => {
   }
 });
 
+// (últimos tests del suite CLI — añadidos con la higiene CLI 2026-10-18)
+
+test('compare --scenario <inválido>: una línea por stderr, SIN stack, exit 1', () => {
+  const r = cli(['compare', '--scenario', 'no-existe']);
+  eq(r.status, 1, 'escenario desconocido sale 1');
+  includes(r.stderr, 'escenario desconocido', 'nombra el problema');
+  includes(r.stderr, 'spec-lite', 'lista los escenarios válidos');
+  assert(!/\bat .+\.mjs:\d+/.test(r.stderr), 'sin stack (antes soltaba TypeError)');
+});
+
+test('--help / -h por stdout y exit 0', () => {
+  for (const a of [['--help'], ['-h']]) {
+    const r = cli(a);
+    eq(r.status, 0, `${a[0]} sale 0`);
+    includes(r.stdout, 'Uso:', `${a[0]} imprime el uso`);
+  }
+});
+
 await runAll();
