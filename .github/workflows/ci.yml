@@ -85,18 +85,14 @@ jobs:
 
       # La opencode.json de la raíz está gitignored a propósito (es config de
       # desarrollo local), así que un checkout limpio no la trae. Y sin ella
-      # `doctor` marca "opencode.json" en error, lo que hace fallar
-      # test/doctor.test.mjs ("harness sano del repo real"). Se siembra desde la
-      # plantilla — es un fichero de trabajo, nunca se commitea.
-      - name: sembrar la opencode.json de la raíz (config de desarrollo)
-        run: |
-          set -euo pipefail
-          if [ ! -f opencode.json ]; then
-            cp templates/opencode.json opencode.json
-            echo "sembrada opencode.json desde la plantilla (ignorado por git)"
-          else
-            echo "opencode.json ya presente"
-          fi
+      # `doctor` marca "opencode.json" en error (ya NO hay fallback a la
+      # plantilla), lo que hace fallar test/doctor.test.mjs ("harness sano del
+      # repo real"). La genera `npm run dev:config` desde templates/opencode.json
+      # resolviendo cada {{MODEL_*}} a "" — es un fichero de trabajo, nunca se
+      # commitea. Misma forma de invocación que release.yml y que documenta
+      # CONTRIBUTING.md; sin `--force` es no-op si el fichero ya existe.
+      - name: generar la opencode.json de la raíz (config de desarrollo)
+        run: npm run dev:config
 
       - name: npm test (suite completa)
         run: npm test

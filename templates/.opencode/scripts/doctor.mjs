@@ -25,12 +25,12 @@ function add(name, status, detail, fix='') { checks.push({ name, status, detail,
 function lines(p) { try { return readFileSync(p,'utf8').split('\n').length; } catch { return 0; } }
 
 // ── Capa A: proyecto (⚠️/❌ posibles) ─────────────────────────────────────
-// 1 opencode.json (root opencode.json, fallback .opencode/opencode.json; en el
-// repo DEV del harness la fuente canónica es templates/opencode.json)
+// 1 opencode.json (config raíz del proyecto; `.opencode/opencode.json` queda como
+// fallback legacy. SIN fallback a la plantilla pública: la config raíz es un
+// prerequisito duro)
 try {
   let p = join(ROOT,'opencode.json');
   if (!existsSync(p)) p = join(ROOT,'.opencode','opencode.json');
-  if (!existsSync(p) && existsSync(join(ROOT,'templates','opencode.json'))) p = join(ROOT,'templates','opencode.json');
   const j = JSON.parse(readFileSync(p,'utf8'));
   if (j.default_agent==='advisor' && j.subagent_depth===2) add('opencode.json','✅','default_agent advisor depth 2');
   else add('opencode.json','⚠️','default_agent/subagent_depth inesperado','Revisa la config del proyecto');

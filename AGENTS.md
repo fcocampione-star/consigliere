@@ -60,6 +60,7 @@
 
 ```bash
 npm test                                              # suite completa: node --check + test/ + rotación + contrato + versión
+npm run dev:config                                    # genera la opencode.json DEV de este repo (gitignored); prerequisito de `npm test` en un clon limpio
 npm run test:unit                                    # solo la suite de test/ (micro-framework sin deps, un proceso por archivo)
 npm run test:contract                                # contrato anti-drift (paridad espejo raíz↔templates/ + catálogos)
 npm run lint:sh                                      # bash -n init.sh + scripts/check-memory-limits.sh (lint-sh.mjs resuelve el bash: PATH → Git for Windows; override ADVISOR_BASH)

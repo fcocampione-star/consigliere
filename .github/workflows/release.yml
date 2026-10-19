@@ -76,12 +76,11 @@ jobs:
           cache: ''
 
       # Igual que en CI: la opencode.json de la raíz está gitignored y sin ella
-      # `npm test` falla en test/doctor.test.mjs. Fichero de trabajo, no se
-      # commitea.
-      - name: sembrar la opencode.json de la raíz (config de desarrollo)
-        run: |
-          set -euo pipefail
-          [ -f opencode.json ] || cp templates/opencode.json opencode.json
+      # `npm test` falla en test/doctor.test.mjs (doctor ya no tiene fallback a la
+      # plantilla). La genera `npm run dev:config` — misma forma de invocación que
+      # en ci.yml. Fichero de trabajo, no se commitea.
+      - name: generar la opencode.json de la raíz (config de desarrollo)
+        run: npm run dev:config
 
       # El tag es la versión: si divergen, se publica algo distinto de lo que
       # dice el tag, y eso no se detecta en npm hasta que es tarde. Solo aplica

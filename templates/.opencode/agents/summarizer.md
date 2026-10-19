@@ -18,9 +18,9 @@ permission:
     "mkfs*": deny
     "chmod -R 777 /*": deny
     "chmod 777*": deny
-    "del /f /s C:\*": deny
-    "rmdir /s* C:\*": deny
-    "Remove-Item* C:\*": deny
+    "del /f /s C:\\*": deny
+    "rmdir /s* C:\\*": deny
+    "Remove-Item* C:\\*": deny
     "Format-Volume*": deny
     "diskpart*": deny
     "cat **/.env*": ask

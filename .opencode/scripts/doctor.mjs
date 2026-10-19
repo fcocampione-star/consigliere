@@ -25,15 +25,15 @@ function add(name, status, detail, fix='') { checks.push({ name, status, detail,
 
 function lines(p) { try { return readFileSync(p,'utf8').split('\n').length; } catch { return 0; } }
 
-// 1 opencode.json (root opencode.json, fallback .opencode/opencode.json; en el
-// repo DEV del harness la fuente canónica es templates/opencode.json)
+// 1 opencode.json (config raíz del proyecto; `.opencode/opencode.json` queda como
+// fallback legacy. SIN fallback a `templates/opencode.json`: la config raíz es un
+// prerequisito duro — un clon limpio de este repo da ❌ hasta `npm run dev:config`)
 try {
   let p = join(ROOT,'opencode.json');
   if (!existsSync(p)) p = join(ROOT,'.opencode','opencode.json');
-  if (!existsSync(p) && existsSync(join(ROOT,'templates','opencode.json'))) p = join(ROOT,'templates','opencode.json');
   const j = JSON.parse(readFileSync(p,'utf8'));
   if (j.default_agent==='advisor' && j.subagent_depth===2) add('opencode.json','✅','default_agent advisor depth 2');
-  else add('opencode.json','⚠️','default_agent/subagent_depth inesperado','Revisa templates/opencode.json');
+  else add('opencode.json','⚠️','default_agent/subagent_depth inesperado','Regenera la config: npx advisor-harness@latest . --upgrade (dev: npm run dev:config)');
   const b = j.agent?.builder?.permission?.bash;
   if (b && b['cat **/.env*']==='ask') add('bash harden','✅','deny+ask sensibles presentes');
   else add('bash harden','⚠️','falta harden v1.0 (cat **/.env* -> ask)','Re-render init.mjs --upgrade');

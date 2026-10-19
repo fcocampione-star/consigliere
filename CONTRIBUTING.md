@@ -22,7 +22,10 @@ Flujo de desarrollo del harness. Esto es un repo **sin dependencias**: no hay `p
 
 ## Qué validar antes de dar por cerrada una tarea
 
+> ⚠️ **Primer arranque de un clon: `npm install && npm run dev:config` ANTES de `npm test`.** La `opencode.json` de la raíz está gitignored y `doctor` ya **no** cae a `templates/opencode.json` (config raíz = prerequisito duro): sin ese fichero un clon limpio da `doctor` ❌ y `test/doctor.test.mjs` falla. **El orden importa:** primero `dev:config` (crea el fichero), y solo después `routine-model.mjs --persist` (que edita ese mismo fichero); al revés, `routine-model` caería a `.opencode/opencode.json` — no ignorado — y rompería el contrato.
+
 ```bash
+npm run dev:config      # prerequisito: genera la opencode.json dev (gitignored)
 npm test                # suite completa (ver abajo)
 npm run lint:sh         # bash -n init.sh + scripts/check-memory-limits.sh
 npm run lint:ps1        # parse AST de PowerShell sobre init.ps1
@@ -33,6 +36,7 @@ npm run lint:ps1        # parse AST de PowerShell sobre init.ps1
 | `npm test` | `node --check init.mjs` + `test/run.mjs` (suite propia) + `.opencode/scripts/memory-rotate.test.mjs` + `.opencode/scripts/contract-tests.mjs` + `.opencode/scripts/version-check.mjs` |
 | `npm run test:unit` | solo `test/run.mjs` |
 | `npm run test:contract` | solo el contrato anti-drift |
+| `npm run dev:config` | genera la `opencode.json` dev local (gitignored) desde `templates/opencode.json` (`{{MODEL_*}}` → `""`); `--check` asserta frescura, `--force` regenera; sin flags es no-op si existe |
 | `npm run lint:sh` | `bash -n` de los scripts bash de la raíz |
 | `npm run lint:ps1` | parse real con `[Parser]::ParseFile` (un grep no vale: un `.ps1` con error de sintaxis devuelve tokens de error) |
 | `npm run version:check` | `package.json` == `init.mjs` / `init.sh` / `init.ps1` |
@@ -45,7 +49,7 @@ La suite de `test/` es un micro-framework propio sin dependencias: `test/harness
 El contrato anti-drift (`.opencode/scripts/contract-tests.mjs`) compara **bytes**:
 
 - Lo que existe en ambos lados debe ser **idéntico**, salvo lo que esté catalogado en `ALLOW_DIVERGENCE` (`AGENTS.md`, `.opencode/agents/advisor.md`, `.opencode/commands/doctor.md`, `.opencode/scripts/doctor.mjs`, `.opencode/skills/_project-docs/SKILL.md`, `opencode.json`, `PROJECT_STATE.md`, `SUMMARY.md`, `skills-lock.json`, `scripts/check-memory-limits.sh`).
-- Un archivo **solo en la raíz sin catalogar rompe el contrato** (no avisa: falla). Si creas uno, o lo espejas en `templates/`, o lo declaras en `ROOT_ONLY_EXACT` / `ROOT_ONLY_PREFIXES` con su motivo.
+- Un archivo **solo en la raíz sin catalogar rompe el contrato** (no avisa: falla). Si creas uno, o lo espejas en `templates/`, o lo declaras en `ROOT_ONLY_EXACT` / `ROOT_ONLY_PREFIXES` con su motivo. Dev-only ya catalogados: `lint-sh.mjs` (resuelve el intérprete bash) y `dev-config.mjs` (genera el config dev de la raíz).
 - `test/` y `.github/` son desarrollo puro: nunca se instalan por proyecto ni se espejan.
 - `templates/gitignore` es un caso especial: npm **excluye del tarball** cualquier fichero llamado `.gitignore` (lo trata como ignore-file), así que la plantilla se guarda sin el punto y `init.mjs` (`TEMPLATE_RENAME`) la restituye a `.gitignore` en el proyecto. Por eso `.gitignore` (raíz) está en `ROOT_ONLY_EXACT` y `gitignore` en `TEMPLATE_ONLY_EXACT`, y **no** son un par espejo.
 
@@ -68,11 +72,11 @@ node init.mjs /tmp/demo --upgrade --autoskills 3 --git no   # la segunda pasada
 
 (`/tmp/demo` = cualquier ruta vacía fuera del repo; en Windows, `%TEMP%\demo`.) Instala en ese directorio, haz el `--upgrade` contra ese proyecto temporal, y lee el resultado ahí. Si lo que quieres probar es el repo en sí, usa `npm test` y el contrato anti-drift, que es la comprobación de la divergencia.
 
-> Recordatorio de la nota 1 de abajo: la `opencode.json` de la raíz está en `.gitignore` **a propósito** — es la config de desarrollo local, nunca se commitea — y por eso `ci.yml` y `release.yml` la siembran desde `templates/opencode.json` antes de correr la suite.
+> Recordatorio de la nota 1 de abajo: la `opencode.json` de la raíz está en `.gitignore` **a propósito** — es la config de desarrollo local, nunca se commitea — y por eso `ci.yml` y `release.yml` la generan con `npm run dev:config` antes de correr la suite. En local, `npm run dev:config` es el prerequisito del primer arranque.
 
 ## Dos notas de mantenimiento de la CI ( quirks deliberados, no son bugs)
 
-1. **La `opencode.json` de la raíz está en `.gitignore` a propósito** (el patrón anclado `/opencode.json`; la pública es `templates/opencode.json`, que sí se trackea). Es config de desarrollo local, así que un checkout limpio de CI **no la trae**, y sin ella `doctor` marca `opencode.json` en error y `test/doctor.test.mjs` falla. Por eso `ci.yml` y `release.yml` siembran el fichero antes de correr la suite (`[ -f opencode.json ] || cp templates/opencode.json opencode.json`). Es un fichero de trabajo: nunca se commitea.
+1. **La `opencode.json` de la raíz está en `.gitignore` a propósito** (el patrón anclado `/opencode.json`; la pública es `templates/opencode.json`, que sí se trackea). Es config de desarrollo local, así que un checkout limpio de CI **no la trae**, y sin ella `doctor` marca `opencode.json` en error — ya **sin** fallback a la plantilla — y `test/doctor.test.mjs` falla. Por eso `ci.yml` y `release.yml` la generan con `npm run dev:config` (misma forma de invocación que documenta este archivo) antes de correr la suite; en local el prerequisito del primer arranque es `npm install && npm run dev:config`. Es un fichero de trabajo: nunca se commitea.
 
 2. **En el runner de Windows, el `tar` de GNU va primero en el PATH.** Git for Windows pone su propio `tar` delante del `bsdtar` de System32, y el de GNU interpreta `C:` como un host remoto: el backup (que usa rutas absolutas al escribir sobre un destino con contenido) falla con rutas `C:\...`. Por eso `init.mjs` resuelve el tar internamente (`ADVISOR_TAR` → `System32\tar.exe` en win32 → `tar` del PATH) y lo usa en todos sus call-sites; el workflow ya **no** antepone `/c/Windows/System32` al PATH. Si añades un paso de CI que invoque `tar` por su cuenta en Windows, resuélvelo igual.
 

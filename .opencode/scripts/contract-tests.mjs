@@ -91,6 +91,7 @@ const ROOT_ONLY_EXACT = new Set([
   '.nvmrc',
   '.opencode/.gitignore',
   '.opencode/scripts/lint-sh.mjs', // `bash -n` de este repo resolviendo el intérprete: tool de dev, no del harness instalado
+  '.opencode/scripts/dev-config.mjs', // genera la `opencode.json` LOCAL de este repo (gitignored) desde `templates/opencode.json`: el repo dev no puede autoinstalarse (`refuseHarnessSource`), así que la config dev no la escribe el instalador. Tool de dev, no del harness instalado.
   '.opencode/scripts/memory-rotate.test.mjs',
   '.opencode/scripts/contract-tests.mjs',
   '.opencode/scripts/version-check.mjs',
