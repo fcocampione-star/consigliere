@@ -33,7 +33,7 @@
 - Backup previo obligatorio antes de escribir en destino no vacío; `--dry-run` no escribe [topic: installer/backup-previo] review_after: 2027-03-30
 - Suite propia sin deps (`test/run.mjs`) + CI 5 jobs (3 SO × Node 20/22/24); cero deps runtime [topic: test/ci-gate] review_after: 2027-03-30
 - Free tier opencode (`{{MODEL_*}}` sin entitlement) solo se documenta; se valida forma, no entitlement [topic: dx/free-tier-doc] review_after: 2027-03-30
-- `lint:sh` resuelve bash (`ADVISOR_BASH`→PATH→Git for Windows); exit 3 sin intérprete; solo raíz (`ROOT_ONLY_EXACT`) [topic: tools/lint-sh-crossplatform] review_after: 2027-03-30
+- `lint:sh` resuelve bash (`ADVISOR_BASH`→PATH→Git for Windows); exit 3 sin intérprete; solo raíz (`ROOT_ONLY_EXACT`); en win32 args RELATIVOS porque el PATH puede exponer WSL-bash que destruye rutas `C:\` [topic: tools/lint-sh-crossplatform] review_after: 2027-03-30
 - Harness en raíz commiteado (un repo = harness+memoria); excluir de artefacto prod; app en subcarpeta [topic: architecture/harness-placement] review_after: 2027-03-30
 - `skill-search.mjs`: registry JSON autoskills (tag `v0.3.6`) best-effort, cache 7d gitignored; tests/doctor sin red [topic: dx/skill-search-registry] review_after: 2027-04-06
 - Catálogo autoskills (CC-BY-NC-4.0) nunca commiteado/empaquetado; solo cache local (CLI sin search/list) [topic: dx/autoskills-registry-license] review_after: 2027-04-06
@@ -44,11 +44,13 @@
 - D2: `dev`=integración/`main`=estable (ambas repo completo), promoción `--ff-only`; consumo vía npm + source archive [topic: repo/dev-main-merge] review_after: 2027-01-09
 - Publicación npm desde `main` (tag `v*`, guarda ancestría, `NPM_TOKEN`); `latest` apunta a versión buena [topic: release/npm-publish] review_after: 2027-04-18
 - Template `templates/gitignore`→`.gitignore` en destino (`TEMPLATE_RENAME`); npm excluye `.gitignore` [topic: installer/tarball-gitignore] review_after: 2027-03-30
+- Gate 0 V2 empírico automatizado en `test/e2e-harness-v2.test.mjs` (21 tests instalación→memoria→skills→upgrade contra CLI v2 real): pines `permissions[]` sin pérdida, `subagent_depth` strippado, claves desconocidas sin warnings; reintentos por race del servicio global (`debug agents`/`config`) [topic: test/e2e-v2-empirico] review_after: 2027-01-16
 
 ---
 
 ## 3. Pendientes inmediatos
 
+- [x] **Gate 0 empírico V2: validado** en `test/e2e-harness-v2.test.mjs` contra CLI 2.0.32 (sin warnings por claves del harness, `default_agent`/`instructions` resueltos, reglas `deny`/`ask` aplicadas). La migración V2-nativa sigue la spec `sdd/v2-compat/spec` (ver SUMMARY, topic `test/e2e-v2-empirico` y `sdd/v2-compat/spec`).
 - [ ] Menores no bloqueantes: (a) help de `init.mjs` dice "sin binario global" pero `package.json` expone bins — incoherencia de redacción; (b) `--autoskills 3` no ejecutó autoskills en una prueba (revisar parseo del valor); (c) `release.yml` sin guarda "saltar si `name@version` ya existe" (tag de versión ya publicada fallaría); (d) actualizar/limpiar el stub `0.0.0-stage` si procede.
 
 ---
@@ -59,6 +61,7 @@
 
 | Semana (lunes) | Archivo | Resumen |
 |----------------|---------|---------|
+| 2026-10-12 | 2026-10-12.md | rotación automática |
 | 2026-10-05 | 2026-10-05.md | rotación automática |
 | 2026-09-28 | 2026-09-28.md | rotación automática |
 | 2026-09-21 | 2026-09-21.md | rotación automática |

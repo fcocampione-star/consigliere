@@ -7,25 +7,15 @@
 
 <!-- ADVISOR:ENTRIES:START -->
 
-## 2026-10-15 — Suite en verde 14/14: el fallo `opencode.json` era quirk ambiental documentado
+## 2026-10-18 — test E2E hermético del harness + Gate 0 empírico v2 ✓
 
-topic: dx/opencode-json-quirk
-**Goal:** llevar `npm test` de 13/14 a 14/14 (fallaba `doctor.test.mjs` "ningún check en error" por `❌ opencode.json` ENOENT).
-**Discoveries:** no era bug de diseño: `CONTRIBUTING.md:75` lo documenta como quirk deliberado (raíz gitignorada en `.gitignore:51`, CI la siembra desde `templates/`); la propuesta de Plan mode (doctor dual-context) habría violado el diseño — las dos copias de `doctor.mjs` divergen a propósito (SKILL.md:70 del skill-loader).
-**Accomplished:** sembrada `opencode.json` desde `templates/` (gitignored, idéntico a CI); cero cambios de código; `doctor --json` 25 checks / 0 errores.
-**Next:** nada; el seeding ya vive en `ci.yml`/`release.yml` como paso de setup.
+topic: test/e2e-v2-empirico
+**Goal:** validar el harness de punta a punta (instalador real, agentes, ciclo completo de memoria 3 capas, skills, `--upgrade`) contra el CLI OpenCode v2 real, cerrando el Gate 0 empírico que bloqueaba la migración V2 (spec `sdd/v2-compat/spec`).
+**Discoveries:** `debug agents`/`debug config` hablan con un servicio global compartido y bajo carga pueden resolver vistas SOLO-builtin o sin el doc del proyecto: detección determinista + 5 reintentos con backoff 400 ms (transiente del servicio; asserts de contrato sin debilitar). Pines empíricos v2 2.0.32: `permission.bash{}`→`permissions[]` ({action,resource,effect}) SIN pérdida de reglas; `subagent_depth` strippado silenciosamente (recodificar a permiso `subagent` en la migración); claves desconocidas sin warnings; `model` "proveedor/modelo" tras `--upgrade` se normaliza a `{model, providerID}`. Hallazgo win32 de `lint:sh`: el `bash` del PATH puede ser WSL-bash (no MSYS2, destruye rutas Windows) → fix con args RELATIVOS (rutas desde el `cwd` del spawn, idéntico para Git-Bash/WSL/POSIX) y validado exit 0 con ambos intérpretes. Bug real de `requireNode()` en `init.mjs`: el comparador semver daba "Node >=20.11 requerido" en Node 26.4/25.x/23.x.
+**Accomplished:** creado `test/e2e-harness-v2.test.mjs` (5 suites: instalación→Gate 0→memoria→skills→upgrade+roundtrip; 21 tests, instalación REAL con `init.mjs` en `%TEMP%`, hermético CERO deps, se auto-omite si `opencode --version` ≥2.0.0 no está); fix de `init.mjs` (semver) y de `doctor.mjs` (fallback a `templates/opencode.json` en raíz↔templates byte-idénticos).
+**Next:** migración V2-nativa según spec `sdd/v2-compat/spec` (Gate 0 ya validado: estrategia V2-nativa única); menores de §3.
 **Files:** `git log --oneline -5` (no listas manuales)
-**Verificación:** PASS — `npm test` 14/14 ✓ (`doctor` 0 errores).
-
-## 2026-10-15 — Compactación capa 0: PROJECT_STATE.md 14,5 KB→8 KB (−45% tokens fijos)
-
-topic: memory/compact-state
-**Goal:** reducir el coste fijo de contexto (capa 0, siempre cargada) sin perder decisiones vigentes ni trazabilidad por topic.
-**Discoveries:** §2 concentraba el 65% del archivo con 16 líneas >220 chars que duplicaban AGENTS.md/skills/SUMMARY; `field()` solo extrae un topic por línea, así que las fusiones multi-topic habrían dejado topics huérfanos (hallazgo del critic).
-**Accomplished:** recorte-sin-fusión (variante aprobada por critic): §1 5→2 filas, §2 28→27 líneas todas ≤220 chars (solo fusión permitida: contracts+git-aware con alias), §3 sin viñeta histórica, §5 8→6 filas, §6 4→2 líneas; cero archivados, `templates/` intacto.
-**Next:** `/review` diciembre decide sobre las 4 decisiones con `review_after: 2026-12-03` (fusionar/archivar con señal real).
-**Files:** `git log --oneline -5` (no listas manuales)
-**Verificación:** PASS — `doctor` PROJECT_STATE ✅ 89 líneas (<100), `test:contract` ✅, `npm test` 13/14 (fallo pre-existente `opencode.json` ausente, reproducido en limpio), `search "tar"`/`"contract-git-aware"` resuelven `state--*`, `measure` 3.582→1.980 tok, `compare spec-lite` ahorro 95,0→95,9%.
+**Verificación:** e2e 21/21 solo y dentro de `npm test` (15/15 archivos); `npm test` PASS (48 pass + contrato paridad espejo 41 + versión 1.0.1: "harness ok"); `lint:sh` exit 0 con WSL-bash (PATH) y con Git-Bash (`ADVISOR_BASH`); `lint:ps1` exit 0.
 
 <!-- ADVISOR:ENTRIES:END -->
 
