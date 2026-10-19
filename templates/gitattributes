@@ -1,0 +1,8 @@
+# EOL canonico del proyecto (declarado por el harness: LF en texto, CRLF solo Windows-only).
+# Canoniza el repo ante core.autocrlf global de cualquier SO: los ficheros aterrizan
+# LF puro y los .sh (scripts/, hooks) NUNCA deben ser re-escritos a CRLF por git
+# (`\r: command not found` ante bash). Protege el rotador de memoria post-commit.
+* text=auto eol=lf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf

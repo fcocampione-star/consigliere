@@ -38,7 +38,7 @@ const TEMPLATE_DIR = join(HERE, 'templates');
 // lo restituye a su nombre real en el destino. Esta tabla es el ÚNICO punto de
 // traducción: la usan renderTree (nombre de destino) y el cálculo de REGENERATED
 // (qué se anuncia como regenerado de verdad). Ver contract-tests / CI pack-smoke.
-const TEMPLATE_RENAME = { gitignore: '.gitignore' };
+const TEMPLATE_RENAME = { gitignore: '.gitignore', gitattributes: '.gitattributes' };
 const dstName = (name) => TEMPLATE_RENAME[name] || name;
 // Nombre del paquete tal y como lo declara el repo del harness. Lo lee package.json
 // para que un renombrado del paquete no deje el guardián pointing a un nombre muerto.
@@ -69,7 +69,7 @@ const HARNESS_SCRIPTS = ['scripts/check-memory-limits.sh', 'scripts/check-memory
 // directorio: solo se pisan los dos archivos de arriba.
 const BACKUP_ITEMS = [
   '.opencode', 'AGENTS.md', 'PROJECT_STATE.md', 'SUMMARY.md', 'CHANGELOG', STATE_DIR,
-  'opencode.json', '.gitignore', 'skills-lock.json', ...HARNESS_SCRIPTS,
+  'opencode.json', '.gitignore', '.gitattributes', 'skills-lock.json', ...HARNESS_SCRIPTS,
 ];
 // Datos del usuario: nunca se regeneran. Tras el render se restauran del backup.
 const PRESERVE_DATA = ['PROJECT_STATE.md', 'SUMMARY.md', 'CHANGELOG'];
@@ -79,13 +79,13 @@ const PRESERVE_DATA = ['PROJECT_STATE.md', 'SUMMARY.md', 'CHANGELOG'];
 // La lista sale de la REALIDAD del paquete (fuente de plantilla presente), no de
 // un deseo: un fichero cuyo template no viaja en el tarball (p. ej. un .gitignore
 // que npm excluyó) NO se anuncia como regenerado, en vez de mentir.
-const REGENERATED = ['AGENTS.md', 'opencode.json', 'gitignore']
+const REGENERATED = ['AGENTS.md', 'opencode.json', 'gitignore', 'gitattributes']
   .filter((src) => existsSync(join(TEMPLATE_DIR, src)))
   .map(dstName);
 // Subsets por --part (allowlist de primer nivel del render; null = árbol completo).
 // OJO: la allowlist casa contra el nombre EN DISCO de la plantilla (`gitignore`),
 // no contra el nombre de destino (`.gitignore`).
-const PART_HARNESS = ['.opencode', 'scripts', 'AGENTS.md', 'opencode.json', 'gitignore', 'skills-lock.json'];
+const PART_HARNESS = ['.opencode', 'scripts', 'AGENTS.md', 'opencode.json', 'gitignore', 'gitattributes', 'skills-lock.json'];
 const PART_MEMORIA = ['PROJECT_STATE.md', 'SUMMARY.md', 'CHANGELOG'];
 const PARTS = ['harness', 'memoria', 'autoskills', 'all'];
 const BACKUP_RE = /^(harness|advisor)-.*\.tgz$/;
@@ -497,6 +497,20 @@ function escapeJsonValue(v) {
   return JSON.stringify(String(v)).slice(1, -1);
 }
 
+// EOL canónico, espejo de la regla .gitattributes de este repo (`* text=auto eol=lf`;
+// solo *.ps1/*.cmd/*.bat a CRLF) y de la que se INSTALA en cada proyecto destino.
+// Se APLICA AL ESCRIBIR: el destino no debe heredar el EOL del working tree del
+// contribuidor — un template que llega CRLF (checkout con autocrlf, editor) rompe
+// los .sh/hook instalados (`\r` ante bash en POSIX) y mete drift EOL en los
+// fixtures de paridad. Regla única en `canonicalEol`: todo a LF salvo extensiones
+// exclusivas de Windows, que se re-exprimen a CRLF.
+const CRLF_EXT_RE = /\.(ps1|cmd|bat)$/;
+function canonicalEol(content, srcName) {
+  let s = String(content).replace(/\r\n?/g, '\n');
+  if (CRLF_EXT_RE.test(srcName)) s = s.replace(/\n/g, '\r\n');
+  return s;
+}
+
 // Render
 function renderFile(src, dst, vars) {
   const isJson = src.endsWith('.json');
@@ -505,7 +519,7 @@ function renderFile(src, dst, vars) {
     const value = isJson && JSON_VARS.has(k) ? escapeJsonValue(v ?? '') : (v ?? '');
     content = content.split(`{{${k}}}`).join(value);
   }
-  writeFileSync(dst, content, 'utf8');
+  writeFileSync(dst, canonicalEol(content, src), 'utf8');
   if (EXEC_EXT.some((ext) => src.endsWith(ext))) chmodExecutable(dst);
 }
 
@@ -542,7 +556,10 @@ function renderTree(srcDir, dstDir, vars, allow = null, relBase = '', skip = nul
         info(`${rel}: ya existe en el proyecto y es dato tuyo — no se sobrescribe.`);
         continue;
       }
-      const isTemplate = /\.(md|json|mjs|sh|ps1)$/.test(e.name);
+      // Routed por render (EOL canónico + placeholders): todo lo textual. El
+      // catch-all cpSync queda para lo desconocido/dato del usuario, byte-exacto.
+      const isTemplate = /\.(md|json|mjs|sh|ps1|cmd|bat)$/.test(e.name)
+        || e.name === 'gitignore' || e.name === 'gitattributes'; // nombres en disco (TEMPLATE_RENAME)
       if (isTemplate) renderFile(src, dst, vars);
       else cpSync(src, dst);
     }
@@ -650,7 +667,10 @@ function installGitHook(repo, templateDir, force) {
     info(`Hook post-commit previo copiado a ${bak} (--force: se reemplaza).`);
   }
   try {
-    copyFileSync(src, dst);
+    // Normaliza EOL al instalar (no es copyFileSync ciego): el hook bash debe
+    // ir LF puro — un CRLF aquí se manifiesta como `\r: command not found` ante
+    // bash, y el rotador de memoria muere en silencio en cada commit.
+    writeFileSync(dst, readFileSync(src, 'utf8').replace(/\r\n?/g, '\n'), 'utf8');
   } catch (e) {
     warn(`No se pudo instalar el hook post-commit (${e.message}).`);
     return false;
@@ -678,6 +698,15 @@ function gitInitAndCommit(repo, templateDir, force) {
       warn(`git init falló en '${repo}' (${spawnWhy(init)}): el harness queda sin repo git.`);
       warn(`Créalo a mano: cd "${repo}" && git init`);
       return;
+    }
+    // EOL silencioso: con el `core.autocrlf=true` GLOBAL típico de Git-for-Windows,
+    // el `git add` del commit inicial escupiría una muralla de warnings
+    // "LF will be replaced by CRLF" (uno por fichero, ruido puro: los
+    // .gitattributes instalados ya declaran la convención). Config LOCAL, nunca
+    // la global del usuario; best-effort: si falla solo avisa, no aborta.
+    const eolCfg = spawnSync('git', ['config', '--local', 'core.autocrlf', 'false'], { cwd: repo, stdio: 'ignore' });
+    if (!gitOk(eolCfg)) {
+      warn(`No pude fijar core.autocrlf=false local: git puede imprimir avisos de conversión de EOL.`);
     }
   } else {
     info('Ya existía repo git: solo se revisa el hook post-commit.');
@@ -814,7 +843,7 @@ function uninstallPlan(part) {
   if (part === 'autoskills') return { items: ['.agents'], prune: [] };
   if (part === 'memoria') return { items: ['PROJECT_STATE.md', 'SUMMARY.md', 'CHANGELOG', STATE_DIR], prune: [] };
   return {
-    items: [...templateFilesUnder('.opencode'), ...HARNESS_SCRIPTS, 'AGENTS.md', 'opencode.json', '.gitignore', 'skills-lock.json'],
+    items: [...templateFilesUnder('.opencode'), ...HARNESS_SCRIPTS, 'AGENTS.md', 'opencode.json', '.gitignore', '.gitattributes', 'skills-lock.json'],
     prune: ['.opencode'],
   };
 }

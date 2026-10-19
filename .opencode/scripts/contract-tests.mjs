@@ -114,6 +114,8 @@ const ROOT_ONLY_PREFIXES = [
 // (igual que ALLOW_DIVERGENCE): un solo-template sin catalogar es drift silencioso
 // (nadie lo espeja, nadie lo comparó, nadie lo declaró excepción).
 const TEMPLATE_ONLY_EXACT = {
+  'gitattributes':
+    'igual que `gitignore` (nombre neutral en el tarball): la plantilla va como `gitattributes` y `init.mjs` (TEMPLATE_RENAME) la restituye a `.gitattributes` en el proyecto. La raíz no la espeja: su `.gitattributes` lleva export-ignore de los ficheros de desarrollo de este repo, que no aplican al proyecto instalado.',
   'gitignore':
     'npm EXCLUYE del tarball cualquier fichero llamado `.gitignore` (lo trata como ignore-file), así que la plantilla se guarda como `gitignore` y `init.mjs` (TEMPLATE_RENAME) la restituye a `.gitignore` en el proyecto. La raíz no la espeja: su `.gitignore` es la config de este repo (runtime + `/opencode.json` anclado).',
   'opencode.json':
@@ -192,6 +194,26 @@ for (const r of tplFiles) {
   // espeja a la raíz o se catalega arriba con su motivo, y en ambos casos la
   // comprobación existe.
   fail('espejo', `archivo solo-template no catalogado: ${r} (¿debe espejarse o catalogarse en TEMPLATE_ONLY_EXACT?)`);
+}
+
+// 3a-bis. EOL canónico de templates/ (anti-drift): espejo literal del .gitattributes
+// de la raíz (`* text=auto eol=lf`; solo *.ps1/*.cmd/*.bat a CRLF). El instalador
+// normaliza al escribir (canonicalEol en init.mjs), pero la FUENTE no puede pillar
+// por estar sucia de CRLF en el working tree de quien commitea: se pinea aquí.
+{
+  const CRLF_EXT = /\.(ps1|cmd|bat)$/;
+  let eolBad = 0;
+  for (const rel of tplFiles) {
+    const buf = read(join(TPL, rel));
+    if (buf === null) continue; // ilegible ya se reporta con la paridad espejo
+    if (CRLF_EXT.test(rel)) {
+      if (buf.replace(/\r\n/g, '').includes('\n')) { fail('eol templates', `${rel}: LF desnudo (debe ser CRLF puro)`); eolBad++; }
+    } else if (buf.includes('\r')) {
+      fail('eol templates', `${rel}: contiene \\r (debe ser LF puro)`);
+      eolBad++;
+    }
+  }
+  if (!eolBad) pass('eol templates', `${tplFiles.length} archivos con EOL canónico (LF puro, CRLF solo Windows-only)`);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

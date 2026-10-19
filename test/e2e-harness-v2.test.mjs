@@ -307,7 +307,7 @@ test('init.mjs instala el árbol base completo con los 7 agentes (harness de ver
   const res = instalar([PROYECTO, '--name', 'e2e-v2-demo', '--autoskills', '3', '--git', 'no']);
   eq(res.status, 0, salida(res, 'instalación e2e'));
   for (const rel of [
-    'opencode.json', 'AGENTS.md', 'PROJECT_STATE.md', 'SUMMARY.md', 'skills-lock.json', '.gitignore',
+    'opencode.json', 'AGENTS.md', 'PROJECT_STATE.md', 'SUMMARY.md', 'skills-lock.json', '.gitignore', '.gitattributes',
     '.opencode/agents/advisor.md', '.opencode/scripts/doctor.mjs', '.opencode/scripts/memory-index.mjs',
     '.opencode/scripts/memory-rotate.mjs', '.opencode/skills/_skill-loader/loader.mjs',
     'scripts/check-memory-limits.sh',

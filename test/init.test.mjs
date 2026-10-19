@@ -93,6 +93,7 @@ const ESPERADOS = [
   'SUMMARY.md',
   'skills-lock.json',
   '.gitignore',
+  '.gitattributes',
   '.opencode/agents/advisor.md',
   '.opencode/scripts/doctor.mjs',
   '.opencode/scripts/routine-model.mjs',
