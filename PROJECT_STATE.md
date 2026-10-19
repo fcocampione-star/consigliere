@@ -45,6 +45,7 @@
 - Publicación npm desde `main` (tag `v*`, guarda ancestría, `NPM_TOKEN`); `latest` apunta a versión buena [topic: release/npm-publish] review_after: 2027-04-18
 - Template `templates/gitignore`→`.gitignore` en destino (`TEMPLATE_RENAME`); npm excluye `.gitignore` [topic: installer/tarball-gitignore] review_after: 2027-03-30
 - Gate 0 V2 empírico automatizado en `test/e2e-harness-v2.test.mjs` (21 tests instalación→memoria→skills→upgrade contra CLI v2 real): pines `permissions[]` sin pérdida, `subagent_depth` strippado, claves desconocidas sin warnings; reintentos por race del servicio global (`debug agents`/`config`) [topic: test/e2e-v2-empirico] review_after: 2027-01-16
+- EOL canónico aplicado AL ESCRIBIR en el destino (`canonicalEol` en init.mjs, espejo del `.gitattributes`: LF puro, CRLF solo `ps1|cmd|bat`); el proyecto instalado recibe su propio `.gitattributes` (TEMPLATE_RENAME) y el instalador fija `core.autocrlf=false` LOCAL en repos fresh; hook post-commit normalizado a LF (no `copyFileSync` ciego); contrato `eol templates` custodia la fuente [topic: installer/eol-canonical] review_after: 2027-01-16
 
 ---
 
@@ -82,6 +83,7 @@
 | test/suite | `npm test` · `npm run test:unit` (`node test/run.mjs`) · `npm run test:contract` · `lint:sh`/`lint:ps1`/`version:check` | Micro-framework sin deps; `test:contract` = anti-drift; `lint-sh.mjs` resuelve bash (exit 3 sin intérprete) |
 | shared-lib | `.opencode/scripts/lib/{core,md,cache}.mjs` | Núcleo sin deps (isMain, readText, sectionText, field, fenceSpans, listChangelog, todayUTC, writeAtomic, fingerprint/isFresh, EXIT_CODES): importar, nunca reimplementar |
 | installer | `node init.mjs <dir> --upgrade --quick` (exit 0/1/2/3/4/5) | Entrada única; shims delegan; `EXIT_CODES` en `lib/core.mjs`; binarios por env→SO→PATH (`ADVISOR_BASH`/`ADVISOR_TAR`), sonda memoizada |
+| installer/eol | `canonicalEol()` en `init.mjs` + `.opencode/scripts/contract-tests.mjs §3a-bis` | Render normaliza EOL al escribir (LF, CRLF en ps1/cmd/bat); `test/eol-canonical.test.mjs` verif. el DESTINO con fixture envenenado; el contrato `eol templates` verif. la FUENTE |
 | release/npm | `npm dist-tag add advisor-harness@<v> latest` | Corregir `latest` tras publicar; `publish` desde `main` (tag `v*`) con `NPM_TOKEN` |
 
 ---
