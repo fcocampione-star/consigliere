@@ -7,6 +7,17 @@
 
 <!-- ADVISOR:ENTRIES:START -->
 
+## 2026-10-21 — Intento de release 1.0.2: deadlock de concurrencia CI + tmpdir macOS arreglados (sin publish)
+
+topic: ci/reusable-concurrency-literal-groups  <!-- relacionados: test/tmpdir (§5), release/npm-publish, release/version-bump-single-source -->
+review_after: 2027-04-21
+**Goal:** publicar la 1.0.2 (merge `dev`→`main`, tag `v1.0.2`, push); el intento tumbó `release.yml` por 2 bugs preexistentes.
+**Discoveries:** en workflows reusables, `github.workflow` se resuelve al nombre del CALLER — `ci.yml` invocado vía `workflow_call` heredaba "Release" y caller/callee caían en el MISMO grupo de concurrencia, auto-bloqueándose en 1 s (run 39629128099; `release.yml` no ha tenido NINGÚN run exitoso en la historia del repo). En macOS, `os.tmpdir()` devuelve `/var/folders/...` pero Node entrega `import.meta.dirname` ya canonicalizado (`/private/var/...`, `/var` es symlink): el gate de `test/e2e-harness-v2.test.mjs:542` comparaba rutas distintas (preexistente desde `fa4d9e7`).
+**Accomplished:** (1) grupos de concurrencia con prefijo literal distinto por workflow: `ci-${{ github.ref }}` (cancel-in-progress: true — CI es read-only y re-ejecutable) y `release-${{ github.ref }}` (false — nunca cortar un publish a mitad); comentarios en ambos YAML citando el incidente. (2) `tmpdir()` de `test/harness.mjs` canonicaliza con `realpathSync` (punto único: es el único creador de temporales de la suite; arregla de golpe e2e:542, docProyecto y memory-rotate-extra) — sin tocar producción (`init.mjs`). (3) Regresión hermética nueva `test/harness-paths.test.mjs` (junction real en win32, sin admin). Estado del release: remoto `main`==`dev`==`a7d385b`, tag `v1.0.2` criado sobre el commit anterior pero **SIN publicar** (npm `latest` sigue `1.0.1`); fixes quedaron en el árbol sin commit. Plan acordado: mover el tag al commit arreglado tras validar con `workflow_dispatch dry-run=true` sobre `main`.
+**Next:** commit de los 2 fixes + dry-run sobre `main` + re-corte del tag `v1.0.2` (push forzado del tag movido) ⇒ `release.yml` publica; la guarda skip-if-published absorbe re-runs.
+**Files:** `git log --oneline -5` (no listas manuales)
+**Verificación:** `npm test` ✅ ("harness ok", 20/20 archivos), `test:contract` ✅, YAML de ambos workflows parseado y grupos de concurrencia distintos confirmados. Sin commit (decisión del coordinador).
+
 ## 2026-10-21 — Release 1.0.2 preparada: `version:bump` (fuente única) + guarda skip-if-published ✓
 
 topic: release/version-bump-single-source  <!-- relacionados: release/npm-publish, tools/lint-sh-crossplatform -->

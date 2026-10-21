@@ -5,9 +5,13 @@
 # versión, empaquetado) y los scripts de shell/PowerShell.
 #
 # Este workflow es REUTILIZABLE (`workflow_call`): release.yml lo invoca para
-# no duplicar la definición de CI. Al invocarse desde otro workflow,
-# `github.workflow` pasa a ser el del caller, así que el grupo de concurrencia
-# no colisiona entre la CI de un push y la CI que gatea un release.
+# no duplicar la definición de CI. OJO con la concurrencia de abajo: en un
+# workflow llamado, `github.workflow` NO cambia — se resuelve al nombre del
+# caller (`Release`) tanto en el caller como en el callee. Usarlo como
+# prefijo del grupo metía a los dos en el MISMO grupo de concurrencia y el
+# callee se auto-bloqueaba esperando al caller (deadlock del run
+# 39629128099). Por eso el prefijo es LITERAL y distinto por workflow:
+# `ci-` aquí, `release-` en release.yml.
 name: CI
 
 on:
@@ -19,8 +23,11 @@ on:
   workflow_call:
 
 # Un run por rama/ref: el nuevo cancela al anterior (ramas con pushes seguidos).
+# `cancel-in-progress: true` es seguro AQUÍ: CI es solo lectura (permissions:
+# contents: read) y re-ejecutable — cancelar solo tira un run obsoleto, nunca
+# deja artefactos a medias.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 # Mínimo para leer el repo. Ningún job de CI escribe nada en GitHub.

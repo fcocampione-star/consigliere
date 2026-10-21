@@ -18,7 +18,7 @@
  *   await runAll();
  */
 
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir as osTmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -134,7 +134,21 @@ export async function throwsAsync(fn, msg) {
 
 // ── Utilidades de disco ────────────────────────────────────────────────────
 export function tmpdir(prefix) {
-  return mkdtempSync(join(osTmpdir(), `${prefix}-`));
+  // Canonicaliza la base ANTES de mkdtemp: `os.tmpdir()` puede devolver una
+  // ruta NO canónica (macOS: `/var` es symlink de `/private/var`) y los
+  // motores del harness resuelven su raíz desde `import.meta.dirname`, que
+  // Node entrega YA resuelta vía realpath — comparaciones de rutas helper↔motor
+  // divergían solo en macOS (fallo preexistente desde fa4d9e7 en
+  // macos-latest, aserción de e2e-harness-v2 `st.file`). Punto ÚNICO del
+  // fix: todos los tests crean temporales aquí, así que no se toca ni
+  // producción ni motores. Tolerante a ENOENT: si el realpath falla, se
+  // conserva el comportamiento anterior (mkdtempSync ya fallará con un
+  // error clarificador si la base no existe de verdad).
+  try {
+    return mkdtempSync(join(realpathSync(osTmpdir()), `${prefix}-`));
+  } catch {
+    return mkdtempSync(join(osTmpdir(), `${prefix}-`));
+  }
 }
 
 export function cleanup(paths) {

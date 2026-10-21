@@ -9,9 +9,9 @@
 | Fase | Descripción | Estado |
 |------|-------------|--------|
 | Fases 0/0.5/1 + modelo D2 + release 1.0 | Bootstrap/hardening/validación demo; `dev` = integración / `main` = estable (ambas repo completo, promoción `--ff-only`); `advisor-harness@1.0.1` en npm, contrato git-aware, `lint:sh`/PATH resuelto | ✅ Completadas |
-| Release 1.0.2 | Preparada en `dev` (2026-10-21, sin commitear al registrar): `version:bump` de fuente única, guarda skip-if-published en `release.yml`, aserción de `dist-tags.latest` | 🟡 Pendiente publish |
+| Release 1.0.2 | Preparada en `dev` (a7d385b, version:bump de fuente única, guarda skip-if-published, aserción de `dist-tags.latest`) + intento de release fallido (2026-10-21): tag `v1.0.2` en remoto SIN publicar; 2 fixes en árbol sin commit (deadlock concurrencia `ci.yml`/`release.yml`, tmpdir macOS en gate e2e) | 🟡 Pendiente commit + dry-run + publish |
 
-> Próximo hito: publicar la `1.0.2` — merge `dev`→`main` (`--ff-only`) + tag `v1.0.2` + push; `release.yml` publica (idempotente) y `latest` en npm pasa a la versión buena. Hasta ese publish, `latest` = `1.0.1`, que sigue siendo la última publicada y verificada desde el registry. Pendientes menores no bloqueantes en §3.
+> Próximo hito: mover el tag `v1.0.2` al commit arreglado tras validar `workflow_dispatch dry-run=true` sobre `main` (fixes del deadlock de concurrencia CI + tmpdir macOS, pendientes de commit); luego merge/push ⇒ `release.yml` publica (idempotente) y `latest` en npm pasa a `1.0.2`. Hasta ese publish, `latest` = `1.0.1`, que sigue siendo la última publicada y verificada desde el registry. Pendientes menores no bloqueantes en §3.
 
 ---
 
@@ -23,8 +23,7 @@
 - Sunset legacy: solo `.advisor/` vivo, fallback read-only `.consigliere/` eliminado de instaladores/scripts y `.gitignore` (F6) [topic: repo/legacy-sunset] review_after: 2026-12-03
 - Advisor-only routing orgánico + SDD-lite ≤650w [topic: sdd/routing-organico] review_after: 2026-12-21
 - Lock `memory-lock.mjs` (mkdir atómico + owner.json/token, takeover por rename, stale `ADVISOR_LOCK_STALE_MS`); sin `flock` [topic: memory/lock-canonico] review_after: 2026-12-21
-- `mondayOf` UTC único (memory-sync importa de memory-stats); rotación por lunes de cada entrada [topic: memory/utc-mondayof] review_after: 2026-12-21
-- Marcadores `ADVISOR:ENTRIES` + motor `memory-rotate.mjs`; rotación en `/record`; hook post-commit gated [topic: memory/markers-motor] review_after: 2026-12-21
+- Rotación de memoria canónica: `mondayOf` UTC único (memory-sync importa de memory-stats) + marcadores `ADVISOR:ENTRIES` y motor `memory-rotate.mjs` en `/record`; hook post-commit gated [topic: memory/markers-motor] review_after: 2026-12-21
 - Routing por clase de riesgo (conteo = desempate); advisor delega deltas; spec-lite persistida y consumida por builder [topic: process/routing-risk-deltas] review_after: 2026-12-21
 - Contract tests en `npm test` (paridad raíz↔templates con allowlist; `ls-files` respeta `.gitignore`, incl. test/contract-git-aware) [topic: test/contracts-antidrift] review_after: 2026-12-21
 - Runtime real Node >=20.11 (`import.meta.dirname` en 15 scripts); `engines: >=18` mentía; CI fija versión [topic: runtime/node-floor] review_after: 2027-03-30
@@ -48,6 +47,7 @@
 - Config dev del repo gitignored generada por `dev-config.mjs` (`npm run dev:config`): `templates/opencode.json` con `{{MODEL_*}}`→`""`, `--check`/`--force` y no-op si existe; `doctor` SIN fallback a `templates/` (config raíz = prerequisito duro, CI la invoca igual) [topic: dx/dev-config-gitignored] review_after: 2027-04-18
 - Frontmatter de agentes con escalares YAML de comillas dobles válidos (`C:\\*`): `\*` NO es escape válido y hacía que opencode no parseara `builder`/`summarizer` (paridad byte a byte raíz↔templates en las 4 copias) [topic: agents/frontmatter-yaml-escape] review_after: 2027-04-18
 - Versión con fuente única: `package.json` manda y `npm run version:bump <patch|minor|major>` reescribe los 5 destinos que vigila `version-check` (raw EOL + rollback); `version-check` es módulo puro importable (`isMain`, cero side effects) y ambos scripts son dev-only (`ROOT_ONLY_EXACT`) [topic: release/version-bump-single-source] review_after: 2027-04-21
+- Workflows reusables: `github.workflow` se resuelve al nombre del CALLER — grupos de concurrencia con prefijo literal distinto por workflow (`ci-${{ github.ref }}`/`release-${{ github.ref }}`) y `cancel-in-progress` diferenciado (CI sí — read-only/re-ejecutable; release no — nunca cortar un publish); incidente run 39629128099: `ci.yml` vía `workflow_call` heredaba "Release" y caller/callee se auto-bloqueaban en el mismo grupo (1 s) [topic: ci/reusable-concurrency-literal-groups] review_after: 2027-04-21
 
 ---
 
@@ -88,6 +88,7 @@
 | release | `npm dist-tag add advisor-harness@<v> latest` · `npm run version:bump patch` (`--dry-run`/`--set X.Y.Z`) | Corregir `latest` tras publicar; bump de fuente única que hereda los 5 `TARGETS` de `version-check.mjs` y escribe in-place con EOL crudo (`bump()` = core puro importable) |
 | dev-config | `npm run dev:config` (`.opencode/scripts/dev-config.mjs`, root-only) | Genera la `opencode.json` dev gitignored desde `templates/opencode.json` (`{{MODEL_*}}`→`""`); `--check`/`--force`; no-op si existe. Prerequisito de `npm test` en clon limpio · **orden**: `dev:config` ANTES de `routine-model --persist` (si no, `--persist` edita `.opencode/opencode.json`, que NO está ignorado) |
 | test/wiring | `test/wiring-basic.test.mjs` (4 suites / 18 asserts) | Wiring estático comando→agente→script SIN CLI: paridad semántica frontmatter↔`templates/opencode.json`, invariante repo-dev con `opencode.json` raíz presente (7 agentes, cero `{{`, `--check` de frescura), ciclo memoria en tmpdir; complementa e2e-v2, contract-tests y dev-config.test.mjs |
+| test/tmpdir | `tmpdir()` en `test/harness.mjs` (canonicaliza con `realpathSync`) | Devuelve la ruta YA canonicalizada: obligatorio comparar rutas con helpers de la suite, nunca `os.tmpdir()` crudo (macOS: `/var` → `/private/var`); custodia `test/harness-paths.test.mjs` (junction win32 sin admin) |
 
 ---
 

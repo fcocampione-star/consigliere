@@ -20,10 +20,16 @@ on:
         required: false
         default: true
 
-# Un release por tag. NO se cancela en curso: cortar un publish a medias deja el
-# tag y npm en un estado que nadie ha verificado.
+# Un release por tag. NO se cancela en curso (`cancel-in-progress: false`):
+# cortar un publish a medias deja el tag y npm en un estado que nadie ha
+# verificado. El prefijo es LITERAL (`release-`) y distinto del de ci.yml
+# (`ci-`): en un `workflow_call`, `github.workflow` NO cambia (se resuelve al
+# nombre del caller en ambos), así que no sirve para desambiguar grupos —
+# con la expresión antigua (`github.workflow-ref`, idéntica en ambos ficheros)
+# el callee caía en el grupo del caller y se auto-bloqueaba (deadlock del run
+# 39629128099).
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 # Por defecto, solo lectura. El job `publish` sube sus permisos a lo mínimo que
