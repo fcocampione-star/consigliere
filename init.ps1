@@ -10,7 +10,7 @@
 #>
 
 # Const de versión: solo para el chequeo de fuente única .opencode/scripts/version-check.mjs.
-$HARNESS_VERSION = "1.0.1"
+$HARNESS_VERSION = "1.0.2"
 
 $init = Join-Path $PSScriptRoot 'init.mjs'
 

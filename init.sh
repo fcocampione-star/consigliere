@@ -9,7 +9,7 @@
 set -euo pipefail
 
 # Const de versión: solo para el chequeo de fuente única .opencode/scripts/version-check.mjs.
-VERSION="1.0.1"
+VERSION="1.0.2"
 
 if ((BASH_VERSINFO[0] < 4)); then echo "❌ Bash >=4 requerido. Actual: ${BASH_VERSION}" >&2; exit 1; fi
 

@@ -8,10 +8,10 @@
 
 | Fase | Descripción | Estado |
 |------|-------------|--------|
-| Fases 0/0.5/1 — Bootstrap/hardening/validación demo | Harness CLI Node-only + suite sin deps + `doctor` 0❌/0⚠️ + límites en verde | ✅ Completadas |
-| Modelo D2 + release npm 1.0 | `dev` = integración / `main` = estable (ambas repo completo, promoción `--ff-only`); `advisor-harness@1.0.1` en npm, contrato git-aware, `lint:sh`/PATH resuelto | ✅ Completadas |
+| Fases 0/0.5/1 + modelo D2 + release 1.0 | Bootstrap/hardening/validación demo; `dev` = integración / `main` = estable (ambas repo completo, promoción `--ff-only`); `advisor-harness@1.0.1` en npm, contrato git-aware, `lint:sh`/PATH resuelto | ✅ Completadas |
+| Release 1.0.2 | Preparada en `dev` (2026-10-21, sin commitear al registrar): `version:bump` de fuente única, guarda skip-if-published en `release.yml`, aserción de `dist-tags.latest` | 🟡 Pendiente publish |
 
-> Próximo hito: ninguno bloqueante — `1.0.1` publicada y verificada desde el registry, Fase 1 cerrada. Pendientes menores no bloqueantes en §3.
+> Próximo hito: publicar la `1.0.2` — merge `dev`→`main` (`--ff-only`) + tag `v1.0.2` + push; `release.yml` publica (idempotente) y `latest` en npm pasa a la versión buena. Hasta ese publish, `latest` = `1.0.1`, que sigue siendo la última publicada y verificada desde el registry. Pendientes menores no bloqueantes en §3.
 
 ---
 
@@ -41,19 +41,19 @@
 - `init.mjs` resuelve `tar` inline (`ADVISOR_TAR`→System32→PATH, sonda `--version`); sin `tar` exit 3/4 [topic: tools/tar-resolver-crossplatform] review_after: 2027-03-30
 - `isMain` con `realpathSync` tolerante a ENOENT (symlinks macOS `/var`); firma intacta, 20 consumidores [topic: runtime/isMain-realpath] review_after: 2027-03-30
 - D2: `dev`=integración/`main`=estable (ambas repo completo), promoción `--ff-only`; consumo vía npm + source archive [topic: repo/dev-main-merge] review_after: 2027-01-09
-- Publicación npm desde `main` (tag `v*`, guarda ancestría, `NPM_TOKEN`); `latest` apunta a versión buena [topic: release/npm-publish] review_after: 2027-04-18
+- Publicación npm desde `main` (tag `v*`, guarda ancestría, `NPM_TOKEN`); skip-if-published (`npm view`, skip solo en `E404`), GitHub Release idempotente y aserción post-publish de `dist-tags.latest`; `latest` apunta a versión buena [topic: release/npm-publish] review_after: 2027-04-18
 - Template `templates/gitignore`→`.gitignore` en destino (`TEMPLATE_RENAME`); npm excluye `.gitignore` [topic: installer/tarball-gitignore] review_after: 2027-03-30
 - Gate 0 V2 empírico automatizado en `test/e2e-harness-v2.test.mjs` (21 tests instalación→memoria→skills→upgrade contra CLI v2 real): pines `permissions[]` sin pérdida, `subagent_depth` strippado, claves desconocidas sin warnings; reintentos por race del servicio global (`debug agents`/`config`) [topic: test/e2e-v2-empirico] review_after: 2027-01-16
 - EOL canónico aplicado AL ESCRIBIR en el destino (`canonicalEol` en init.mjs, espejo del `.gitattributes`: LF puro, CRLF solo `ps1|cmd|bat`); el proyecto instalado recibe su propio `.gitattributes` (TEMPLATE_RENAME) y el instalador fija `core.autocrlf=false` LOCAL en repos fresh; hook post-commit normalizado a LF (no `copyFileSync` ciego); contrato `eol templates` custodia la fuente [topic: installer/eol-canonical] review_after: 2027-01-16
 - Config dev del repo gitignored generada por `dev-config.mjs` (`npm run dev:config`): `templates/opencode.json` con `{{MODEL_*}}`→`""`, `--check`/`--force` y no-op si existe; `doctor` SIN fallback a `templates/` (config raíz = prerequisito duro, CI la invoca igual) [topic: dx/dev-config-gitignored] review_after: 2027-04-18
 - Frontmatter de agentes con escalares YAML de comillas dobles válidos (`C:\\*`): `\*` NO es escape válido y hacía que opencode no parseara `builder`/`summarizer` (paridad byte a byte raíz↔templates en las 4 copias) [topic: agents/frontmatter-yaml-escape] review_after: 2027-04-18
+- Versión con fuente única: `package.json` manda y `npm run version:bump <patch|minor|major>` reescribe los 5 destinos que vigila `version-check` (raw EOL + rollback); `version-check` es módulo puro importable (`isMain`, cero side effects) y ambos scripts son dev-only (`ROOT_ONLY_EXACT`) [topic: release/version-bump-single-source] review_after: 2027-04-21
 
 ---
 
 ## 3. Pendientes inmediatos
 
-- [x] **Gate 0 empírico V2: validado** en `test/e2e-harness-v2.test.mjs` contra CLI 2.0.32 (sin warnings por claves del harness, `default_agent`/`instructions` resueltos, reglas `deny`/`ask` aplicadas). La migración V2-nativa sigue la spec `sdd/v2-compat/spec` (ambas ya archivadas en `CHANGELOG/2026-10-12.md`, topics `test/e2e-v2-empirico` y `sdd/v2-compat/spec`).
-- [ ] Menores no bloqueantes: (a) help de `init.mjs` dice "sin binario global" pero `package.json` expone bins — incoherencia de redacción; (b) `--autoskills 3` no ejecutó autoskills en una prueba (revisar parseo del valor); (c) `release.yml` sin guarda "saltar si `name@version` ya existe" (tag de versión ya publicada fallaría); (d) actualizar/limpiar el stub `0.0.0-stage` si procede · **(e) cerrado (2026-10-18):** `debug agents` no resolvía `builder`/`summarizer` por el escape YAML inválido del frontmatter (`C:\*`) — causa en §2 `agents/frontmatter-yaml-escape`.
+- [ ] Menores no bloqueantes: (a) help de `init.mjs` dice "sin binario global" pero `package.json` expone bins — incoherencia de redacción; (b) `--autoskills 3` no ejecutó autoskills en una prueba (revisar parseo del valor) · **(c) cerrado (2026-10-21):** `release.yml` salta si `name@version` ya existe (`npm view`, skip solo en `E404`) en vez de fallar con una tag ya publicada — §2 `release/npm-publish` · **(d) cerrado (2026-10-21):** `0.0.0-stage` sin artefacto vivo (solo un comentario en `release.yml` + histórico; el `"version": "0.0.0"` de `skills-lock.json` es otro campo) · **(e) cerrado (2026-10-18):** `debug agents` no resolvía `builder`/`summarizer` por el escape YAML inválido del frontmatter (`C:\*`) — causa en §2 `agents/frontmatter-yaml-escape`.
 
 ---
 
@@ -85,7 +85,7 @@
 | shared-lib | `.opencode/scripts/lib/{core,md,cache}.mjs` | Núcleo sin deps (isMain, readText, sectionText, field, fenceSpans, listChangelog, todayUTC, writeAtomic, fingerprint/isFresh, EXIT_CODES): importar, nunca reimplementar |
 | installer | `node init.mjs <dir> --upgrade --quick` (exit 0/1/2/3/4/5) | Entrada única; shims delegan; `EXIT_CODES` en `lib/core.mjs`; binarios por env→SO→PATH (`ADVISOR_BASH`/`ADVISOR_TAR`), sonda memoizada |
 | installer/eol | `canonicalEol()` en `init.mjs` + `.opencode/scripts/contract-tests.mjs §3a-bis` | Render normaliza EOL al escribir (LF, CRLF en ps1/cmd/bat); `test/eol-canonical.test.mjs` verif. el DESTINO con fixture envenenado; el contrato `eol templates` verif. la FUENTE |
-| release/npm | `npm dist-tag add advisor-harness@<v> latest` | Corregir `latest` tras publicar; `publish` desde `main` (tag `v*`) con `NPM_TOKEN` |
+| release | `npm dist-tag add advisor-harness@<v> latest` · `npm run version:bump patch` (`--dry-run`/`--set X.Y.Z`) | Corregir `latest` tras publicar; bump de fuente única que hereda los 5 `TARGETS` de `version-check.mjs` y escribe in-place con EOL crudo (`bump()` = core puro importable) |
 | dev-config | `npm run dev:config` (`.opencode/scripts/dev-config.mjs`, root-only) | Genera la `opencode.json` dev gitignored desde `templates/opencode.json` (`{{MODEL_*}}`→`""`); `--check`/`--force`; no-op si existe. Prerequisito de `npm test` en clon limpio · **orden**: `dev:config` ANTES de `routine-model --persist` (si no, `--persist` edita `.opencode/opencode.json`, que NO está ignorado) |
 | test/wiring | `test/wiring-basic.test.mjs` (4 suites / 18 asserts) | Wiring estático comando→agente→script SIN CLI: paridad semántica frontmatter↔`templates/opencode.json`, invariante repo-dev con `opencode.json` raíz presente (7 agentes, cero `{{`, `--check` de frescura), ciclo memoria en tmpdir; complementa e2e-v2, contract-tests y dev-config.test.mjs |
 

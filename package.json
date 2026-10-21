@@ -1,6 +1,6 @@
 {
   "name": "advisor-harness",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Harness de agentes + memoria persistente para opencode — reusable scaffold con agentes orquestados y memoria de 3 capas (Consigliere 1.0 (Advisor Harness), solo por proyecto)",
   "type": "module",
   "bin": {
@@ -46,6 +46,7 @@
     "lint:sh": "node .opencode/scripts/lint-sh.mjs",
     "lint:ps1": "pwsh -NoProfile -Command \"$e=$null; [void][System.Management.Automation.Language.Parser]::ParseFile('init.ps1',[ref]$null,[ref]$e); if($e.Count){$e|%{Write-Error $_}; exit 1}\"",
     "version:check": "node .opencode/scripts/version-check.mjs",
+    "version:bump": "node .opencode/scripts/version-bump.mjs",
     "prepublishOnly": "node .opencode/scripts/version-check.mjs && node .opencode/scripts/contract-tests.mjs"
   }
 }

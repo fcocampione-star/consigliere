@@ -94,7 +94,8 @@ const ROOT_ONLY_EXACT = new Set([
   '.opencode/scripts/dev-config.mjs', // genera la `opencode.json` LOCAL de este repo (gitignored) desde `templates/opencode.json`: el repo dev no puede autoinstalarse (`refuseHarnessSource`), así que la config dev no la escribe el instalador. Tool de dev, no del harness instalado.
   '.opencode/scripts/memory-rotate.test.mjs',
   '.opencode/scripts/contract-tests.mjs',
-  '.opencode/scripts/version-check.mjs',
+  '.opencode/scripts/version-check.mjs', // comprueba la versión de ESTE repo (5 destinos + package.json): un proyecto instalado no tiene esos ficheros, así que no se instala.
+  '.opencode/scripts/version-bump.mjs', // dev-only por definición: sube la versión del PAQUETE npm de este repo (`package.json` + los 5 destinos). Un proyecto instalado no bumpea su propio paquete (no publica nada), así que no viaja a templates/.
   'CONTRIBUTING.md',
   'LICENSE',
   'README.md',

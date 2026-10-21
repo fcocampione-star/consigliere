@@ -66,6 +66,7 @@ npm run test:contract                                # contrato anti-drift (pari
 npm run lint:sh                                      # bash -n init.sh + scripts/check-memory-limits.sh (lint-sh.mjs resuelve el bash: PATH → Git for Windows; override ADVISOR_BASH)
 npm run lint:ps1                                     # parse AST de PowerShell sobre init.ps1
 npm run version:check                                # versión única: package.json == init.mjs/init.sh/init.ps1 + las 2 SKILL.md de _project-docs
+npm run version:bump patch                           # sube la versión en esos 5 destinos + package.json (--dry-run / --set X.Y.Z); no toca git
 node --check init.mjs && node --check .opencode/scripts/doctor.mjs  # validación ESM syntax
 node .opencode/scripts/doctor.mjs --json              # diagnóstico harness (opencode.json, memoria, lock, hook, cache, scripts, dirs, derivados)
 node .opencode/skills/_skill-loader/loader.mjs list --json  # listar skills (cache fingerprint)

@@ -127,11 +127,41 @@ jobs:
           echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
           echo "empaquetado: $tarball"
 
+      # Idempotencia del release: si `advisor-harness@<version>` YA está en npm,
+      # el publish se salta (re-ejecutar un tag ya publicado no es un fallo). Solo
+      # el E404 de `npm view` significa "no existe": cualquier otro error (red,
+      # 5xx, ENEEDAUTH) es un fallo REAL y NO puede degradar a skip, o el workflow
+      # diría "ya estaba" mientras el paquete sigue sin publicarse.
+      - name: comprobar si advisor-harness@<version> ya está publicado
+        id: published
+        if: github.event_name == 'push'
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          set +e
+          salida=$(npm view "advisor-harness@$version" version 2>&1)
+          estado=$?
+          set -e
+          if [ "$estado" -eq 0 ]; then
+            echo "ya=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::advisor-harness@$version ya existe en npm: se omite el publish"
+            echo "ya publicado: $salida"
+          elif printf '%s' "$salida" | grep -q 'E404'; then
+            echo "ya=false" >> "$GITHUB_OUTPUT"
+            echo "advisor-harness@$version no existe todavía: se publicará"
+          else
+            echo "::error::npm view falló (exit $estado) y no es E404: no se puede decidir si publicar — $salida"
+            exit 1
+          fi
+
       # npm publish. El token solo vive en este workflow; CI no lee secretos.
       # --provenance ata el tarball al workflow y al commit, y exige id-token.
-      # En dry-run (workflow_dispatch con la casilla marcada) este paso no corre.
+      # En dry-run (workflow_dispatch con la casilla marcada) este paso no corre, y
+      # tampoco si la versión ya estaba publicada (paso anterior).
       - name: publicar en npm (con provenance)
-        if: github.event_name == 'push' || !inputs.dry-run
+        if: (github.event_name == 'push' || !inputs.dry-run) && steps.published.outputs.ya != 'true'
         # `setup-node` con registry-url escribe un .npmrc con
         # `${NODE_AUTH_TOKEN}`: sin definirlo aquí, el token va vacío → ENEEDAUTH.
         # El secret `NPM_TOKEN` debe existir en GitHub (scope Automation si la
@@ -146,6 +176,30 @@ jobs:
             --registry=https://registry.npmjs.org
           echo "publicado advisor-harness@${{ github.ref_name }}"
 
+      # Aserción post-publish: que lo que se ve en el registry sea exactamente lo
+      # que se acaba de publicar. `latest` NO es decorativo — en 1.0.0 apuntaba al
+      # stub `0.0.0-stage` y `npx advisor-harness@latest` servía el paquete
+      # equivocado sin que nada fallara.
+      - name: verificar en el registry (versión + dist-tag latest)
+        if: (github.event_name == 'push' || !inputs.dry-run) && steps.published.outputs.ya != 'true'
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          publicado=$(npm view "advisor-harness@$version" version)
+          if [ "$publicado" != "$version" ]; then
+            echo "::error::el registry devuelve '$publicado' para advisor-harness@$version"
+            exit 1
+          fi
+          latest=$(npm view advisor-harness dist-tags.latest)
+          if [ "$latest" != "$version" ]; then
+            echo "::error::dist-tags.latest apunta a '$latest' y no a la versión publicada ($version); corrige con: npm dist-tag add advisor-harness@$version latest"
+            exit 1
+          fi
+          echo "registry OK: advisor-harness@$version es latest"
+
+      # `gh release view || gh release create`: idempotente a propósito. Si el
+      # publish ya existía y la release quedó a medias (publish OK / release KO),
+      # una re-ejecución del tag crea la release en vez de fallar por duplicada.
       - name: crear la release de GitHub con el tarball adjunto
         if: github.event_name == 'push' || !inputs.dry-run
         env:
@@ -154,10 +208,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          gh release create "${{ github.ref_name }}" \
-            --title "advisor-harness ${{ github.ref_name }}" \
-            --generate-notes \
-            "${{ steps.pack.outputs.tarball }}"
+          tag="${{ github.ref_name }}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "la release $tag ya existe: no se recrea"
+          else
+            gh release create "$tag" \
+              --title "advisor-harness $tag" \
+              --generate-notes \
+              "${{ steps.pack.outputs.tarball }}"
+          fi
 
       - name: borrar el tarball
         if: always()

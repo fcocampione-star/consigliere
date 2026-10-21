@@ -2,7 +2,7 @@
 
 > **Solo por proyecto.** Un scaffold reutilizable que deja cada proyecto listo para trabajar con opencode: agentes orquestados, memoria que recuerda decisiones entre sesiones y comandos para auditar, registrar y revisar el progreso. Sin dependencias globales de runtime, sin servicios: es Markdown + scripts que se instalan **dentro** del proyecto.
 
-> **✅ Publicado en npm:** el paquete `advisor-harness` (v1.0.x) ya está en el registry, así que `npx advisor-harness@latest <dir>` funciona directamente. También puedes instalarlo global (`npm install -g advisor-harness`) o clonar el repo (`git clone` + `node init.mjs` / `./init.sh` / `powershell -File init.ps1`).
+> **✅ Publicado en npm:** el paquete `advisor-harness` ([v1.0.2](https://www.npmjs.com/package/advisor-harness)) ya está en el registry, así que `npx advisor-harness@latest <dir>` funciona directamente. La versión publicada sale de `package.json` y de ningún otro sitio: las copias que la repiten las sincroniza `npm run version:bump`. También puedes instalarlo global (`npm install -g advisor-harness`) o clonar el repo (`git clone` + `node init.mjs` / `./init.sh` / `powershell -File init.ps1`).
 
 ## Requisitos
 
@@ -328,7 +328,7 @@ Genera frontmatter válido para `_skill-loader` (`name` == directorio, `descript
 
 ## Estructura de este repositorio
 
-> **Ramas de este repositorio.** `dev` es la rama de **integración** y `main` la rama **estable**: **ambas son el repo completo** (`test/`, `.github/`, `scripts/`, `CONTRIBUTING.md`, `.nvmrc` y los dev-tools de `.opencode/scripts/`). La promoción es `dev`→`main` con **`--ff-only`** (fast-forward, sin regenerar): `main` queda idéntico a `dev` en cada promoción. El **canal de consumo limpio no es una rama** sino el paquete **npm** (`advisor-harness`, publicado con `files`) y el **source archive del tag** de GitHub (`git archive`, que respeta el `export-ignore` de `.gitattributes`); el filtrado de lo dev-only ocurre ahí, no en una rama distinta. El paquete npm se publica desde `main` (tag `v*`). Los scripts de desarrollo (`npm test`, `test:contract`, `version:check`, `lint:sh`) aplican igual en `dev` y en `main`.
+> **Ramas de este repositorio.** `dev` es la rama de **integración** y `main` la rama **estable**: **ambas son el repo completo** (`test/`, `.github/`, `scripts/`, `CONTRIBUTING.md`, `.nvmrc` y los dev-tools de `.opencode/scripts/`). La promoción es `dev`→`main` con **`--ff-only`** (fast-forward, sin regenerar): `main` queda idéntico a `dev` en cada promoción. El **canal de consumo limpio no es una rama** sino el paquete **npm** (`advisor-harness`, publicado con `files`) y el **source archive del tag** de GitHub (`git archive`, que respeta el `export-ignore` de `.gitattributes`); el filtrado de lo dev-only ocurre ahí, no en una rama distinta. El paquete npm se publica desde `main` (tag `v*`). Los scripts de desarrollo (`npm test`, `test:contract`, `version:check`, `version:bump`, `lint:sh`) aplican igual en `dev` y en `main`.
 
 ```
 consigliere/
@@ -342,6 +342,7 @@ consigliere/
 ├── CONTRIBUTING.md         # flujo de desarrollo y notas de mantenimiento
 ├── .nvmrc                  # Node de desarrollo: 20
 ├── test/                   # suite propia (harness sin dependencias + fixtures + agregador)
+├── .opencode/scripts/      # dev-only de ESTE repo: version-check.mjs, version-bump.mjs, memory-tokens.mjs, contract-tests.mjs, dev-config.mjs, lint-sh.mjs
 └── .github/workflows/      # ci.yml (5 jobs) + release.yml (gatea en CI)
 ```
 
@@ -367,7 +368,8 @@ El repo tiene su propia suite, sin dependencias externas (nada de `npm ci`: no h
 | `npm run test:contract` | contrato anti-drift: paridad espejo raíz↔`templates/`, catálogos de archivos solo-raíz **y solo-template** (los dos fallan), invariantes, `node --check` derivado |
 | `npm run lint:sh` | `bash -n` de `init.sh` y `scripts/check-memory-limits.sh` |
 | `npm run lint:ps1` | parse real con el AST de PowerShell sobre `init.ps1` |
-| `npm run version:check` | la versión de `package.json` aparece en `init.mjs`, `init.sh`, `init.ps1` y en las 2 copias de `_project-docs/SKILL.md` |
+| `npm run version:check` | la versión de `package.json` aparece en los 5 destinos: `init.mjs`, `init.sh`, `init.ps1` y las 2 copias de `_project-docs/SKILL.md` |
+| `npm run version:bump` | sube la versión (`patch`/`minor`/`major`, o `--set X.Y.Z`) en esos 5 destinos y en `package.json`; `--dry-run` imprime la tabla sin escribir |
 | `prepublishOnly` | `version:check` + contrato, antes de publicar |
 
 `.github/workflows/ci.yml`, cinco jobs:
@@ -378,7 +380,30 @@ El repo tiene su propia suite, sin dependencias externas (nada de `npm ci`: no h
 4. **drift-and-packaging** — `templates/opencode.json` trackeada y la de raíz ignorada, `version:check`, bit `100755` en todo `.sh` trackeado, `git archive` sin rutas de desarrollo, `templates/opencode.json` presente en el tar y contrato anti-drift.
 5. **pack-smoke** — `npm pack`, lista must-have dentro del tarball, instalación del tarball en un directorio temporal, instalación del harness con el CLI no interactivo, `opencode.json` generado como JSON válido, ningún placeholder `{{...}}` sin resolver, doctor instalado en exit 0 y una segunda pasada `--upgrade` idempotente (3 SO).
 
-`.github/workflows/release.yml` llama a `ci.yml` con `workflow_call` y solo publica (con `--provenance`) si todo lo anterior pasó; el tag `v<version>` tiene que coincidir con `package.json`.
+`.github/workflows/release.yml` llama a `ci.yml` con `workflow_call` y solo publica (con `--provenance`) si todo lo anterior pasó; el tag `v<version>` tiene que coincidir con `package.json` y estar sobre `main`. Detalle de la cadena en [Versionado y publicación](#versionado-y-publicación).
+
+## Versionado y publicación
+
+**Semver aplicado** (manda lo que rompe al consumidor del harness, no el volumen del cambio):
+
+| Kind | Qué incluye | Ejemplos |
+|------|-------------|----------|
+| `patch` | fix o documentación | corregir un mensaje, endurecer un check, actualizar el README |
+| `minor` | algo **nuevo y compatible** | comando, agente o script nuevo; flag opcional; sección nueva de memoria que no cambia el formato |
+| `major` | cambio de **contrato** | formato de la memoria en `.advisor/`, CLI de `init.mjs` (flags o códigos de salida), layout de `templates/` |
+
+**Fuente única.** La versión vive en `package.json` y en ningún otro sitio. Hay 5 destinos que la repiten porque la leen en tiempo de ejecución (`init.mjs`, `init.sh`, `init.ps1` y las 2 copias de `_project-docs/SKILL.md`); `npm run version:bump <patch|minor|major>` los reescribe todos y deja `package.json` para el final, y `npm run version:check` verifica que los 6 coinciden. El bump exige **1 sola ocurrencia** por fichero, aborta sin escribir si ya había drift (exit 2) y restaura los originales si algo falla a mitad. `--dry-run` imprime la tabla `ruta | from → to | ocurrencias` sin tocar disco, y `--set X.Y.Z` es el escape hatch (idempotente: repetirlo con la versión ya puesta sale 0 sin escribir).
+
+**Cadena de release** (4 pasos, en este orden):
+
+1. En `dev`: `npm run version:bump patch` (o `minor`/`major`).
+2. `npm test` en verde — incluye `version:check` y el contrato anti-drift.
+3. `git switch main && git merge --ff-only dev && git push origin main` (la promoción es fast-forward; si no lo es, `main` se movió por su cuenta y hay que revisarlo).
+4. `git tag vX.Y.Z` sobre el commit que **ya** está en `origin/main`, y `git push origin vX.Y.Z`. El tag dispara `release.yml`.
+
+`release.yml` llama a `ci.yml` (`workflow_call`) y solo publica si los cinco jobs pasan; antes comprueba que el tag coincide con `package.json` y que el commit del tag es ancestro de `origin/main`, después publica el tarball con `--provenance` y crea la release de GitHub con el tarball adjunto. Si `advisor-harness@X.Y.Z` **ya** existe en el registry (tag re-ejecutado) el publish se omite con un `::notice::`, y la release se envuelve en `gh release view || gh release create` para curar el caso "publish OK / release KO". Tras publicar se asserta que `npm view advisor-harness@X.Y.Z version` y el `dist-tags.latest` apuntan a la versión publicada. Un error que **no** sea el `E404` de "no existe" (red, 5xx, `ENEEDAUTH`) no se degrada a skip: falla el workflow.
+
+> `prepublishOnly` **no** corre al publicar un tarball (`npm publish <tarball>`), que es exactamente lo que hace el workflow: la cobertura real son los steps de `release.yml` (`version:check`, `test:contract`, `npm test`), no el hook del `package.json`.
 
 ## Notas de diseño v1.0 (detalle técnico)
 

@@ -39,7 +39,8 @@ npm run lint:ps1        # parse AST de PowerShell sobre init.ps1
 | `npm run dev:config` | genera la `opencode.json` dev local (gitignored) desde `templates/opencode.json` (`{{MODEL_*}}` → `""`); `--check` asserta frescura, `--force` regenera; sin flags es no-op si existe |
 | `npm run lint:sh` | `bash -n` de los scripts bash de la raíz |
 | `npm run lint:ps1` | parse real con `[Parser]::ParseFile` (un grep no vale: un `.ps1` con error de sintaxis devuelve tokens de error) |
-| `npm run version:check` | `package.json` == `init.mjs` / `init.sh` / `init.ps1` |
+| `npm run version:check` | `package.json` == los 5 destinos: `init.mjs` / `init.sh` / `init.ps1` + las 2 `_project-docs/SKILL.md` |
+| `npm run version:bump` | sube la versión en los 5 destinos y en `package.json` (`patch`/`minor`/`major` o `--set X.Y.Z`); `--dry-run` no escribe |
 | `prepublishOnly` | `version:check` + contrato, automático antes de publicar |
 
 La suite de `test/` es un micro-framework propio sin dependencias: `test/harness.mjs` (registro de casos, asserts, temporales), `test/fixtures.mjs` y `test/run.mjs`, que **ejecuta cada `test/*.test.mjs` en su propio proceso** (un `process.exit()` de un test no puede contaminar a los demás). Añade un `test/<area>.test.mjs` y el agregador lo descubre solo, sin editar nada más.
@@ -59,7 +60,7 @@ Al tocar cualquier par, copia el fichero entero al otro lado en vez de editar lo
 
 > El flujo de un proyecto **consumidor** (harness+memoria en la raíz de su repo, compartidos, y exclusión solo del artefacto de release) se documenta en README › "Equipo: un repo, un harness + memoria compartidos".
 
-Los ficheros de la raíz que **no** son copia de `templates/` (`.opencode/`, `AGENTS.md`, la variante de desarrollo de `doctor.mjs`, `contract-tests.mjs`, `version-check.mjs`, `test/`) divergen de la plantilla **a propósito**, y esa divergencia está catalogada en la allowlist del espejo (`ALLOW_DIVERGENCE` / `ROOT_ONLY_EXACT` de `contract-tests.mjs`). Por eso el instalador **nunca** debe recibir la ruta de este repo: un `--upgrade` contra aquí regenera desde `templates/` lo que no es una copia y lo sustituye por la versión genérica de la plantilla — el `AGENTS.md` con la tabla de stack real, el `doctor.mjs` de desarrollo, el doc del comando `/doctor`, la skill `_project-docs`, el `.gitignore`, `scripts/check-memory-limits.sh`. Además se crea `.advisor/backups/` con el backup previo y una `opencode.json` generada en la raíz, y el `.gitignore` regenerado es el de la plantilla, que **no lleva la línea `/opencode.json`** (esa solo existe en el de la raíz) ni las de `.advisor/memory-manifest.json` y `.advisor/chunks/`: el config local y el estado vivo derivado dejan de estar ignorados y un `git add -A` se los lleva al commit. Los backups sí los ignora la plantilla (`.advisor/backups/`), pero aparecen igualmente en tu working tree.
+Los ficheros de la raíz que **no** son copia de `templates/` (`.opencode/`, `AGENTS.md`, la variante de desarrollo de `doctor.mjs`, `contract-tests.mjs`, `version-check.mjs`, `version-bump.mjs`, `test/`) divergen de la plantilla **a propósito**, y esa divergencia está catalogada en la allowlist del espejo (`ALLOW_DIVERGENCE` / `ROOT_ONLY_EXACT` de `contract-tests.mjs`). Por eso el instalador **nunca** debe recibir la ruta de este repo: un `--upgrade` contra aquí regenera desde `templates/` lo que no es una copia y lo sustituye por la versión genérica de la plantilla — el `AGENTS.md` con la tabla de stack real, el `doctor.mjs` de desarrollo, el doc del comando `/doctor`, la skill `_project-docs`, el `.gitignore`, `scripts/check-memory-limits.sh`. Además se crea `.advisor/backups/` con el backup previo y una `opencode.json` generada en la raíz, y el `.gitignore` regenerado es el de la plantilla, que **no lleva la línea `/opencode.json`** (esa solo existe en el de la raíz) ni las de `.advisor/memory-manifest.json` y `.advisor/chunks/`: el config local y el estado vivo derivado dejan de estar ignorados y un `git add -A` se los lleva al commit. Los backups sí los ignora la plantilla (`.advisor/backups/`), pero aparecen igualmente en tu working tree.
 
 El instalador se defiende: `isHarnessSource` + `refuseHarnessSource` (`init.mjs`) detectan el caso (destino con `templates/.opencode`, `init.mjs` y un `package.json` cuyo `name` sea el del paquete del harness) y **se niegan con exit 2** sin escribir nada. Con `--force` avisa en voz alta y continúa (el backup previo sigue siendo obligatorio: es la única red). Los dos caminos están cubiertos en `test/init.test.mjs`.
 
@@ -84,7 +85,19 @@ Además, en la CI no se activa `cache: npm` a propósito: exigiría un lockfile 
 
 ## Publicación
 
-- El publish se origina desde **`main`**: el tag `v<version>` se crea sobre `main` y `release.yml` verifica que el commit del tag es ancestro de `origin/main` (con `fetch-depth: 0` + `git merge-base --is-ancestor`); además el tag tiene que coincidir con la versión de `package.json`.
+**Runbook (orden exacto, sin atajos):**
+
+1. En `dev`: `npm run version:bump patch` (o `minor`/`major`; primera vez en una rama, `--dry-run` para revisar la tabla). Reescribe los 5 destinos + `package.json` y no toca git.
+2. `npm test` en verde (incluye `version:check` y el contrato anti-drift). Commit y push del bump a `dev`.
+3. `git switch main && git merge --ff-only dev && git push origin main`. La promoción es **solo** fast-forward: si `--ff-only` falla, `main` se movió por su cuenta y hay que investigarlo, no forzar el merge.
+4. `git tag vX.Y.Z` sobre el commit que **ya** está en `origin/main` (`git rev-parse main origin/main` tienen que coincidir) y `git push origin vX.Y.Z`. El push del tag dispara `release.yml`.
+
+Detalles que el workflow comprueba y que conviene no olvidar:
+
+- El publish se origina desde **`main`**: `release.yml` verifica que el commit del tag es ancestro de `origin/main` (con `fetch-depth: 0` + `git merge-base --is-ancestor`) y que el tag coincide con la versión de `package.json`.
 - `release.yml` invoca `ci.yml` con `workflow_call` y solo publica si pasan los cinco jobs; `npm publish --provenance` + GitHub Release con el tarball adjunto. Un `workflow_dispatch` con `dry-run` verifica sin publicar.
+- **`release.yml` no valida que `main` esté al día con `dev`**: comprueba que el tag está sobre `main` y que la versión coincide, no que `main` contenga lo último de `dev`. Si te saltas el paso 3 y taggeas sobre un `main` atrasado, el release publica un árbol incompleto sin que la guarda lo detecte: el orden de arriba no es ceremonia, es la única red.
+- Si `advisor-harness@X.Y.Z` ya existe en npm (tag re-ejecutado) el publish se omite con un `::notice::`; la release de GitHub es idempotente (`gh release view || gh release create`). Un error del `npm view` que no sea `E404` (red, 5xx, `ENEEDAUTH`) **falla** el workflow en vez de convertirse en skip. Tras publicar se asserta que `npm view advisor-harness@X.Y.Z version` y el `dist-tags.latest` apuntan a la versión del tag.
+- `prepublishOnly` **no** corre con `npm publish <tarball>` (el workflow publica el tarball que antes empaquetó), así que la cobertura son los steps del workflow, no el hook.
 - `package.json` `files` = `init.sh`, `init.ps1`, `init.cmd`, `init.mjs`, `templates/`, `README.md`, `LICENSE`. Si añades algo al paquete, actualiza también la lista must-have del job `pack-smoke` y la aserción de `git archive`.
 - `.gitattributes` marca con `export-ignore` lo que es desarrollo puro; sin eso, el zip de código de GitHub se lleva `.opencode/`, la memoria y los scripts.
