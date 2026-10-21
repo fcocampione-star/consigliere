@@ -60,8 +60,8 @@ jobs:
     permissions:
       # `contents: write` — crear el GitHub Release (releases: write no hace
       # falta; el permiso de contents cubre el release del tag).
-      # `id-token: write` — OIDC para que npm firme la provenance del paquete;
-      # sin esto `--provenance` falla. Es lo mínimo para publicar con trazabilidad.
+      # `id-token: write` — OIDC: npm Trusted Publishing autentica el publish con
+      # él (sin token) y firma la provenance. Sin esto no hay publish posible.
       contents: write
       id-token: write
     defaults:
@@ -78,7 +78,10 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
+          # SIN `registry-url`: setup-node escribiría un .npmrc con
+          # `_authToken=${NODE_AUTH_TOKEN}`, y un token vacío rompe el OIDC de
+          # Trusted Publishing (actions/setup-node#1551). npm ya usa
+          # registry.npmjs.org por defecto.
           cache: ''
 
       # Igual que en CI: la opencode.json de la raíz está gitignored y sin ella
@@ -141,8 +144,6 @@ jobs:
       - name: comprobar si advisor-harness@<version> ya está publicado
         id: published
         if: github.event_name == 'push'
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
           version=$(node -p "require('./package.json').version")
@@ -162,18 +163,21 @@ jobs:
             exit 1
           fi
 
-      # npm publish. El token solo vive en este workflow; CI no lee secretos.
-      # --provenance ata el tarball al workflow y al commit, y exige id-token.
+      # Trusted Publishing (OIDC) exige npm CLI >= 11.5.1; Node 20 trae npm 10.x,
+      # que falla con un 404 engañoso. Se actualiza solo npm, no el Node de la suite.
+      - name: npm >= 11.5.1 (Trusted Publishing)
+        if: (github.event_name == 'push' || !inputs.dry-run) && steps.published.outputs.ya != 'true'
+        run: |
+          npm install -g npm@^11.5.1
+          npm --version
+
+      # npm publish vía Trusted Publishing (OIDC): sin NPM_TOKEN ni secretos; npm
+      # canjea el id-token del job (publisher configurado en npmjs.com para este
+      # repo + release.yml). --provenance ata el tarball al workflow y al commit.
       # En dry-run (workflow_dispatch con la casilla marcada) este paso no corre, y
       # tampoco si la versión ya estaba publicada (paso anterior).
       - name: publicar en npm (con provenance)
         if: (github.event_name == 'push' || !inputs.dry-run) && steps.published.outputs.ya != 'true'
-        # `setup-node` con registry-url escribe un .npmrc con
-        # `${NODE_AUTH_TOKEN}`: sin definirlo aquí, el token va vacío → ENEEDAUTH.
-        # El secret `NPM_TOKEN` debe existir en GitHub (scope Automation si la
-        # cuenta tiene 2FA); nunca se escribe en claro.
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
           npm publish "${{ steps.pack.outputs.tarball }}" \

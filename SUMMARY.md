@@ -17,6 +17,7 @@ review_after: 2027-04-21
 **Next:** commit de los 2 fixes + dry-run sobre `main` + re-corte del tag `v1.0.2` (push forzado del tag movido) ⇒ `release.yml` publica; la guarda skip-if-published absorbe re-runs.
 **Files:** `git log --oneline -5` (no listas manuales)
 **Verificación:** `npm test` ✅ ("harness ok", 20/20 archivos), `test:contract` ✅, YAML de ambos workflows parseado y grupos de concurrencia distintos confirmados. Sin commit (decisión del coordinador).
+**Addendum:** run 39649433616 falló en `publish` con `EOTP` (token granular no supera el 2FA de escritura de la cuenta) → `release.yml` migra a npm Trusted Publishing (OIDC: sin `NPM_TOKEN`, npm >=11.5.1, sin `registry-url`); tag `v1.0.2` re-cortado sobre ese commit.
 
 ## 2026-10-21 — Release 1.0.2 preparada: `version:bump` (fuente única) + guarda skip-if-published ✓
 
