@@ -7,6 +7,17 @@
 
 <!-- ADVISOR:ENTRIES:START -->
 
+## 2026-10-21 — Release 1.0.2 publicada en npm vía Trusted Publishing (OIDC) ✓
+
+topic: release/npm-publish  <!-- relacionados: ci/reusable-concurrency-literal-groups, release/version-bump-single-source -->
+review_after: 2027-04-21
+**Goal:** cerrar el release 1.0.2: publicar `advisor-harness@1.0.2` desde `release.yml` y dejar la publicación sin tokens.
+**Discoveries:** 4 bloqueos en cadena: (1) secret con nombre equivocado (`NODE_AUTH_TOKEN` en vez de `NPM_TOKEN`) → ENEEDAUTH; (2) token granular frenado por "Require 2FA for write actions" de la cuenta → EOTP; (3) migración a OIDC (npm `^11.5.1` en publish, sin `registry-url` en setup-node por setup-node#1551); (4) Trusted Publisher en npmjs.com con "Allow npm publish" sin marcar → `E403 OIDC permission denied for this action` (solo permitía `stage publish`). Aparte, 2 cancelaciones de jobs macOS por falta de runners (capacidad de GitHub, no código; `rerun --failed`). Anomalía: el paso "verificar en el registry" corrió 3 s tras el publish y dio E404 (npm tardó ~2,5 min en servir la versión) ⇒ run 39656624120 en rojo con todo publicado.
+**Accomplished:** npm `latest` = **1.0.2** con provenance SLSA v1 (attestation en el registry), publicado por OIDC desde `6c5431e` (tag `v1.0.2`). GitHub Release `v1.0.2` creada a mano con el tarball oficial de npm (shasum `bd2a7104…`). Limpieza de seguridad (usuario): token granular "Consigliere Harness" revocado, secrets `NPM_TOKEN`/`NODE_AUTH_TOKEN` borrados (0 secrets verificado), Publishing access en "Require 2FA and disallow bypass 2fa tokens" (confirmado por el usuario; no verificable por CLI). Smoke test del paquete publicado (Windows, Node 24, tmp): `npx advisor-harness@1.0.2` `--version` OK, instalación no interactiva OK, `doctor` sin ⚠️/❌, `--upgrade` con backup y memoria preservada; los 3 bins (`advisor`, `advisor-harness`, `consigliere-harness`) → `init.mjs`.
+**Next:** endurecer `release.yml` (§3: reintentos en la verificación post-publish, quitar el gate `ya != 'true'` de ese paso, mitigar colas macOS arm64). Nada bloqueante.
+**Files:** `git log --oneline -5` (no listas manuales)
+**Verificación:** `npm view advisor-harness dist-tags.latest` = 1.0.2, attestation presente, `gh secret list` vacío, smoke test OK; `doctor` exit 0 tras este registro.
+
 ## 2026-10-21 — Intento de release 1.0.2: deadlock de concurrencia CI + tmpdir macOS arreglados (sin publish)
 
 topic: ci/reusable-concurrency-literal-groups  <!-- relacionados: test/tmpdir (§5), release/npm-publish, release/version-bump-single-source -->
