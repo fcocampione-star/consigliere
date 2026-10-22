@@ -8,7 +8,8 @@
  * memoria y su .advisor/) queda intacto. Covers: derive-name, bloqueo `_*`,
  * dry-run por defecto (stdout, sin disco), --write, existente sin --force,
  * fail-closed (cero fuentes y topic solo-§3), parser `[topics:]` plural en §2 y
- * §3, prefijo/exacto + dedup, --summary/--json/--help y contenido consolidado.
+ * §3, prefijo/exacto + dedup, --summary/--json/--help, contenido consolidado,
+ * chunks sin contenido filtrados (sin placeholders) y texto ÍNTEGRO de entradas.
  */
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -16,6 +17,7 @@ import { spawnSync } from 'node:child_process';
 
 import { suite, test, assert, eq, includes, tmpdir, cleanup, runAll } from './harness.mjs';
 import { makeProject, summaryWithEntries, FOOTER_MARK } from './fixtures.mjs';
+import { stripMeta } from '../.opencode/scripts/skill-capture.mjs';
 
 const REPO_ROOT = join(import.meta.dirname, '..');
 const SCRIPTS_DIR = join(REPO_ROOT, '.opencode', 'scripts');
@@ -47,6 +49,7 @@ const STATE_FIXTURE = `# PROJECT_STATE — fixture (estado vivo del proyecto)
 - Decisión fixture A [topic: test/fixture-a] review_after: 2099-12-31
 - Decisión topics plural [topics: test/plural-a, test/plural-b] review_after: 2099-12-31
 - Decisión kit [topic: test/kit] review_after: 2099-12-31
+- Decisión antes TEXTO-ANTES [topic: test/meta] review_after: 2099-12-31 despues TEXTO-DESPUES
 
 ---
 
@@ -83,6 +86,25 @@ const STATE_FIXTURE = `# PROJECT_STATE — fixture (estado vivo del proyecto)
 ## 6. Índices de búsqueda
 
 - **Decisiones**: \`PROJECT_STATE.md §2\`.
+`;
+
+// Entrada SOLO de SUMMARY (topic sin §2 ni §5): escenario "experiencia pura".
+// Su cuerpo excede el `preview` de 160 chars de memory-index y los últimos
+// campos caen FUERA de las 4 primeras líneas, así que el consolidado solo puede
+// contener las marcas leyendo el texto ÍNTEGRO de la entrada.
+const LONG_TAIL = 'COLA-INTEGRA-DE-LA-ENTRADA';
+const NEXT_MARK = 'NEXT-SOLO-VISIBLE-CON-TEXTO-COMPLETO';
+const SUMMARY_ONLY_ENTRY = `## 2026-09-07 - Experiencia solo SUMMARY
+
+topic: test/summary-only
+review_after: 2099-12-31
+**Goal:** ${'relleno de la entrada '.repeat(12)}${LONG_TAIL}
+**Discoveries:** sin hallazgos.
+**Accomplished:** fixture de memoria.
+**Next:** ${NEXT_MARK}
+**Files:** \`git log --oneline -5\`.
+**Verificación:** pendiente.
+
 `;
 
 // CHANGELOG de fixture con el MISMO bloque que SUMMARY (id idéntico de
@@ -134,7 +156,10 @@ const makeFixture = () => {
   // 2 entradas con topic test/fixture → renombradas a test/kit (fixture del set completo)
   summaryWithEntries(dir, 2);
   const sumPath = join(dir, 'SUMMARY.md');
-  writeFileSync(sumPath, readFileSync(sumPath, 'utf8').replace(/topic: test\/fixture/g, 'topic: test/kit'), 'utf8');
+  let sum = readFileSync(sumPath, 'utf8').replace(/topic: test\/fixture/g, 'topic: test/kit');
+  // +1 entrada solo-SUMMARY (la más nueva) para el escenario de experiencia pura.
+  sum = sum.replace('<!-- ADVISOR:ENTRIES:START -->', `<!-- ADVISOR:ENTRIES:START -->\n\n${SUMMARY_ONLY_ENTRY}`);
+  writeFileSync(sumPath, sum, 'utf8');
   writeFileSync(join(dir, 'CHANGELOG', '2026-08-31.md'), CHANGELOG_FIXTURE, 'utf8');
   return dir;
 };
@@ -203,12 +228,12 @@ test('dry-run por defecto: solo stdout (consolidado), nunca crea el directorio',
 test('contenido consolidado: decisión §2 + patrón §5 + entradas (no esqueleto vacío)', () => {
   const dir = DRY_DIR();
   const r = runMirror(dir, ['test/kit']);
-  includes(r.out, 'Decisión kit [topic: test/kit]', 'la decisión §2 del topic');
+  includes(r.out, 'Decisión kit', 'la decisión §2 del topic (sin metadatos)');
   includes(r.out, 'test/kit-pattern', 'el patrón §5 del topic');
   includes(r.out, 'Entrada fixture 1', 'la entrada de SUMMARY/CHANGELOG');
   includes(r.out, 'PROJECT_STATE §2 — 1 decisión (fuente primaria)', 'la §2 marcada como primaria');
-  assert(!r.out.includes('(pendiente: contenido de decisiones)'), 'el chunk decisiones queda relleno');
-  assert(!r.out.includes('(pendiente: contenido de entradas)'), 'el chunk entradas queda relleno');
+  includes(r.out, 'chunks: [decisiones, patrones, entradas]', 'frontmatter con los 3 chunks con contenido');
+  assert(!r.out.includes('(pendiente:'), 'ningún placeholder del esqueleto sobrevive');
 });
 
 test('--write escribe el SKILL.md en .opencode/skills/<name>/', () => {
@@ -218,7 +243,7 @@ test('--write escribe el SKILL.md en .opencode/skills/<name>/', () => {
   const skill = join(dir, '.opencode', 'skills', 'kit-capt', 'SKILL.md');
   assert(existsSync(skill), 'SKILL.md escrito');
   const body = readFileSync(skill, 'utf8');
-  includes(body, 'Decisión kit [topic: test/kit]', 'contenido real (no esqueleto)');
+  includes(body, 'Decisión kit', 'contenido real (no esqueleto)');
   assert(body !== '', 'contenido no vacío');
 });
 
@@ -238,6 +263,88 @@ test('--write --json describe lo escrito (written, target, bytes) y no imprime e
   eq(r.json && r.json.name, 'kit-json', 'name en el JSON');
   assert(r.json && r.json.bytes > 0, 'bytes del contenido escrito');
   assert(r.json && String(r.json.target).includes(join('.opencode', 'skills', 'kit-json', 'SKILL.md')), 'target en el JSON');
+});
+
+suite('skill-capture · chunks con contenido y texto íntegro');
+
+test('topic solo-SUMMARY: cero placeholders y frontmatter solo con los chunks con contenido', () => {
+  const dir = DRY_DIR();
+  const r = runMirror(dir, ['test/summary-only']);
+  eq(r.status, 0, 'topic solo-SUMMARY sale 0');
+  assert(!r.out.includes('(pendiente: contenido de'), 'cero placeholders del esqueleto');
+  const fm = r.out.split('---')[1] || '';
+  includes(fm, 'chunks: [entradas]', 'solo el chunk con contenido entra en el frontmatter');
+  assert(!r.out.includes('## decisiones'), 'el chunk decisiones vacío no se renderiza');
+  assert(!r.out.includes('## patrones'), 'el chunk patrones vacío no se renderiza');
+  includes(r.out, '## entradas', 'el chunk con contenido sí se renderiza');
+  includes(r.out, 'SUMMARY.md — 1 entrada', 'la fuente SUMMARY aparece en el encabezado');
+  const j = runMirror(dir, ['test/summary-only', '--json']);
+  eq((j.json && j.json.chunks || []).join(','), 'entradas', 'el JSON reporta los chunks realmente renderizados');
+});
+
+test('entradas: se consolida el texto ÍNTEGRO (no el preview de 160 chars)', () => {
+  const dir = DRY_DIR();
+  const r = runMirror(dir, ['test/summary-only']);
+  eq(r.status, 0, 'dry-run sale 0');
+  includes(r.out, LONG_TAIL, 'un fragmento que el preview truncaría (>160 chars) aparece completo');
+  includes(r.out, NEXT_MARK, 'un campo más allá de las 4 líneas del preview aparece completo');
+});
+
+test('si NINGÚN chunk pedido tiene contenido → uso con mensaje claro y nada escrito', () => {
+  const dir = DRY_DIR();
+  const r = runMirror(dir, ['test/summary-only', '--chunks', 'decisiones', '--write']);
+  eq(r.status, 1, 'chunk pedido sin contenido → uso');
+  includes(r.err, 'ninguno de los chunks', 'mensaje explícito de uso');
+  assert(!existsSync(join(dir, '.opencode', 'skills')), 'nada escrito');
+});
+
+test('--write consolida sin placeholders (SKILL reusable tal cual)', () => {
+  const dir = DRY_DIR();
+  const r = runMirror(dir, ['test/summary-only', '--name', 'summary-only', '--write']);
+  eq(r.status, 0, '--write sale 0');
+  const body = readFileSync(join(dir, '.opencode', 'skills', 'summary-only', 'SKILL.md'), 'utf8');
+  assert(!body.includes('(pendiente: contenido de'), 'el SKILL escrito no arrastra placeholders');
+  includes(body, LONG_TAIL, 'el SKILL escrito lleva el texto completo');
+});
+
+suite('skill-capture · cuerpo sin metadatos de memoria');
+
+test('stripMeta: quita [topic:]/[topics:] y review_after, sin comerse texto legítimo', () => {
+  eq(stripMeta('Decisión A [topic: x/y] review_after: 2099-12-31'), 'Decisión A', 'ambos marcadores al final');
+  eq(stripMeta('Antes [topics: a/b, c/d] despues review_after: 2099-12-31 cola'), 'Antes despues cola', 'texto antes y después del marcador íntegro');
+  eq(stripMeta('topic: x/y sin corchetes'), 'topic: x/y sin corchetes', 'la palabra "topic" suelta se respeta');
+  eq(stripMeta('linea  con  dobles espacios'), 'linea  con  dobles espacios', 'sin marcadores no reescribe el texto');
+  eq(stripMeta('  - item [topic: a/b]'), '  - item', 'conserva la sangría de la línea');
+  eq(stripMeta('el parser acepta `[topic:]` y `[topics:]` plural'), 'el parser acepta `[topic:]` y `[topics:]` plural', 'la sintaxis citada en un code span es prosa');
+  eq(stripMeta('antes `[topic: x]` y [topic: y] despues'), 'antes `[topic: x]` y despues', 'strip fuera del code span, intacto dentro');
+});
+
+test('render: la decisión conserva el texto antes/después y pierde los metadatos', () => {
+  const dir = DRY_DIR();
+  const r = runMirror(dir, ['test/meta']);
+  eq(r.status, 0, 'topic test/meta sale 0');
+  assert(!r.out.includes('[topic:'), 'ningún [topic: en el cuerpo');
+  assert(!r.out.includes('[topics:'), 'ningún [topics: en el cuerpo');
+  assert(!r.out.includes('review_after:'), 'ningún review_after: en el cuerpo');
+  includes(r.out, 'TEXTO-ANTES', 'el texto previo al marcador se conserva');
+  includes(r.out, 'TEXTO-DESPUES', 'el texto posterior al marcador se conserva');
+});
+
+test('render completo (decisiones + patrones + entradas): cero marcadores de memoria', () => {
+  const dir = DRY_DIR();
+  const r = runMirror(dir, ['test/kit']);
+  eq(r.status, 0, 'test/kit sale 0');
+  assert(!/\[topics?:/i.test(r.out), 'sin [topic:]/[topics:] en el consolidado');
+  assert(!/review_after:/i.test(r.out), 'sin review_after: en el consolidado');
+});
+
+test('entradas SUMMARY/CHANGELOG: la caducidad no viaja y el "topic:" sin corchetes no se toca', () => {
+  const dir = DRY_DIR();
+  const r = runMirror(dir, ['test/summary-only']);
+  eq(r.status, 0, 'topic solo-SUMMARY sale 0');
+  assert(!/review_after:/i.test(r.out), 'sin review_after: en el cuerpo de la entrada');
+  includes(r.out, LONG_TAIL, 'el cuerpo íntegro sigue en el consolidado');
+  includes(r.out, 'topic: test/summary-only', 'un "topic:" sin corchetes es texto legítimo, no se elimina');
 });
 
 suite('skill-capture · fail-closed y fuentes');
@@ -283,7 +390,7 @@ test('prefijo de categoría y topic exacto; JSON lista las fuentes consolidadas'
   assert(labelsP.some((l) => l.includes('PROJECT_STATE §2')), 'prefijo consolida las decisiones test/*');
   assert(labelsP.some((l) => l.includes('CHANGELOG/')), 'prefijo consolida las entradas de CHANGELOG');
   const d = runMirror(dir, ['test']);
-  includes(d.out, 'Decisión kit [topic: test/kit]', 'el prefijo consolida el topic test/kit');
+  includes(d.out, 'Decisión kit', 'el prefijo consolida el topic test/kit');
   const e = runMirror(dir, ['test/kit', '--json']);
   eq(e.status, 0, 'topic exacto sale 0');
   const labels = (e.json && e.json.sources || []).map((s) => s.label);

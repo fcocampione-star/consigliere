@@ -14,6 +14,14 @@
  *    `allEntries` de memory-index);
  *  - ítems §3 (pendientes) del mismo topic, añadidos marcados "(pendiente)".
  *
+ * Un consolidado es reusable tal cual: los chunks SIN contenido se filtran del
+ * frontmatter y del cuerpo (el placeholder del esqueleto nunca sobrevive) y las
+ * entradas se renderizan con su texto ÍNTEGRO, no con el `preview` recortado a
+ * 160 chars de memory-index (ese recorte es para búsqueda, no para consolidar).
+ * El cuerpo renderizado va sin metadatos de memoria (`stripMeta`): los
+ * marcadores `[topic:]`/`[topics:]` y `review_after:` son ruido para el loader,
+ * salvo entre backticks (prosa que cita la sintaxis, no metadato).
+ *
  * Fail-closed: sin ≥1 fuente de {decisión §2, patrón §5, entradas
  * SUMMARY/CHANGELOG} sale con uso (1) — un topic que SOLO existe como pendiente
  * §3 no genera skill. El dry-run por defecto imprime por stdout y NUNCA crea
@@ -30,6 +38,8 @@ import { join } from 'node:path';
 import { writeAtomic, EXIT_CODES, exitUsage, fail, isMain, readText } from './lib/core.mjs';
 import { field, sectionText } from './lib/md.mjs';
 import { allEntries, slugId, score } from './memory-index.mjs';
+import { entriesRegion } from './memory-stats.mjs';
+import { headingToId, parseRegion } from './memory-rotate.mjs';
 import { validateName, normalizeChunks, oneLine, render } from './skill-scaffold.mjs';
 
 const ROOT = join(import.meta.dirname, '..', '..');
@@ -151,13 +161,40 @@ export function patternsOf(sec5) {
   return out;
 }
 
+/** Texto ÍNTEGRO de las entradas de las fuentes indicadas, por id: re-parsea
+ * cada fuente con el lector de memoria ya exportado (`entriesRegion` acota la
+ * región de entradas y `parseRegion` tolerante devuelve los bloques) y deriva el
+ * id con la MISMA identidad que `parseEntries` de memory-index (`headingToId`,
+ * con `slugId` de respaldo). Hace falta porque el `preview` de memory-index se
+ * recorta a 160 chars: sirve para búsqueda, pero truncaría el consolidado.
+ * Devuelve un Map id → bloque completo (heading incluido). */
+export function entryBodies(sources) {
+  const map = new Map();
+  for (const src of new Set(sources || [])) {
+    if (!src) continue;
+    const file = join(ROOT, String(src));
+    if (!existsSync(file)) continue;
+    const text = readText(file);
+    let region;
+    try { region = entriesRegion(text).region; }
+    catch { region = text; }
+    for (const b of parseRegion(region, { tolerant: true }).entries) {
+      const id = headingToId(b.text.split('\n', 1)[0]) || slugId(b.date, b.title);
+      if (!map.has(id)) map.set(id, b.text);
+    }
+  }
+  return map;
+}
+
 /** Entradas SUMMARY/CHANGELOG (best-effort) desde `allEntries` de memory-index:
  * descarta las derivadas de §2 (se re-parsean arriba para soportar el plural).
- * Id al de memory-index (headingToId o slugId) — dedup por ese id. */
+ * Id al de memory-index (headingToId o slugId) — dedup por ese id. `text` es el
+ * bloque completo de la entrada (ver `entryBodies`). */
 export function memoryEntriesOf() {
-  return allEntries()
-    .filter((e) => !String(e.source || '').startsWith('PROJECT_STATE') && (e.topic || ''))
-    .map((e) => ({ id: e.id, date: e.date, title: e.title, topics: topicsOfLine(`[topic: ${e.topic}]`), text: e.title, source: e.source, preview: e.preview || '' }));
+  const raw = allEntries()
+    .filter((e) => !String(e.source || '').startsWith('PROJECT_STATE') && (e.topic || ''));
+  const bodies = entryBodies(raw.map((e) => e.source));
+  return raw.map((e) => ({ id: e.id, date: e.date, title: e.title, topics: topicsOfLine(`[topic: ${e.topic}]`), text: bodies.get(e.id) ?? e.title, source: e.source, preview: e.preview || '' }));
 }
 
 /** Toma las N primeras de cada sección (o todas si N < 1). */
@@ -205,35 +242,105 @@ export function collectSources(topic, { stateText = readText(STATE), summaryN = 
 
 // ── Funciones puras: render ─────────────────────────────────────────────────
 
+/** Aplica `fn` solo a los tramos de la línea que NO están dentro de un code span
+ * inline (backticks equilibrados): una mención del marcador entre backticks es
+ * prosa que cita la sintaxis, no un metadato. */
+function outsideInlineCode(line, fn) {
+  let out = '';
+  let openLen = 0;
+  for (const part of String(line).split(/(`+)/)) {
+    const ticks = /^(`+)$/.exec(part);
+    if (ticks) {
+      const n = ticks[1].length;
+      if (!openLen) openLen = n;
+      else if (openLen === n) openLen = 0;
+      out += part;
+    } else out += openLen ? part : fn(part);
+  }
+  return out;
+}
+
+/** Quita del texto los metadatos de memoria que no pertenecen al artefacto
+ * consumible: la topic entre corchetes (`[topic: x]`, `[topics: a, b]`) y la
+ * caducidad `review_after: YYYY-MM-DD`. Solo esos dos patrones (la palabra
+ * "topic" suelta y una mención entre backticks se respetan: la sintaxis citada
+ * en prosa no es un metadato). Una línea que SOLO lleva la caducidad desaparece;
+ * en el resto se colapsan los espacios que dejó la eliminación, nunca la sangría
+ * ni el contenido de un code span. Pura: no muta la entrada, así que `--json`
+ * conserva sus `sources[]` intactas. */
+export function stripMeta(text) {
+  const out = [];
+  for (const line of String(text ?? '').split('\n')) {
+    if (/^[ \t]*review_after:[ \t]*\d{4}-\d{2}-\d{2}[ \t]*$/i.test(line)) continue;
+    const clean = outsideInlineCode(line, (seg) => seg.replace(/\s*\[topics?:[^\]]*\]/gi, '').replace(/\s+review_after:[ \t]*\d{4}-\d{2}-\d{2}/gi, ''));
+    if (clean === line) {
+      out.push(line);
+      continue;
+    }
+    const indent = /^[ \t]*/.exec(clean)[0];
+    const rest = outsideInlineCode(clean.slice(indent.length), (seg) => seg.replace(/[ \t]{2,}/g, ' '));
+    out.push(indent + rest.replace(/[ \t]+$/, ''));
+  }
+  return out.join('\n');
+}
+
 /** Viñetas markdown de una lista de items, o '' si la lista quedó vacía. */
 function bulleted(items) {
   return (items || []).map((i) => `- ${i}`).join('\n');
 }
 
-/**
- * renderCapture muestra el SKILL consolidado reutilizando el render() del
- * scaffold: frontmatter válida para `_skill-loader` + marcadores CHUNK que se
- * sustituyen por el consolidado real (los chunks que no reciben contenido
- * conservan el placeholder del esqueleto). Encabezado "Fuentes consolidadas"
- * listando las fuentes; los §3 pendientes, marcados *(pendiente)* y anidadas
- * tras las decisiones (o en su propio chunk `pendientes` si el usuario las pide).
- */
-export function renderCapture(name, description, chunks, buckets, sources) {
-  let content = render(name, description, chunks);
-  const anchor = `# ${name}\n`;
-  if (content.includes(anchor)) content = content.replace(anchor, () => `${anchor}\n## Fuentes consolidadas\n\n${sources.map((s) => `- ${s.label}`).join('\n')}\n\n`);
-  const pendFill = bulleted((buckets.pendientes || []).map((p) => `${p.text} *(pendiente)*`));
+/** Una entrada consolidada: título en negrita + origen y el cuerpo ÍNTEGRO de la
+ * entrada (sin el heading, que ya va en el título) indentado como continuación
+ * de la viñeta. Si el bloque no se pudo localizar se queda en el título. */
+function entryBullet(entry) {
+  const head = `**${entry.title}** — \`${entry.source}\``;
+  const body = stripMeta(String(entry.text || '').split('\n').slice(1).join('\n')).trim();
+  return body ? `${head}\n${body.split('\n').map((l) => (l.trim() ? `  ${l}` : '')).join('\n')}` : head;
+}
+
+/** Relleno de cada chunk pedido. `entradas` lleva el texto completo (nunca el
+ * `preview`) y todos los chunks van sin metadatos (`stripMeta`); los §3
+ * pendientes se anidan tras las decisiones salvo que el usuario pida el chunk
+ * `pendientes` propio. */
+export function captureFills(buckets, chunks) {
   const pendOwn = chunks.includes('pendientes');
+  const pendFill = bulleted((buckets.pendientes || []).map((p) => `${stripMeta(p.text)} *(pendiente)*`));
   const fills = {
-    decisiones: bulleted((buckets.decisiones || []).map((d) => d.text)),
-    patrones: bulleted((buckets.patrones || []).map((p) => `**${p.title}** — ${p.preview}`)),
-    entradas: bulleted((buckets.entradas || []).map((e) => `${e.title} (${e.source}) :: ${e.preview}`)),
+    decisiones: bulleted((buckets.decisiones || []).map((d) => stripMeta(d.text))),
+    patrones: bulleted((buckets.patrones || []).map((p) => stripMeta(`**${p.title}** — ${p.preview}`))),
+    entradas: bulleted((buckets.entradas || []).map(entryBullet)),
     pendientes: pendOwn ? pendFill : '',
   };
   if (!pendOwn && pendFill) fills.decisiones = [fills.decisiones, pendFill].filter(Boolean).join('\n\n');
-  for (const c of chunks) {
+  return fills;
+}
+
+/** Chunks que recibieron contenido real, en el orden pedido. */
+export function chunksWithContent(chunks, fills) {
+  return chunks.filter((c) => String((fills || {})[c] ?? '').trim() !== '');
+}
+
+/**
+ * renderCapture muestra el SKILL consolidado reutilizando el render() del
+ * scaffold: frontmatter válida para `_skill-loader` + marcadores CHUNK que se
+ * sustituyen por el consolidado real. Los chunks SIN contenido se filtran del
+ * frontmatter y del cuerpo: el placeholder `(pendiente: contenido de x)` es del
+ * esqueleto de skill-scaffold y nunca debe sobrevivir a un consolidado, de modo
+ * que el artefacto es reusable tal cual. Encabezado "Fuentes consolidadas"
+ * listando las fuentes; los §3 pendientes, marcados *(pendiente)* y anidadas
+ * tras las decisiones (o en su propio chunk `pendientes` si el usuario las pide).
+ * Devuelve `null` si ningún chunk tiene contenido (el CLI lo trata como uso).
+ */
+export function renderCapture(name, description, chunks, buckets, sources) {
+  const fills = captureFills(buckets, chunks);
+  const kept = chunksWithContent(chunks, fills);
+  if (!kept.length) return null;
+  let content = render(name, description, kept);
+  const anchor = `# ${name}\n`;
+  if (content.includes(anchor)) content = content.replace(anchor, () => `${anchor}\n## Fuentes consolidadas\n\n${sources.map((s) => `- ${s.label}`).join('\n')}\n\n`);
+  for (const c of kept) {
     const marker = `(pendiente: contenido de ${c})`;
-    if (fills[c] && content.includes(marker)) content = content.replace(marker, () => fills[c]);
+    if (content.includes(marker)) content = content.replace(marker, () => fills[c]);
   }
   return content;
 }
@@ -301,9 +408,13 @@ function main(argv) {
   }
 
   const description = oneLine(opts.description) || `Consolidado de memoria para el topic ${opts.topic}: decisiones, patrones y entradas generados por /skill-capture.`;
-  const content = renderCapture(name, description, chunks, buckets, sources);
+  const keptChunks = chunksWithContent(chunks, captureFills(buckets, chunks));
+  if (!keptChunks.length) {
+    exitUsage(`skill-capture.mjs: ninguno de los chunks [${chunks.join(', ')}] recibió contenido para el topic "${opts.topic}" — ajusta --chunks a las fuentes disponibles.\n\n${USAGE}`);
+  }
+  const content = renderCapture(name, description, keptChunks, buckets, sources);
   const target = join(SKILLS_DIR, name, 'SKILL.md');
-  const meta = { topic: opts.topic, name, chunks, summary: summaryN, target, sources, sources_total: justified + buckets.pendientes.length };
+  const meta = { topic: opts.topic, name, chunks: keptChunks, summary: summaryN, target, sources, sources_total: justified + buckets.pendientes.length };
 
   if (!opts.write) {
     if (opts.json) console.log(JSON.stringify({ mode: 'dry-run', ...meta }, null, 2));
