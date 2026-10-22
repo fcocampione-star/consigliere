@@ -20,6 +20,7 @@ permission:
     verifier: allow
     critic: allow
     summarizer: allow
+    general: deny
 ---
 
 # Advisor — coordinador del pipeline

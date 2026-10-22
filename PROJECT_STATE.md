@@ -26,19 +26,17 @@
 - Rotación de memoria canónica: `mondayOf` UTC único (memory-sync importa de memory-stats) + marcadores `ADVISOR:ENTRIES` y motor `memory-rotate.mjs` en `/record`; hook post-commit gated [topic: memory/markers-motor] review_after: 2026-12-21
 - Routing por clase de riesgo (conteo = desempate); advisor delega deltas; spec-lite persistida y consumida por builder [topic: process/routing-risk-deltas] review_after: 2026-12-21
 - Contract tests en `npm test` (paridad raíz↔templates con allowlist; `ls-files` respeta `.gitignore`, incl. test/contract-git-aware) [topic: test/contracts-antidrift] review_after: 2026-12-21
-- Runtime real Node >=20.11 (`import.meta.dirname` en 15 scripts); `engines: >=18` mentía; CI fija versión [topic: runtime/node-floor] review_after: 2027-03-30
+- Runtime real Node >=20.11: `import.meta.dirname` en 15 scripts + `isMain` con `realpathSync` tolerante a ENOENT (symlinks macOS `/var`, firma intacta, 20 consumidores); `engines: >=18` mentía, CI fija versión [topics: runtime/node-floor, runtime/isMain-realpath] review_after: 2027-03-30
 - Instalador Node-only: `init.mjs` implementación única, sh/ps1/cmd lanzadores; Node requisito duro [topic: installer/node-only] review_after: 2027-03-30
 - `--upgrade` separa memoria PRESERVADA de config REGENERADA (conserva `model:` por agente) y exige backup previo si el destino tiene contenido; `--dry-run` no escribe [topic: installer/upgrade-backup] review_after: 2027-03-30
 - Suite propia sin deps (`test/run.mjs`) + CI 5 jobs (3 SO × Node 20/22/24); cero deps runtime [topic: test/ci-gate] review_after: 2027-03-30
 - Free tier opencode (`{{MODEL_*}}` sin entitlement) solo se documenta; se valida forma, no entitlement [topic: dx/free-tier-doc] review_after: 2027-03-30
-- `lint:sh` resuelve bash (`ADVISOR_BASH`→PATH→Git for Windows); exit 3 sin intérprete; solo raíz (`ROOT_ONLY_EXACT`); en win32 args RELATIVOS porque el PATH puede exponer WSL-bash que destruye rutas `C:\` [topic: tools/lint-sh-crossplatform] review_after: 2027-03-30
+- Resolver binarios crossplatform único patrón: `lint:sh` resuelve bash (`ADVISOR_BASH`→PATH→Git for Windows, exit 3 sin intérprete, solo raíz `ROOT_ONLY_EXACT`, args RELATIVOS en win32 porque el PATH puede exponer WSL-bash que destruye rutas `C:\`) y `init.mjs` resuelve `tar` inline (`ADVISOR_TAR`→System32→PATH, sonda `--version`; sin tar exit 3/4) [topics: tools/lint-sh-crossplatform, tools/tar-resolver-crossplatform] review_after: 2027-03-30
 - Harness en raíz commiteado (un repo = harness+memoria); excluir de artefacto prod; app en subcarpeta [topic: architecture/harness-placement] review_after: 2027-03-30
 - `skill-search.mjs`: registry JSON autoskills (tag `v0.3.6`) best-effort, cache 7d gitignored; tests/doctor sin red [topic: dx/skill-search-registry] review_after: 2027-04-06
 - Catálogo autoskills (CC-BY-NC-4.0) nunca commiteado/empaquetado; solo cache local (CLI sin search/list) [topic: dx/autoskills-registry-license] review_after: 2027-04-06
 - `/discover` vía `gaps` pura (match exacto deps→registry) + `skill-scaffold.mjs`; sin `/skill-new` [topic: process/discover-gaps] review_after: 2027-04-06
 - Estimador `memory-tokens.mjs` (`measure`/`compare`, chars/4, solo lectura; opencode sin usage real) [topic: dx/memory-tokens-estimator] review_after: 2027-04-10
-- `init.mjs` resuelve `tar` inline (`ADVISOR_TAR`→System32→PATH, sonda `--version`); sin `tar` exit 3/4 [topic: tools/tar-resolver-crossplatform] review_after: 2027-03-30
-- `isMain` con `realpathSync` tolerante a ENOENT (symlinks macOS `/var`); firma intacta, 20 consumidores [topic: runtime/isMain-realpath] review_after: 2027-03-30
 - D2: `dev`=integración/`main`=estable (ambas repo completo), promoción `--ff-only`; consumo vía npm + source archive [topic: repo/dev-main-merge] review_after: 2027-01-09
 - Publicación npm desde `main` (tag `v*`, guarda ancestría, **Trusted Publishing OIDC** sin tokens: el Trusted Publisher de npmjs.com DEBE tener "Allow npm publish" marcado (si no, `E403 OIDC permission denied`), Publishing access "disallow tokens", npm >=11.5.1 en publish, `setup-node` sin `registry-url` (setup-node#1551)); skip-if-published (`npm view`, skip solo en `E404`), GitHub Release idempotente y aserción post-publish de `dist-tags.latest`; `latest` apunta a versión buena [topic: release/npm-publish] review_after: 2027-04-18
 - Template `templates/gitignore`→`.gitignore` en destino (`TEMPLATE_RENAME`); npm excluye `.gitignore` [topic: installer/tarball-gitignore] review_after: 2027-03-30
@@ -53,6 +51,7 @@
 
 ## 3. Pendientes inmediatos
 
+- [ ] Fase 2 (deferred): feat `/skill-capture` — flujo que consolide en skills reales decisiones/patrones de memoria (§2/§5 por topic); revertiría parcialmente la decisión "sin `/skill-new`" [topic: process/discover-gaps]; requiere planner + critic antes de implementar.
 - [ ] `release.yml` (no bloqueantes, de la 1.0.2): (a) "verificar en el registry" sin reintentos/espera — corrió 3 s tras el publish y dio E404 (npm tarda ~2-3 min; run 39656624120 en rojo con todo publicado); (b) ese paso está gateado por `steps.published.outputs.ya != 'true'` y se salta en reruns con la versión ya publicada → quitar la condición; (c) colas largas de runners macOS arm64 cancelan el gate → valorar `timeout`/`continue-on-error`/reintento sin perder cobertura. · Menores no bloqueantes: (a) help de `init.mjs` dice "sin binario global" pero `package.json` expone bins — incoherencia de redacción; (b) `--autoskills 3` no ejecutó autoskills en una prueba (revisar parseo del valor) · **(c) cerrado (2026-10-21):** `release.yml` salta si `name@version` ya existe (`npm view`, skip solo en `E404`) en vez de fallar con una tag ya publicada — §2 `release/npm-publish` · **(d) cerrado (2026-10-21):** `0.0.0-stage` sin artefacto vivo (solo un comentario en `release.yml` + histórico; el `"version": "0.0.0"` de `skills-lock.json` es otro campo) · **(e) cerrado (2026-10-18):** `debug agents` no resolvía `builder`/`summarizer` por el escape YAML inválido del frontmatter (`C:\*`) — causa en §2 `agents/frontmatter-yaml-escape`.
 
 ---
@@ -89,6 +88,7 @@
 | dev-config | `npm run dev:config` (`.opencode/scripts/dev-config.mjs`, root-only) | Genera la `opencode.json` dev gitignored desde `templates/opencode.json` (`{{MODEL_*}}`→`""`); `--check`/`--force`; no-op si existe. Prerequisito de `npm test` en clon limpio · **orden**: `dev:config` ANTES de `routine-model --persist` (si no, `--persist` edita `.opencode/opencode.json`, que NO está ignorado) |
 | test/wiring | `test/wiring-basic.test.mjs` (4 suites / 18 asserts) | Wiring estático comando→agente→script SIN CLI: paridad semántica frontmatter↔`templates/opencode.json`, invariante repo-dev con `opencode.json` raíz presente (7 agentes, cero `{{`, `--check` de frescura), ciclo memoria en tmpdir; complementa e2e-v2, contract-tests y dev-config.test.mjs |
 | test/tmpdir | `tmpdir()` en `test/harness.mjs` (canonicaliza con `realpathSync`) | Devuelve la ruta YA canonicalizada: obligatorio comparar rutas con helpers de la suite, nunca `os.tmpdir()` crudo (macOS: `/var` → `/private/var`); custodia `test/harness-paths.test.mjs` (junction win32 sin admin) |
+| agents/task-perms | `.opencode/agents/advisor.md` `permission.task` (+ espejo `templates/.opencode/agents/advisor.md`) | Los permisos de `task` viven SOLO en el frontmatter de advisor.md (`general: deny` corta al built-in `general` de opencode, fuera del pipeline de 7); `templates/opencode.json` NO los contiene |
 
 ---
 

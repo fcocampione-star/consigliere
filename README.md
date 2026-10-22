@@ -81,6 +81,7 @@ Ese es el día a día. Si tu carpeta **no está vacía**, el mismo comando abre 
 └── skills-lock.json
 ```
 
+> **Agentes del pipeline**: los 7 agentes listados arriba son los únicos del harness (`advisor` coordina y delega en los otros 6). `general` es un agente built-in de opencode que queda **fuera del pipeline**: el advisor lo deniega por defecto (`task: general: deny`).
 > **Repo público ≠ proyecto instalado.** En este repositorio, `opencode.json`, `skills-lock.json`, `scripts/`, `test/`, `.github/` y la memoria (`PROJECT_STATE.md`, `SUMMARY.md`, `CHANGELOG/`, `.advisor/`) quedan **fuera del paquete público** (`package.json` `files`: `init.sh`, `init.ps1`, `init.cmd`, `init.mjs`, `templates/`, `README.md`, `LICENSE`; `export-ignore` en `git archive`). Salvo `test/` y `.github/`, **todo lo anterior sí se genera** en cada proyecto que instalas: el árbol de arriba es lo que obtiene el proyecto, no lo que se publica en npm. Los dos excluidos son de desarrollo de este repo —la suite propia y los workflows de CI— y no se instalan en ningún proyecto. `.advisor/` tampoco viene de `templates/`: lo crea el instalador en caliente como estado vivo (backups, chunks, cache). La `opencode.json` de **este** repo es la config dev local (gitignored, `{{MODEL_*}}` → `""`) y se genera con `npm run dev:config` desde `templates/opencode.json`; la que se instala en los proyectos es la plantilla.
 
 ## Instalación

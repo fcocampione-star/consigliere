@@ -7,6 +7,16 @@
 
 <!-- ADVISOR:ENTRIES:START -->
 
+## 2026-10-22 — Fix: subagente `general` denegado en advisor (built-in fuera del pipeline)
+
+topic: process/general-deny  <!-- relacionados: agents/task-perms (§5), sdd/routing-organico · cierra pendiente "fase 2: general task ask→deny" de CHANGELOG/2026-10-12 -->
+**Goal:** `general` era alcanzable vía `task` del advisor pese a no estar definido en `.opencode/agents/` — cerrar el hueco de routing del pipeline de 7 agentes.
+**Discoveries:** `general` es agente BUILT-IN de opencode (no del harness). En este entorno el runtime NO aplicó el `task: "*": ask` del frontmatter de advisor al invocarlo (los tools difieren del runtime de opencode.json); el cierre explícito debe ser `deny`, no `ask`.
+**Accomplished:** `general: deny` añadido a `permission.task` en `.opencode/agents/advisor.md` + espejo `templates/.opencode/agents/advisor.md` (paridad byte a byte; los 6 allows y `"*": ask` intactos). README/AGENTS: `general` documentado como built-in de opencode FUERA del pipeline de 7 agentes, denegado en advisor. Fix sin commit — el coordinador propone commit tras este cierre de memoria. STATE: pendiente fase 2 en §3 + patrón `agents/task-perms` en §5; §2 compactado por familias (runtime/* y tools/* agrupadas con `[topics: …]`, contenido ±0) para mantener <100 líneas.
+**Next:** pendiente diferido a fase 2 en STATE §3: feat `/skill-capture` (topic process/discover-gaps), requiere planner + critic. Commit propuesto de los 4 archivos modificados.
+**Files:** `git log --oneline -5` (no listas manuales)
+**Verificación:** VERDE previo al registro: `npm test` 0 fallos, `test:contract` PASS, `doctor` 0 ⚠/❌.
+
 ## 2026-10-21 — Release 1.0.2 publicada en npm vía Trusted Publishing (OIDC) ✓
 
 topic: release/npm-publish  <!-- relacionados: ci/reusable-concurrency-literal-groups, release/version-bump-single-source -->
