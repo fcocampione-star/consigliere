@@ -7,16 +7,6 @@
 
 <!-- ADVISOR:ENTRIES:START -->
 
-## 2026-10-22 — Ramas `feat/advisor-agility` + `fix/init-autoskills-flag` borradas SIN integrar (trabajo a rehacer)
-
-topic: architecture/advisor-agility  <!-- relacionados: installer/autoskills (§5, fila de diagnóstico) · metrics/advisor-telemetry (mediciones válidas, NO afectadas) -->
-**Goal:** dejar constancia fiel de que la Fase 0 ADVISOR-AGILITY (telemetría al cierre) y el fix de `--autoskills` NO están en `dev` ni en `main`: ambas ramas se borraron sin integrar por decisión explícita del usuario (advertida de antemano).
-**Discoveries:** `e03f241` (Fase 0 ADVISOR-AGILITY: telemetría obligatoria al cierre + plan `.opencode/plans/ADVISOR-AGILITY.md`), `a2ef759` (fix `--autoskills`) y `7d1ffa7` (merge) solo viven en el **reflog** ⇒ ni el código ni las filas de memoria que los describían llegaron a `dev`; el árbol está en el estado previo. Ventana finita: el reflog expira, así que la recuperación es ahora — `git branch feat/advisor-agility 7d1ffa7` (y `fix/init-autoskills-flag` en `a2ef759`).
-**Accomplished:** auditado el estado real (`git log`/`git branch -a`/`git reflog`/`git cat-file -e`): `dev` en `7c7c2a1` sin rastro del trabajo, el plan NO existe en disco y `init.mjs:1149` conserva el gate `autoChoice !== '3'` (o sea, el bug sigue vivo). Memoria corregida sin borrar historia: §3 reabre la Fase 0 (el plan vuelve a "sin implementar") y el menor `--autoskills`; §2 deja UNA decisión de estado (`architecture/advisor-agility`: trabajo a rehacer, 80/20 = permisos y topes); §5 reconvierte `installer/autoskills` en patrón de DIAGNÓSTICO (flag = selector; `npx` falso en `PATH` para testear sin red). **Sigue siendo válido del trabajo perdido:** el diagnóstico de `--autoskills` (es un **selector** 1|2|3, no una cantidad: `3` omite por diseño y el parseo siempre fue correcto) y la identificación del **bug real** (aviso de omisión muerto por el gate `autoChoice !== '3'`, modos 1/2 sin tests, `warn` genérico al fallar `npx`) — se citan aquí para no re-diagnosticar.
-**Next:** rehacer en `dev` (a) el fix de `--autoskills` (gate + tests de modos 1/2 con fake `npx` en `PATH` + `warn` con causa) y (b) la Fase 0 ADVISOR-AGILITY desde el plan recuperado; nada de esto bloquea el release. Las mediciones `metrics/advisor-telemetry` son datos reales y se mantienen intactas.
-**Files:** `git log --oneline -5` (no listas manuales)
-**Verificación:** `git reflog --oneline` (los 3 commits sin rama: `e03f241`/`a2ef759`/`7d1ffa7`), `git branch -a` (solo `dev`/`main`, cero ramas locales del trabajo), `git cat-file -e 7d1ffa7:.opencode/plans/ADVISOR-AGILITY.md` OK frente a `HEAD:.opencode/plans/ADVISOR-AGILITY.md` = "does not exist"; `doctor` exit 0, límites 100/150 OK, `memory-index.mjs search "autoskills"` localiza esta entrada y el estado nuevo.
-
 ## 2026-10-22 — Feat `/skill-capture`: memoria → skills reales (ciclo memoria→skill cerrado) + fix de fidelidad
 
 topic: process/skill-capture  <!-- relacionados: process/discover-gaps (supersede parcial) · patrón skill/consolidar en §5 -->
