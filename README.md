@@ -62,7 +62,8 @@ Ese es el día a día. Si tu carpeta **no está vacía**, el mismo comando abre 
 │   │   ├── memory-rotate.mjs      # motor canónico de rotación
 │   │   ├── routine-model.mjs      # overrides de modelo por agente
 │   │   ├── skill-search.mjs       # búsqueda real en el registry de autoskills
-│   │   ├── skill-scaffold.mjs     # scaffold de skills de proyecto (dry-run por defecto)
+│   │   ├── skill-capture.mjs      # consolida memoria (§2/§5/SUMMARY/CHANGELOG) en una skill real
+│   │   └── skill-scaffold.mjs     # scaffold de skills de proyecto (dry-run por defecto)
 │   │   ├── lib/                   # core.mjs / md.mjs / cache.mjs (compartido, sin deps)
 │   │   └── doctor.mjs             # health check
 │   └── hooks/                     # post-commit-memory-rotate.sh (opcional/gated; no hay hook de sync)
@@ -245,6 +246,7 @@ Lo que **no** es una solución: el harness solo valida la *forma* de un id de mo
 ### Comandos del harness
 
 - `/discover [foco]` — audita stack real vs declarado + skills presentes/faltantes. Incluye **búsqueda real** en el registry público de autoskills (`skill-search.mjs`, no simulada) y propone crear skills de proyecto con `skill-scaffold.mjs`.
+- `/skill-capture <topic>` — consolida la memoria de un topic en una **SKILL real** (no esqueleto) en `.opencode/skills/<name>/SKILL.md`: decisión §2 (`[topic:]` y plural `[topics:]`, fuente primaria), patrón §5, entradas SUMMARY/CHANGELOG (match exacto o por prefijo de categoría, dedup por id) e ítems §3 marcados *(pendiente)*. Dry-run por defecto (`--write [--force]` escribe vía `skill-capture.mjs`); **fail-closed**: sin ≥1 fuente consolidable sale con uso — un topic que solo existe como pendiente §3 no genera skill.
 - `/routine <tarea> [--parallel --skip-verify --skip-critic]` — enruta la tarea por sí solo: pocos archivos → directo; muchos → delega en subagentes (plan → revisión → implementación → verificación → registro). Para los detalles técnicos, ver *Notas de diseño v1.0*.
 - `/doctor` — diagnóstico del harness y la memoria: `opencode.json` (default agent, profundidad, harden bash), tamaños y `topic:` de la memoria, lock huérfano, hook post-commit, cache de skills, scripts, directorios de estado y artefactos derivados (manifest, índice, `review_after` vencidos). Los artefactos regenerables son ℹ️ y nunca rompen; el exit code es 0 (ok), 1 (warnings) o 2 (errores).
 - `/record <contexto>` — persiste con formato 6 campos `Goal/Discoveries/Accomplished/Next/Files/Verificación` (compat `Qué/Verificación`).

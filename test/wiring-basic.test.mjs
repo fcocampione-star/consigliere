@@ -20,7 +20,7 @@ const COMMANDS_DIR = join(REPO_ROOT, '.opencode', 'commands');
 const SCRIPTS_DIR = join(REPO_ROOT, '.opencode', 'scripts');
 
 const AGENTS = ['advisor', 'builder', 'critic', 'explore', 'planner', 'summarizer', 'verifier'];
-const COMMANDS = ['compact-state', 'discover', 'doctor', 'modo', 'record', 'review', 'rotate-memory', 'routine'];
+const COMMANDS = ['compact-state', 'discover', 'doctor', 'modo', 'record', 'review', 'rotate-memory', 'routine', 'skill-capture'];
 const LEAVES = ['builder', 'verifier', 'critic', 'summarizer', 'explore'];
 
 // Frontmatter delgado: el bloque entre el primer `---` y el siguiente. NO es un parser YAML.
@@ -99,9 +99,9 @@ test('advisor delega (allow) en los otros 6 agentes', () => {
 // ── Suite 2: wiring · commands ──────────────────────────────────────────────
 suite('wiring · commands');
 
-test('existen EXACTAMENTE los 8 comandos esperados', () => {
+test('existen EXACTAMENTE los 9 comandos esperados', () => {
   const files = readdirSync(COMMANDS_DIR).filter((f) => f.endsWith('.md')).map((f) => f.replace(/\.md$/, ''));
-  eq([...files].sort(), [...COMMANDS].sort(), 'los 8 comandos, ni uno más ni uno menos');
+  eq([...files].sort(), [...COMMANDS].sort(), 'los 9 comandos, ni uno más ni uno menos');
 });
 
 test('cada comando declara subtask: true y un agent: que existe en .opencode/agents', () => {

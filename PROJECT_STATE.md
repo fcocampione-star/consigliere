@@ -11,8 +11,6 @@
 | Fases 0/0.5/1 + modelo D2 + release 1.0 | Bootstrap/hardening/validación demo; `dev` = integración / `main` = estable (ambas repo completo, promoción `--ff-only`); `advisor-harness@1.0.1` en npm, contrato git-aware, `lint:sh`/PATH resuelto | ✅ Completadas |
 | Release 1.0.2 | `advisor-harness@1.0.2` publicada (2026-10-21): npm `latest` = 1.0.2 vía Trusted Publishing OIDC desde `release.yml` (tag `v1.0.2` → `6c5431e`), provenance SLSA v1, GitHub Release con el tarball oficial de npm; smoke test del paquete publicado OK; token granular revocado y 0 secrets npm en el repo | ✅ Publicada |
 
-> Próximo hito: ninguno bloqueante. Endurecimiento de `release.yml` (verificación post-publish con reintentos, runners macOS) y menores en §3.
-
 ---
 
 ## 2. Decisiones de diseño (append-only, consolidadas, con review_after)
@@ -46,12 +44,13 @@
 - Frontmatter de agentes con escalares YAML de comillas dobles válidos (`C:\\*`): `\*` NO es escape válido y hacía que opencode no parseara `builder`/`summarizer` (paridad byte a byte raíz↔templates en las 4 copias) [topic: agents/frontmatter-yaml-escape] review_after: 2027-04-18
 - Versión con fuente única: `package.json` manda y `npm run version:bump <patch|minor|major>` reescribe los 5 destinos que vigila `version-check` (raw EOL + rollback); `version-check` es módulo puro importable (`isMain`, cero side effects) y ambos scripts son dev-only (`ROOT_ONLY_EXACT`) [topic: release/version-bump-single-source] review_after: 2027-04-21
 - Workflows reusables: `github.workflow` se resuelve al nombre del CALLER — grupos de concurrencia con prefijo literal distinto por workflow (`ci-${{ github.ref }}`/`release-${{ github.ref }}`) y `cancel-in-progress` diferenciado (CI sí — read-only/re-ejecutable; release no — nunca cortar un publish); incidente run 39629128099: `ci.yml` vía `workflow_call` heredaba "Release" y caller/callee se auto-bloqueaban en el mismo grupo (1 s) [topic: ci/reusable-concurrency-literal-groups] review_after: 2027-04-21
+- `/skill-capture` consolida memoria en skills reales: `skill-capture.mjs` (§2+§5+SUMMARY/CHANGELOG por topic → SKILL.md con contenido; fail-closed "≥1 fuente" de {§2,§5,entradas} — §3 pendientes NO rescatan; dry-run por defecto/`--write`/`--force`; parser acepta `[topic:]` y `[topics:]` plural; match exacto o prefijo de categoría, dedup por slugId; cap `--summary N` por sección de origen; nombres `_` reservados; `skill-scaffold` queda esqueleto puro y `/discover` intacto). **Supersede parcial** de process/discover-gaps: SOLO la cláusula "sin `/skill-new`" queda revocada — `/skill-capture` es el skill-new canónico desde memoria; gaps puros + `skill-scaffold` siguen vigentes [topic: process/skill-capture] review_after: 2027-10-22
 
 ---
 
 ## 3. Pendientes inmediatos
 
-- [ ] Fase 2 (deferred): feat `/skill-capture` — flujo que consolide en skills reales decisiones/patrones de memoria (§2/§5 por topic); revertiría parcialmente la decisión "sin `/skill-new`" [topic: process/discover-gaps]; requiere planner + critic antes de implementar.
+- [x] Fase 2 (deferred): feat `/skill-capture` — flujo que consolide en skills reales decisiones/patrones de memoria (§2/§5 por topic) · **cerrado (2026-10-22):** implementado y verificado VERDE (planner + critic previo cumplidos; `npm test` 21/21, contract 43 espejos+2 nuevos, smokes dry-run exit 0 / fail-closed exit 1, doctor 0 errores) — decisión `process/skill-capture` en §2; pendiente original era revertir parcialmente "sin `/skill-new`" [topic: process/discover-gaps], hecho como supersede parcial en §2.
 - [ ] `release.yml` (no bloqueantes, de la 1.0.2): (a) "verificar en el registry" sin reintentos/espera — corrió 3 s tras el publish y dio E404 (npm tarda ~2-3 min; run 39656624120 en rojo con todo publicado); (b) ese paso está gateado por `steps.published.outputs.ya != 'true'` y se salta en reruns con la versión ya publicada → quitar la condición; (c) colas largas de runners macOS arm64 cancelan el gate → valorar `timeout`/`continue-on-error`/reintento sin perder cobertura. · Menores no bloqueantes: (a) help de `init.mjs` dice "sin binario global" pero `package.json` expone bins — incoherencia de redacción; (b) `--autoskills 3` no ejecutó autoskills en una prueba (revisar parseo del valor) · **(c) cerrado (2026-10-21):** `release.yml` salta si `name@version` ya existe (`npm view`, skip solo en `E404`) en vez de fallar con una tag ya publicada — §2 `release/npm-publish` · **(d) cerrado (2026-10-21):** `0.0.0-stage` sin artefacto vivo (solo un comentario en `release.yml` + histórico; el `"version": "0.0.0"` de `skills-lock.json` es otro campo) · **(e) cerrado (2026-10-18):** `debug agents` no resolvía `builder`/`summarizer` por el escape YAML inválido del frontmatter (`C:\*`) — causa en §2 `agents/frontmatter-yaml-escape`.
 
 ---
@@ -89,10 +88,10 @@
 | test/wiring | `test/wiring-basic.test.mjs` (4 suites / 18 asserts) | Wiring estático comando→agente→script SIN CLI: paridad semántica frontmatter↔`templates/opencode.json`, invariante repo-dev con `opencode.json` raíz presente (7 agentes, cero `{{`, `--check` de frescura), ciclo memoria en tmpdir; complementa e2e-v2, contract-tests y dev-config.test.mjs |
 | test/tmpdir | `tmpdir()` en `test/harness.mjs` (canonicaliza con `realpathSync`) | Devuelve la ruta YA canonicalizada: obligatorio comparar rutas con helpers de la suite, nunca `os.tmpdir()` crudo (macOS: `/var` → `/private/var`); custodia `test/harness-paths.test.mjs` (junction win32 sin admin) |
 | agents/task-perms | `.opencode/agents/advisor.md` `permission.task` (+ espejo `templates/.opencode/agents/advisor.md`) | Los permisos de `task` viven SOLO en el frontmatter de advisor.md (`general: deny` corta al built-in `general` de opencode, fuera del pipeline de 7); `templates/opencode.json` NO los contiene |
+| skill/consolidar | `node .opencode/scripts/skill-capture.mjs <topic> [--write]` | Consolida decisión §2 + patrón §5 + entradas SUMMARY/CHANGELOG por topic en skill real con contenido; scaffolding en `/discover` (skill-scaffold puro) |
 
 ---
 
 ## 6. Índices de búsqueda
 
-- **Decisiones y patrones**: `PROJECT_STATE.md §2/§5` + `CHANGELOG/DECISIONS-ARCHIVE.md`.
-- **Historial y comandos**: `SUMMARY.md` + `CHANGELOG/*.md`; `AGENTS.md` + `CONTRIBUTING.md`.
+- **Decisiones y patrones**: `PROJECT_STATE.md §2/§5` + `CHANGELOG/DECISIONS-ARCHIVE.md` · **Historial y comandos**: `SUMMARY.md` + `CHANGELOG/*.md`; `AGENTS.md` + `CONTRIBUTING.md`.

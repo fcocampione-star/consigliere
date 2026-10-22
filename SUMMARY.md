@@ -7,6 +7,16 @@
 
 <!-- ADVISOR:ENTRIES:START -->
 
+## 2026-10-22 — Feat `/skill-capture`: memoria → skills reales (ciclo memoria→skill cerrado)
+
+topic: process/skill-capture  <!-- relacionados: process/discover-gaps (supersede parcial) · patrón skill/consolidar en §5 -->
+**Goal:** cerrar el pendiente fase 2 de §3: consolidar decisiones/patrones de memoria (§2/§5 por topic) en skills reales con contenido, no solo esqueletos — el skill-new canónico desde memoria.
+**Discoveries:** composición sobre lo existente, sin motor nuevo: `skill-capture.mjs` reutiliza exports de `skill-scaffold.mjs` (scaffolding/frontmatter) y `memory-index.mjs` (lectura md+grep); fail-closed "≥1 fuente" — un topic que solo tiene §3 pendientes NO se rescatan ⇒ no se genera skill vacía; el parser acepta `[topic:]` y `[topics:]` plural (formato de compactación de §2). Plan validado por critic antes de implementar.
+**Accomplished:** nuevo `skill-capture.mjs` + command `/skill-capture` (+ espejo templates, paridad byte de los 2 espejos nuevos): match exacto o prefijo de categoría, dedup por slugId, cap `--summary N` por sección de origen, nombres `_` reservados, `--write`/`--force`, dry-run por defecto; `skill-scaffold` queda esqueleto puro y `/discover` intacto. **Supersede parcial** de `process/discover-gaps` en §2: SOLO la cláusula "sin `/skill-new`" queda revocada; gaps puros + scaffold siguen vigentes. STATE: §3 marcado cerrado + fila `skill/consolidar` en §5.
+**Next:** nada bloqueante; en uso real, valorar si conviene flag explícito para elegir fuentes. El propio dry-run del registro confirma el loop: `skill-capture.mjs process/skill-capture` ahora exit 0 (este topic captura su propia entrada).
+**Files:** `git log --oneline -5` (no listas manuales)
+**Verificación:** `npm test` 0 fallos (21/21 unit, contract 43 espejos, rotación, versión 1.0.2); paridad byte raíz↔templates (script+command); smokes: dry-run exit 0 (dx/skill-search-registry), fail-closed exit 1 (topic solo-§3); `doctor` 0 errores; cero residuos.
+
 ## 2026-10-22 — Fix: subagente `general` denegado en advisor (built-in fuera del pipeline)
 
 topic: process/general-deny  <!-- relacionados: agents/task-perms (§5), sdd/routing-organico · cierra pendiente "fase 2: general task ask→deny" de CHANGELOG/2026-10-12 -->
