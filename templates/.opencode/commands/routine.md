@@ -15,7 +15,7 @@ Recordatorio de tu flujo como Advisor (routing orgánico + SDD-lite integrado, A
    - `spec-lite` ambigüedad duradera → pide a `planner` spec ≤650w Given/When/Then + Tasks.
 2. Si necesitas entender código, delega en `explore` (read-only, cache skill via `loader.mjs list`).
 3. Diseña con `planner` (sin tocar código). Si spec-lite, exige MUST/SHOULD + Given/When/Then.
-4. Si plan/spec implica arquitectura/migraciones/refactor/>3 files acoplados, valida con `critic` antes de builder.
+4. Routing del critic: ver la regla única en .opencode/agents/advisor.md §2 (marcador canon:critic-routing).
 5. Implementa con `builder` (respeta bash harden: deny irreparable + ask sensibles `.env/*.pem`).
 6. Verifica con `verifier` (typecheck→lint→tests barato primero); si falla, itera builder↔verifier con `git stash` rollback (max 3).
 7. No commitees: propone commit al final.
@@ -31,6 +31,6 @@ Flags:
 - Nota: `--model-*` solo resuelve via `routine-model.mjs`; el instalador (`init.mjs`, sección de prompts de modelo: `interactiveCreate` con `MODEL_AGENT` y `checkModelInputs`) solo ofrece prompts interactivos, sin flags CLI.
 - **Free tier de opencode**: el harness solo valida la FORMA de un id de modelo (`MODEL_RE` en `routine-model.mjs` y en el instalador), nunca si ese id tiene entitlement. Si un subagente falla con `OpenCode's free tier can only be used from within OpenCode`, el error lo emite opencode: no reintentes. Las dos vías son un modelo que no sea del free tier para ese agente, o `opencode auth login` (ver § "Modelos del free tier" del README).
 
-Cierra la rutina con `/record` (cadena `/discover` → `/routine` → `/record`).
+Cierra la rutina con `/record` (obligatorio por hito: al cerrar fase, decisión estructural o diff que toca contrato/§2/arquitectura; ver `AGENTS.md` y `advisor.md §7`).
 
 Devuelve: qué resolviste, ruta elegida (direct/delegated/spec-lite), spec si hubo, subagentes usados, verificación y commit propuesto.

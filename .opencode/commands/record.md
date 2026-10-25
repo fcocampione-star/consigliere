@@ -21,6 +21,8 @@ Contexto a registrar: $ARGUMENTS
 
 Detalle de archivos si el usuario lo pidiera: remítete a `git log`, no lo dupliques en SUMMARY.
 
+Disparador: se exige al cerrar fase, al tomar/derogar una decisión estructural o cuando el diff toca contrato/`PROJECT_STATE.md §2`/arquitectura; un cambio menor reversible no lo exige. **Commit**: commit exige `/record` si el diff toca `.opencode/`, `templates/` o `init.mjs`; solo un diff de docs/memoria puro admite la línea `sin hito: <motivo>`.
+
 Routing: aquí no se decide ruta; el trabajo previo vino de `direct/delegated/spec-lite → advisor.md §2`.
 
 Cadena: este comando cierra `/discover` → `/routine` → `/record`.

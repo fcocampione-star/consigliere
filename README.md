@@ -42,7 +42,7 @@ Ese es el día a día. Si tu carpeta **no está vacía**, el mismo comando abre 
 │   │   └── summarizer.md          # memoria 3 capas + topic upsert + session summary
 │   ├── commands/
 │   │   ├── discover.md            # /discover → audita contexto + skills
-│   │   ├── routine.md             # /routine → explore→plan/spec→critic→build→verify→record
+│   │   ├── routine.md             # /routine → explore→plan/spec→build→verify→record (critic según §2)
 │   │   ├── modo.md                # /modo → fijar modo de comunicación (educador/practicante/copiloto/auto)
 │   │   ├── doctor.md              # /doctor → diagnóstico harness + memoria
 │   │   ├── record.md              # /record → persistir progreso (6 campos)
@@ -288,9 +288,13 @@ node .opencode/scripts/memory-tokens.mjs compare --scenario direct
 node .opencode/scripts/memory-tokens.mjs compare --scenario delegated
 node .opencode/scripts/memory-tokens.mjs compare --scenario spec-lite
 node .opencode/scripts/memory-tokens.mjs compare --scenario spec-lite --json   # salida máquina
+node .opencode/scripts/session-metrics.mjs --session <ses_id>                  # medición REAL de una sesión (delegaciones, iteraciones, tokens)
+node .opencode/scripts/git-state.mjs status                            # trámite de rama de SOLO LECTURA (status|log|head|branch|diff-stat|ahead-behind|remote)
 ```
 
-> **Honestidad del cálculo:** mide el ahorro **potencial** sobre el tamaño actual de la memoria, **no** tokens facturados de una sesión real. Los subagentes del escenario cuentan como *hojas*: cada uno recibe un delta en vez de recargar el contexto completo. Con `--skip-verify`/`--skip-critic` el ahorro real es algo menor. Los números concretos dependen de tu repo; trátalos como orientación, no como una cifra universal.
+> **`git-state.mjs` es de solo lectura y argv cerrado.** Permite que el `advisor` resuelva trámites de rama sin recibir `git` crudo ni `glob`/`grep` (las 7 entradas exactas de `git-state.mjs` en su allowlist). La única entrada con comodín es `routine-model.mjs*`: su id de modelo es texto libre, así que se documenta como excepción y un test la fija. `ahead-behind` **no hace fetch** (sus refs pueden estar stale): commit, push, fetch y el FF `dev`→`main` siguen requiriendo `builder`.
+
+> **Honestidad del cálculo:** `memory-tokens.mjs` es una **estimación estática** (`chars/4`) del ahorro **potencial** sobre el tamaño actual de la memoria: **no** mide tokens facturados de una sesión real. Los subagentes del escenario cuentan como *hojas*: cada uno recibe un delta en vez de recargar el contexto completo. Con `--skip-verify`/`--skip-critic` el ahorro real es algo menor. Los números concretos dependen de tu repo; trátalos como orientación, no como una cifra universal. La **medición real por sesión** la da `session-metrics.mjs` (solo lectura, `--session <id>` o `--from export.json`): delegaciones por agente, iteraciones y, si el export trae usage, los tokens de esa sesión (si no, `N/A` en vez de ceros).
 
 ## Skills
 

@@ -97,6 +97,8 @@ const ESPERADOS = [
   '.opencode/agents/advisor.md',
   '.opencode/scripts/doctor.mjs',
   '.opencode/scripts/routine-model.mjs',
+  '.opencode/scripts/git-state.mjs',
+  '.opencode/scripts/session-metrics.mjs',
   '.opencode/skills/_skill-loader/loader.mjs',
 ];
 const ESPERADOS_DIR = ['CHANGELOG', '.opencode', '.advisor', '.advisor/backups', '.advisor/chunks'];

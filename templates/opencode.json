@@ -10,6 +10,13 @@
       "permission": {
         "bash": {
           "*": "deny",
+          "node .opencode/scripts/git-state.mjs status": "allow",
+          "node .opencode/scripts/git-state.mjs log": "allow",
+          "node .opencode/scripts/git-state.mjs head": "allow",
+          "node .opencode/scripts/git-state.mjs branch": "allow",
+          "node .opencode/scripts/git-state.mjs diff-stat": "allow",
+          "node .opencode/scripts/git-state.mjs ahead-behind": "allow",
+          "node .opencode/scripts/git-state.mjs remote": "allow",
           "node .opencode/scripts/routine-model.mjs*": "allow"
         }
       }

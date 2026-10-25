@@ -4,6 +4,7 @@
 
 - **Before any work**: read `PROJECT_STATE.md` for current phase, decisions, and pending items. Do NOT preload `SUMMARY.md` or `CHANGELOG/` by default — load them on-demand only when the task needs historical context.
 - **After meaningful changes**: update `SUMMARY.md` with a concise entry (date, what was done, key decisions, verification). Omit file lists — the source of detail is `git log`. Do this when the user explicitly asks to save progress or when it's tactically implied (end of a session, completing a phase, significant structural change). Optionally delegate to the `@summarizer` subagent.
+- **`/record` por hito**: se exige al cerrar fase, al tomar/derogar una decisión estructural o cuando el diff toca contrato/`PROJECT_STATE.md §2`/arquitectura; un cambio menor reversible no lo exige. **Commit**: commit exige `/record` si el diff toca `.opencode/`, `templates/` o `init.mjs`; solo un diff de docs/memoria puro admite la línea `sin hito: <motivo>`. No se relaja "commit solo tras cerrar memoria".
 
 ### Persistent context (3 layers)
 

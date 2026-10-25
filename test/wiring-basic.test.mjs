@@ -23,6 +23,17 @@ const AGENTS = ['advisor', 'builder', 'critic', 'explore', 'planner', 'summarize
 const COMMANDS = ['compact-state', 'discover', 'doctor', 'modo', 'record', 'review', 'rotate-memory', 'routine', 'skill-capture'];
 const LEAVES = ['builder', 'verifier', 'critic', 'summarizer', 'explore'];
 
+// Subcomandos de solo lectura del advisor (argv cerrado en git-state.mjs): una
+// entrada de bash EXACTA por subcomando, sin comodín (un glob permitiría
+// `… status; rm -rf x` si opencode separa compuestos).
+const GIT_STATE_SUBS = ['status', 'log', 'head', 'branch', 'diff-stat', 'ahead-behind', 'remote'];
+
+// ÚNICA allow con comodín tolerada en el advisor, con justificación: la CLI de
+// `routine-model.mjs` recibe ids de modelo LIBRES (`MODEL_RE`), 7 agentes y 4
+// formas de flag, así que no existe un conjunto finito de entradas exactas.
+// Cualquier OTRO `*` en una entrada allow hace fallar el test.
+const ALLOW_WILDCARDS = new Set(['node .opencode/scripts/routine-model.mjs*']);
+
 // Frontmatter delgado: el bloque entre el primer `---` y el siguiente. NO es un parser YAML.
 function frontmatter(text) {
   const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text);
@@ -59,6 +70,21 @@ function blockPairs(fm, key) {
   return pairs;
 }
 
+// Escalares de `permission:` a 2 espacios (`read: allow`, `webfetch: deny`), sin
+// entrar en los bloques anidados (`bash:`, `task:`). NO parsea YAML completo.
+function permissionScalars(fm) {
+  const pairs = {};
+  for (const line of fm.split(/\r?\n/)) {
+    const m = /^ {2}([A-Za-z0-9_.*-]+):\s*(allow|deny|ask)\s*$/.exec(line);
+    if (m) pairs[m[1]] = m[2];
+  }
+  return pairs;
+}
+
+// El advisor NO tiene lectura libre: su único acceso al repo es `read` y los
+// trámites git-state; edit/glob/grep/webfetch quedan denegados.
+const ADVISOR_DENEGADOS = ['edit', 'glob', 'grep', 'webfetch'];
+
 const agentMd = (name) => readFileSync(join(AGENTS_DIR, `${name}.md`), 'utf8');
 
 // ── Suite 1: wiring · agents ────────────────────────────────────────────────
@@ -69,12 +95,28 @@ test('existen EXACTAMENTE los 7 agentes esperados', () => {
   eq([...files].sort(), [...AGENTS].sort(), 'los 7 agentes, ni uno más ni uno menos');
 });
 
-test('advisor: mode primary + bash deny "*" con UNA excepción (routine-model.mjs, que existe)', () => {
+test('advisor: mode primary + bash deny "*" + 7 trámites git-state exactos + excepción routine-model', () => {
   const fm = frontmatter(agentMd('advisor'));
   includes(fm, 'mode: primary', 'advisor es el agente primario');
   const bash = blockPairs(fm, 'bash');
-  eq(bash, { '*': 'deny', 'node .opencode/scripts/routine-model.mjs*': 'allow' }, 'deny por defecto + única allowlist');
+  const esperado = { '*': 'deny', 'node .opencode/scripts/routine-model.mjs*': 'allow' };
+  for (const sub of GIT_STATE_SUBS) esperado[`node .opencode/scripts/git-state.mjs ${sub}`] = 'allow';
+  eq(bash, esperado, 'deny por defecto + trámites git-state exactos + excepción routine-model');
+  assert(existsSync(join(SCRIPTS_DIR, 'git-state.mjs')), 'el script de los trámites existe');
   assert(existsSync(join(SCRIPTS_DIR, 'routine-model.mjs')), 'el script de la excepción existe');
+});
+
+test('advisor: ninguna entrada allow de bash lleva "*" salvo la excepción documentada', () => {
+  const bash = blockPairs(frontmatter(agentMd('advisor')), 'bash');
+  const comodines = Object.keys(bash).filter((k) => bash[k] === 'allow' && k.includes('*'));
+  assert(comodines.length > 0, 'la excepción documentada sigue declarada (si desaparece, retira ALLOW_WILDCARDS)');
+  for (const k of comodines) {
+    assert(ALLOW_WILDCARDS.has(k), `allow con "*" sin justificar: "${k}" (única excepción documentada: ${[...ALLOW_WILDCARDS].join(', ')})`);
+  }
+  // Ninguna entrada de los trámites git-state puede colar un comodín.
+  for (const sub of GIT_STATE_SUBS) {
+    eq(bash[`node .opencode/scripts/git-state.mjs ${sub}`], 'allow', `git-state ${sub}: allow exacta`);
+  }
 });
 
 test('hojas del pipeline con task: deny (builder, verifier, critic, summarizer, explore)', () => {
@@ -94,6 +136,12 @@ test('advisor delega (allow) en los otros 6 agentes', () => {
   for (const name of AGENTS.filter((a) => a !== 'advisor')) {
     eq(task[name], 'allow', `advisor puede delegar en ${name}`);
   }
+});
+
+test('advisor sin lectura libre: edit/glob/grep/webfetch deny', () => {
+  const perm = permissionScalars(frontmatter(agentMd('advisor')));
+  eq(perm.read, 'allow', 'read sigue autorizado (es su única ventana al contexto)');
+  for (const key of ADVISOR_DENEGADOS) eq(perm[key], 'deny', `advisor sin ${key}: deny`);
 });
 
 // ── Suite 2: wiring · commands ──────────────────────────────────────────────
@@ -157,6 +205,15 @@ test('paridad bash md↔json: builder y summarizer (harden: allow + deny irrepar
   for (const name of ['builder', 'summarizer']) {
     const md = blockPairs(frontmatter(agentMd(name)), 'bash');
     eq(md, TEMPLATE.agent[name].permission.bash, `bash de ${name}: md == permission.bash del template`);
+  }
+});
+
+test('template: el advisor espejo tampoco gana lectura libre (md deny, json sin allow)', () => {
+  const mirrorMd = readFileSync(join(REPO_ROOT, 'templates', '.opencode', 'agents', 'advisor.md'), 'utf8');
+  const perm = permissionScalars(frontmatter(mirrorMd));
+  for (const key of ADVISOR_DENEGADOS) {
+    eq(perm[key], 'deny', `templates/.opencode/agents/advisor.md: ${key} deny`);
+    assert(TEMPLATE.agent.advisor.permission[key] !== 'allow', `templates/opencode.json no concede ${key} al advisor`);
   }
 });
 

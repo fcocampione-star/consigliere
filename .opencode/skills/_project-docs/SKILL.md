@@ -65,7 +65,7 @@ webfetch "https://www.gnu.org/software/bash/manual/" --format markdown
 | Shortcut | Expands To | Use Case |
 |----------|------------|----------|
 | `/discover` | `node .opencode/scripts/doctor.mjs` + skill audit | Audita stack real vs declarado |
-| `/routine` | routing orgánico direct/delegated + spec-lite ≤650w | Flujo explore→plan→critic→build→verify→record |
+| `/routine` | routing orgánico direct/delegated + spec-lite ≤650w | Flujo explore→plan→critic (regla §2)→build→verify→record |
 | `/doctor` | `node .opencode/scripts/doctor.mjs --json` | Diagnóstico del harness: opencode.json + harden, tamaños/topic de memoria, lock, hook, cache, scripts, directorios y derivados (exit 0 ok / 1 warnings / 2 errors) |
 | `/record` | 6 campos Goal/Discoveries/Accomplished/Next/Files/Verificación + topic | Persistir memoria |
 | `/review` | stale review_after +90d | Listar decisiones caducadas |

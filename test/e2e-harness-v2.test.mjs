@@ -387,7 +387,7 @@ test('v2 normaliza permission.bash{} → permissions[] SIN perder ninguna regla 
   }
 });
 
-test('debug agents: 7 agentes del pipeline + permisos resueltos (hojas task: deny, advisor shell: deny general + allow routine-model)', () => {
+test('debug agents: 7 agentes del pipeline + permisos resueltos (hojas task: deny, advisor shell: deny general + git-state + allow routine-model)', () => {
   if (!gate()) return;
   const agentes = v2AgentsConReintentos(PROYECTO);
   const de = (id) => agentes.find((a) => a.id === id);
@@ -405,6 +405,8 @@ test('debug agents: 7 agentes del pipeline + permisos resueltos (hojas task: den
   assert(permiso(de('summarizer'), 'shell', 'git push*', 'ask'), 'summarizer: bash harden aplicado también en frontmatter');
   // Wiring comando→agente→capacidad (/doctor /routine /discover): los allows
   // puntuales que hacen ejecutables los comandos sin abrir shell general.
+  assert(permiso(de('advisor'), 'shell', 'node .opencode/scripts/git-state.mjs status', 'allow'), 'advisor: allow exacto git-state.mjs status (trámite de rama read-only)');
+  assert(permiso(de('advisor'), 'shell', 'node .opencode/scripts/git-state.mjs ahead-behind', 'allow'), 'advisor: allow exacto git-state.mjs ahead-behind (sin fetch)');
   assert(permiso(de('advisor'), 'shell', 'node .opencode/scripts/routine-model.mjs*', 'allow'), 'advisor: allow puntual routine-model.mjs (wiring /routine)');
   assert(permiso(de('advisor'), 'shell', '*', 'deny'), 'advisor: sigue SIN shell general');
   assert(permiso(de('explore'), 'shell', 'node .opencode/scripts/doctor.mjs*', 'allow'), 'explore: allow read-only doctor.mjs (wiring /doctor)');

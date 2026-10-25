@@ -390,6 +390,92 @@ for (const rel of SCRIPTS_TO_CHECK) {
 pass('node --check', `${SCRIPTS_TO_CHECK.length} scripts`);
 
 // ─────────────────────────────────────────────────────────────────────────────
+// 8. routing-contract: regla única del critic + carril rápido + `/record` por hito
+// ─────────────────────────────────────────────────────────────────────────────
+// La regla del critic vive en UNA sola fuente (`advisor.md` §2) con marcadores
+// estables; `routine.md` y `AGENT-PIPELINE.md` apuntan a ella en vez de repetir
+// umbrales. Las cadenas legacy se PROHÍBEN: si reaparecen, hay dos fuentes.
+const CRITIC_MARKER = '<!-- canon:critic-routing -->';
+const FAST_MARKER = '<!-- canon:fast-lane -->';
+const LEGACY_ROUTING = ['explore → planner → critic → builder', '>3 files acoplados'];
+const POINTER_CRITIC = 'Routing del critic: ver la regla única en .opencode/agents/advisor.md §2 (marcador canon:critic-routing).';
+const COMMIT_RULE = 'commit exige `/record` si el diff toca';
+const RECORD_RULE = 'al cerrar fase';
+const ADVISOR_DOCS = ['.opencode/agents/advisor.md', 'templates/.opencode/agents/advisor.md'];
+
+// Primera línea no vacía tras el marcador (null si falta o está duplicado).
+function markerLine(txt, marker) {
+  const first = txt.indexOf(marker);
+  if (first === -1 || txt.indexOf(marker, first + marker.length) !== -1) return null;
+  const line = txt.slice(first + marker.length).split(/\r?\n/).find((l) => l.trim() !== '');
+  return line ? line.trim() : null;
+}
+
+const ROUTING_DOCS = [
+  ...ADVISOR_DOCS,
+  '.opencode/commands/routine.md',
+  'templates/.opencode/commands/routine.md',
+  '.opencode/plans/AGENT-PIPELINE.md',
+  'templates/.opencode/plans/AGENT-PIPELINE.md',
+];
+{
+  let bad = 0;
+  for (const rel of ROUTING_DOCS) {
+    const txt = read(join(ROOT, rel));
+    if (txt === null) { fail('routing-contract', `no existe ${rel}`); bad++; continue; }
+    for (const legacy of LEGACY_ROUTING) {
+      if (txt.includes(legacy)) { fail('routing-contract', `${rel}: cadena legacy "${legacy}" (sustitúyela por el puntero a ${CRITIC_MARKER})`); bad++; }
+    }
+  }
+  if (!bad) pass('routing-contract', `sin cadenas legacy del routing en ${ROUTING_DOCS.length} docs`);
+}
+
+// (a)+(b) El marcador y su frase existen en las DOS copias del advisor.
+{
+  const FRAGS_CRITIC = ['obligatorio si la clase de riesgo es **alta**', '>3 archivos acoplados', 'en el resto de riesgo medio es **opcional**', 'process/advisor-agility-descartado'];
+  const FRAGS_FAST = ['NO delegues', '≤3 archivos', 'cambio reversible', 'sin esquema/auth/contrato', 'test que lo cubre'];
+  let bad = 0;
+  for (const rel of ADVISOR_DOCS) {
+    const txt = read(join(ROOT, rel));
+    if (txt === null) { fail('routing-contract', `no existe ${rel}`); bad++; continue; }
+    const rule = markerLine(txt, CRITIC_MARKER);
+    if (rule === null) { fail('routing-contract', `${rel}: falta ${CRITIC_MARKER} o está duplicado`); bad++; }
+    else for (const f of FRAGS_CRITIC) if (!rule.includes(f)) { fail('routing-contract', `${rel}: la regla tras ${CRITIC_MARKER} no dice "${f}"`); bad++; }
+    const fast = markerLine(txt, FAST_MARKER);
+    if (fast === null) { fail('routing-contract', `${rel}: falta ${FAST_MARKER} o está duplicado`); bad++; }
+    else for (const f of FRAGS_FAST) if (!fast.includes(f)) { fail('routing-contract', `${rel}: el carril rápido tras ${FAST_MARKER} no dice "${f}"`); bad++; }
+  }
+  if (!bad) pass('routing-contract', 'marcadores canon:critic-routing + canon:fast-lane con su regla en advisor.md (raíz+template)');
+}
+
+// (c-bis) Los punteros de routine/AGENT-PIPELINE apuntan a un marcador que existe.
+{
+  let bad = 0;
+  for (const rel of ['.opencode/commands/routine.md', 'templates/.opencode/commands/routine.md', '.opencode/plans/AGENT-PIPELINE.md', 'templates/.opencode/plans/AGENT-PIPELINE.md']) {
+    const txt = read(join(ROOT, rel));
+    if (txt === null) { fail('routing-contract', `no existe ${rel}`); bad++; continue; }
+    if (!txt.includes(POINTER_CRITIC)) { fail('routing-contract', `${rel}: falta el puntero canónico del critic`); bad++; }
+  }
+  for (const rel of ADVISOR_DOCS) {
+    const txt = read(join(ROOT, rel)) || '';
+    if (!txt.includes(CRITIC_MARKER)) { fail('routing-contract', `${rel}: el puntero apunta a ${CRITIC_MARKER}, que no existe`); bad++; }
+  }
+  if (!bad) pass('routing-contract', 'punteros de routine/AGENT-PIPELINE → canon:critic-routing');
+}
+
+// (d) `/record` por hito y la frase de commit, sin ambigüedad, en advisor + AGENTS.
+{
+  let bad = 0;
+  for (const rel of ['.opencode/agents/advisor.md', 'AGENTS.md']) {
+    const txt = read(join(ROOT, rel));
+    if (txt === null) { fail('routing-contract', `no existe ${rel}`); bad++; continue; }
+    if (!txt.includes(COMMIT_RULE)) { fail('routing-contract', `${rel}: falta la frase de commit ("${COMMIT_RULE}...")`); bad++; }
+    if (!txt.includes(RECORD_RULE)) { fail('routing-contract', `${rel}: falta el disparador de /record por hito ("${RECORD_RULE}")`); bad++; }
+  }
+  if (!bad) pass('routing-contract', 'commit exige /record (diff .opencode/templates/init.mjs) en advisor.md + AGENTS.md');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Reporte
 // ─────────────────────────────────────────────────────────────────────────────
 console.log(`CONTRACT TESTS — ${failures.length ? `❌ ${failures.length} fallo(s)` : '✅ PASS'}`);
