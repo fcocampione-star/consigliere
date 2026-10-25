@@ -7,6 +7,17 @@
 
 <!-- ADVISOR:ENTRIES:START -->
 
+## 2026-10-24 — Plan `ADVISOR-AGILITY` evaluado y DESCARTADO (tema cerrado); `dev` sincronizado y verde
+
+topic: process/advisor-agility-descartado  <!-- relacionados: sdd/routing-organico, process/routing-risk-deltas -->
+review_after: 2027-04-24
+**Goal:** sincronizar `dev` con `origin/dev` y resolver el rojo que dejó el plan `.opencode/plans/ADVISOR-AGILITY.md` en `npm test` (contrato anti-drift: `espejo: archivo solo-raíz no catalogado`).
+**Discoveries:** `dev` iba 5 commits detrás (incl. `/skill-capture`, deny de `general` y el plan); sync por `fetch` + `merge --ff-only`, 0 divergentes. Evaluación con `explore` + `critic` → veredicto **posponer hasta tener datos**: el diagnóstico salía de UNA sola sesión externa (`pruebq1`) sin baseline; las 3 palancas (F1 glob/grep al advisor, F2 topes de hojas/critic solo en alto, F3 planner con `edit` por ruta + retornos por referencia) eran "hipótesis no medidas" según el propio plan; F1 erosionaba `sdd/routing-organico` y `process/routing-risk-deltas` (el tope "≤3 consultas/≤150 líneas" no es enforceable, solo prompt); la telemetría F0 emitida por el propio LLM es poco fiable; `memory-tokens.mjs` no modela topes de hojas. Colateral: el motivo del descarte previo (commit `05950a7`, ausente del clon local) nunca se documentó en memoria — queda aquí.
+**Accomplished:** decisión del USUARIO: borrar el plan y dar el tema por resuelto; ninguna fase implementada. `git rm .opencode/plans/ADVISOR-AGILITY.md` (en índice, sin commit). Sin referencias residuales fuera de `CHANGELOG/`/`SUMMARY.md`/`.git`. Ideas baratas surgidas y NO adoptadas (constancia, sin pendientes): `session-metrics.mjs` sobre `opencode export`; aclarar en `advisor.md` §2 la incoherencia critic (tabla "clásico" vs "Cuándo usar critic"); sonda del test de `edit` por patrón de ruta en e2e-harness-v2. Decisión en STATE §2 con condición de reapertura.
+**Next:** nada pendiente. Reabrir solo con datos reales de sesiones que muestren saltos innecesarios, medidos con script (no auto-telemetría del LLM). Commit propuesto: borrado del plan + STATE + SUMMARY.
+**Files:** `git log --oneline -5` (no listas manuales)
+**Verificación:** `npm test` exit 0 (contrato anti-drift PASS, 43 espejos, 37 scripts, versión 1.0.2); `git status` solo `D` del plan.
+
 ## 2026-10-22 — Feat `/skill-capture`: memoria → skills reales (ciclo memoria→skill cerrado) + fix de fidelidad
 
 topic: process/skill-capture  <!-- relacionados: process/discover-gaps (supersede parcial) · patrón skill/consolidar en §5 -->
