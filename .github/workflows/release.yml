@@ -57,6 +57,9 @@ jobs:
     # + empaquetado) y se salta únicamente los dos pasos con efecto externo
     # (publicar y crear la release).
     runs-on: ubuntu-latest
+    # Acota cuelgues de EJECUCIÓN, NO el tiempo en cola de runners: mientras el
+    # job espera a que le asignen un runner no consume este límite.
+    timeout-minutes: 30
     permissions:
       # `contents: write` — crear el GitHub Release (releases: write no hace
       # falta; el permiso de contents cubre el release del tag).
@@ -190,22 +193,58 @@ jobs:
       # que se acaba de publicar. `latest` NO es decorativo — en 1.0.0 apuntaba al
       # stub `0.0.0-stage` y `npx advisor-harness@latest` servía el paquete
       # equivocado sin que nada fallara.
+      #
+      # Sin la condición `steps.published.outputs.ya != 'true'`: este paso corre
+      # también en los reruns en los que la versión YA estaba publicada. Un rerun
+      # tiene que volver a verificar el estado final del registry, no heredar la
+      # suposición de que lo que publicó otro run sigue bien. Consecuencia buscada
+      # y aceptada: re-ejecutar un run HISTÓRICO (p. ej. el de 1.0.2) ahora FALLA
+      # aquí, porque `latest` ya apunta a una versión posterior y la aserción
+      # exige `latest` == la versión de ese tag.
+      #
+      # Reintentos con espera: el registry NO sirve la versión en el instante del
+      # publish. Incidente del run 39656624120: E404 tres segundos después de
+      # publicar, con el publish ya hecho (npm tardó ~2,5 min en servir 1.0.2).
+      # 10 intentos x 30 s ≈ 5 min, fail-closed: si al agotarlos no se ve, el run
+      # se queda en rojo.
+      #
+      # `--prefer-online` revalida contra el registry en vez de fiarse de la
+      # cache HTTP de npm (un 404 cacheado sobreviviría a todos los reintentos) y
+      # el `--registry` explícito evita depender de cualquier .npmrc del runner.
       - name: verificar en el registry (versión + dist-tag latest)
-        if: (github.event_name == 'push' || !inputs.dry-run) && steps.published.outputs.ya != 'true'
+        if: github.event_name == 'push' || !inputs.dry-run
         run: |
           set -euo pipefail
           version=$(node -p "require('./package.json').version")
-          publicado=$(npm view "advisor-harness@$version" version)
-          if [ "$publicado" != "$version" ]; then
-            echo "::error::el registry devuelve '$publicado' para advisor-harness@$version"
-            exit 1
-          fi
-          latest=$(npm view advisor-harness dist-tags.latest)
-          if [ "$latest" != "$version" ]; then
-            echo "::error::dist-tags.latest apunta a '$latest' y no a la versión publicada ($version); corrige con: npm dist-tag add advisor-harness@$version latest"
-            exit 1
-          fi
-          echo "registry OK: advisor-harness@$version es latest"
+          intentos=10
+          espera=30
+          for ((intento = 1; intento <= intentos; intento++)); do
+            # `set +e` para que un fallo (E404 mientras propaga) no mate el bucle
+            # en el primer intento.
+            set +e
+            publicado=$(npm view "advisor-harness@$version" version \
+              --prefer-online --registry=https://registry.npmjs.org 2>&1)
+            estado_publicado=$?
+            latest=$(npm view advisor-harness dist-tags.latest \
+              --prefer-online --registry=https://registry.npmjs.org 2>&1)
+            estado_latest=$?
+            set -e
+            if [ "$estado_publicado" -eq 0 ] && [ "$publicado" = "$version" ] \
+              && [ "$estado_latest" -eq 0 ] && [ "$latest" = "$version" ]; then
+              echo "registry OK (intento $intento/$intentos): advisor-harness@$version es latest"
+              exit 0
+            fi
+            # Una sola línea por intento: la salida de npm puede traer saltos.
+            resumen=$(printf '%s | %s' "$publicado" "$latest" | tr '\n' ' ')
+            echo "::notice::intento $intento/$intentos sin confirmar (versión | latest: $resumen)"
+            if [ "$intento" -lt "$intentos" ]; then
+              echo "reintento en ${espera}s"
+              sleep "$espera"
+            fi
+          done
+          echo "::error::el registry no confirma advisor-harness@$version tras $intentos intentos (~$((intentos * espera))s): versión='$publicado' latest='$latest'"
+          echo "si la versión está publicada y solo falla latest: npm dist-tag add advisor-harness@$version latest"
+          exit 1
 
       # `gh release view || gh release create`: idempotente a propósito. Si el
       # publish ya existía y la release quedó a medias (publish OK / release KO),

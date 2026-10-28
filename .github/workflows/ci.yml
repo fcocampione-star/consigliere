@@ -45,6 +45,8 @@ jobs:
   syntax-and-tests:
     name: syntax-and-tests (${{ matrix.os }}, node ${{ matrix.node }})
     runs-on: ${{ matrix.os }}
+    # Acota cuelgues de EJECUCIÓN, NO el tiempo en cola de runners.
+    timeout-minutes: 20
     strategy:
       # Un fallo en un combo no oculta el resto de la matriz.
       fail-fast: false
@@ -110,6 +112,8 @@ jobs:
   shell-and-powershell:
     name: shell-and-powershell (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # Acota cuelgues de EJECUCIÓN, NO el tiempo en cola de runners.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -209,6 +213,8 @@ jobs:
   memory-limits:
     name: memory-limits (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # Acota cuelgues de EJECUCIÓN, NO el tiempo en cola de runners.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -262,6 +268,8 @@ jobs:
   drift-and-packaging:
     name: drift-and-packaging
     runs-on: ubuntu-latest
+    # Acota cuelgues de EJECUCIÓN, NO el tiempo en cola de runners.
+    timeout-minutes: 20
     defaults:
       run:
         shell: bash
@@ -362,6 +370,8 @@ jobs:
   pack-smoke:
     name: pack-smoke (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
+    # Acota cuelgues de EJECUCIÓN, NO el tiempo en cola de runners.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -548,4 +558,3 @@ jobs:
         run: |
           set -euo pipefail
           rm -f "${{ steps.pack.outputs.tarball }}"
-          git status --porcelain
