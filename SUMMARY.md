@@ -36,11 +36,3 @@ topic: <family/kebab>  <!-- ej architecture/auth, sdd/login/spec -->
 ```
 
 > Topic upsert: mismo `topic:` en 7d → actualiza no duplicar. No agregues listas archivos (usa `git log`). Rotación canónica en `/record` vía motor Node (`memory-rotate.mjs`); hook post-commit opcional/gated (`ADVISOR_ROTATE_HOOK=1`); `/rotate-memory` como disparo manual. Búsqueda: `node .opencode/scripts/memory-index.mjs search "query"`.
-
----
-
-## Índice de historial archivado (CAPA 2)
-
-| Semana (lunes) | Archivo |
-|----------------|---------|
-| (aún sin historial) | — |
