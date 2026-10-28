@@ -17,6 +17,7 @@ review_after: 2027-01-25
 **Next:** el coordinador publica: commit → `merge --ff-only` a `main` → push `main` → push `dev` → `git tag -a v1.1.0` → push tag ⇒ `release.yml` publica por OIDC. Verificar `npm view advisor-harness dist-tags.latest` = **1.1.0** y la GitHub Release. No re-ejecutar runs históricos (fallan a propósito). Ninguna acción pendiente en YAML por las colas macOS.
 **Files:** `git log --oneline -5` (no listas manuales)
 **Verificación:** `npm test` exit 0 (48 passed / 0 failed, `node --check` 41 scripts, contrato PASS), `version:check` ✅ 1.1.0, `lint:sh` ✅, `check-memory-limits` ✅, `doctor` exit 0 (3 ℹ️ benignos), semántica de ambos YAML validada (timeouts, gate ausente SOLO en la verificación, `--prefer-online`, bucle 10×30, grupos de concurrencia e `id-token: write` intactos), `merge-base --is-ancestor origin/main dev` = FF_OK.
+**Addendum:** publicado `1.1.0` (npm `latest` = 1.1.0 vía OIDC + attestation `slsa.dev/provenance/v1` + GitHub Release `v1.1.0` con tarball `advisor-harness-1.1.0.tgz`) por el run `40631027734` (success, 3m40s) tras un dry-run `workflow_dispatch` `40630686762` (19 jobs); la aserción post-publish funcionó en real confirmando el registry al **2º intento** (el diseño de una sola pasada habría fallado). Incidencia: `git add -A` capturó la pérdida del bit `100755` en `init.sh`/`init.mjs` → restaurado con `chmod +x` + `git update-index --chmod=+x` y `--amend` antes del push ⇒ un único commit `abfe426`; el chequeo de modos de `drift-and-packaging` en CI es la red que lo habría cazado.
 
 <!-- ADVISOR:ENTRIES:END -->
 

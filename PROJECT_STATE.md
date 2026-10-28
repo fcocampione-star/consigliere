@@ -8,7 +8,7 @@
 | Fase | Descripción | Estado |
 |------|-------------|--------|
 | Fases 0/0.5/1 + modelo D2 + release 1.0 | Bootstrap/hardening/validación demo; `dev` = integración / `main` = estable (ambas repo completo, promoción `--ff-only`); `advisor-harness@1.0.1` en npm, contrato git-aware, `lint:sh`/PATH resuelto | ✅ Completadas |
-| Release 1.0.2 / 1.1.0 | `advisor-harness@1.0.2` publicada (2026-10-21) vía Trusted Publishing OIDC (`v1.0.2` → `6c5431e`, provenance SLSA v1, GitHub Release con tarball oficial, smoke test OK, token granular revocado, 0 secrets) · **1.1.0 lista sin tag** (2026-10-27): `version:bump minor` en los 6 destinos, `release.yml` con aserción post-publish 10×30 s `--prefer-online` y sin gate de skip, `timeout-minutes` en ambos workflows; npm `latest` sigue 1.0.2 | ✅ 1.0.2 publicada · 🟡 1.1.0 pendiente de tag |
+| Release 1.0.2 / 1.1.0 | `advisor-harness@1.0.2` publicada (2026-10-21) vía Trusted Publishing OIDC (`v1.0.2` → `6c5431e`, provenance SLSA v1, GitHub Release con tarball oficial, smoke test OK, token granular revocado, 0 secrets) · **1.1.0 PUBLICADA** (2026-10-27): tag `v1.1.0` → `abfe426` (13 files), npm `latest` = 1.1.0 vía OIDC (attestation SLSA v1, GitHub Release con tarball), run 40631027734 verde y aserción post-publish confirmada al 2º intento; `version:bump minor` en los 6 destinos, bucle 10×30 s `--prefer-online` sin gate de skip, `timeout-minutes` en ambos workflows | ✅ 1.0.2 y 1.1.0 publicadas |
 
 ---
 
