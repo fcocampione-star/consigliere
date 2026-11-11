@@ -42,6 +42,8 @@
 - [ ] `release.yml` (no bloqueantes): (a)(b) **[x] cerrados (2026-10-27)** la verificación post-publish daba E404 a los 3 s (npm tarda ~2-3 min) → hoy bucle 10×30 s (~5 min) `--prefer-online --registry` + `::notice::` + exit 1 fail-closed, y el gate `steps.published.outputs.ya != 'true'` eliminado → los reruns validan `dist-tags.latest` (re-ejecutar un run histórico falla a propósito); (c) colas largas de runners macOS arm64 → **mitigación operativa** (`timeout-minutes` 20/30 min acota ejecución, NO la cola; reruns idempotentes con `gh run rerun --failed`); no se resuelve desde YAML y la matriz se deja intacta (publicar en npm es inmutable: nada de `continue-on-error` sin verificar macOS) — §2 `release/npm-publish`. · Menores no bloqueantes: (a) help de `init.mjs` dice "sin binario global" pero `package.json` expone bins — incoherencia de redacción; (b) `--autoskills 3` no ejecutó autoskills en una prueba (revisar parseo) · **(c)(d)(e) [x] cerrados:** skip `npm view` con `E404` (2026-10-21), `0.0.0-stage` sin artefacto vivo (2026-10-21), `debug agents` por el escape YAML del frontmatter (2026-10-18, §2 `agents/frontmatter-yaml-escape`).
 - [ ] Benchmark A/B (clase `delegated`): harness-6 vs planner→builder — 3 tareas (riesgo bajo/medio/alto) × 2 modos: A = advisor+6 agentes, B = solo planner→builder por protocolo (los `--skip-*` son decorativos); worktrees desde `C^` con enunciado sellado, orden contrabalanceado + warm-up descartado, 3 medidas de resultado (tests verdes, archivos vs ground truth, retrabajo) además de `session-metrics --session` [topic: process/bench-ab] review_after: 2027-05-11
   Umbrales **precomprometidos**: B (simple) es la hipótesis por defecto; el harness solo gana con gate de corrección 3/3 **y** mediana `TOKENS_B/TOKENS_A` ≤ 0,77 sin ningún ratio > 1,0 — empate hasta 1,30, derrota si falla el gate o mediana > 1,30; aborto >900k tokens / >40 min / violación de protocolo = derrota. Coste ~2-3,5M tokens y 1,5-2,5 h + setup; n=3 da dirección y magnitud, **no** significancia, y no atribuye valor por agente; es la vía para obtener los "datos medidos" que exige `process/advisor-agility-descartado`.
+  **Estado (2026-11-11): piloto T1 ejecutado, NO discrimina; pendiente T2 de riesgo medio/alto** (el advisor debe planificar). T1 (README, riesgo bajo, 1 corrida/modo): A 110.941 tok/1,14 min/+5−7 vs B 150.872 tok/1,05 min/+7−9, ratio 1,36 (casi todo caché), ambos correctos; A no usó planner/critic/explore y B no llamó al planner; n=1, "más rápida" sin confirmar. El bench de 6 corridas NO se ejecutó; el diseño sigue válido.
+  Sub-pendientes de herramienta: (1) `session-metrics --session` falla en Windows (`ENOENT`, shim `.cmd`) → solo `--from <export>`; (2) `opencode export --sanitize` no existe en v2.2.6 (`opencode session export <id>`, sin sanitizar); (3) `explore`/`critic`/`planner` sin shell → no se auto-cronometran; `planner→explore` sin probar en runtime.
 
 ---
 
@@ -51,6 +53,7 @@
 
 | Semana (lunes) | Archivo | Resumen |
 |----------------|---------|---------|
+| 2026-10-26 | 2026-10-26.md | rotación automática |
 | 2026-10-19 | 2026-10-19.md | rotación automática |
 | 2026-10-12 | 2026-10-12.md | rotación automática |
 | 2026-10-05 | 2026-10-05.md | rotación automática |
