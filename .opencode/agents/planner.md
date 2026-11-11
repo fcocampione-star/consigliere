@@ -1,29 +1,26 @@
 ---
 description: Diseña el enfoque de una tarea sin modificar código. Produce un plan con pasos, archivos afectados y verificaciones.
 mode: subagent
-permission:
-  read: allow
-  glob: allow
-  grep: allow
-  list: allow
-  webfetch: allow
-  edit: deny
-  bash:
-    "*": deny
-    "git status*": allow
-    "git diff*": allow
-    "git log*": allow
-    "node .opencode/scripts/skill-search.mjs": allow
-    "node .opencode/scripts/skill-search.mjs --json*": allow
-    "node .opencode/scripts/skill-search.mjs --offline*": allow
-    "node .opencode/scripts/skill-search.mjs --refresh*": allow
-    "node .opencode/scripts/skill-search.mjs --limit*": allow
-    "node .opencode/skills/_skill-loader/loader.mjs list*": allow
-    "node .opencode/skills/_skill-loader/loader.mjs search*": allow
-    "node .opencode/skills/_skill-loader/loader.mjs chunk*": allow
-  task:
-    "*": deny
-    explore: allow
+permissions:
+  - { action: read, resource: "*", effect: allow }
+  - { action: glob, resource: "*", effect: allow }
+  - { action: grep, resource: "*", effect: allow }
+  - { action: webfetch, resource: "*", effect: allow }
+  - { action: edit, resource: "*", effect: deny }
+  - { action: shell, resource: "*", effect: deny }
+  - { action: shell, resource: "git status *", effect: allow }
+  - { action: shell, resource: "git diff *", effect: allow }
+  - { action: shell, resource: "git log *", effect: allow }
+  - { action: shell, resource: "node .opencode/scripts/skill-search.mjs", effect: allow }
+  - { action: shell, resource: "node .opencode/scripts/skill-search.mjs --json *", effect: allow }
+  - { action: shell, resource: "node .opencode/scripts/skill-search.mjs --offline *", effect: allow }
+  - { action: shell, resource: "node .opencode/scripts/skill-search.mjs --refresh *", effect: allow }
+  - { action: shell, resource: "node .opencode/scripts/skill-search.mjs --limit *", effect: allow }
+  - { action: shell, resource: "node .opencode/skills/_skill-loader/loader.mjs list *", effect: allow }
+  - { action: shell, resource: "node .opencode/skills/_skill-loader/loader.mjs search *", effect: allow }
+  - { action: shell, resource: "node .opencode/skills/_skill-loader/loader.mjs chunk *", effect: allow }
+  - { action: subagent, resource: "*", effect: deny }
+  - { action: subagent, resource: "explore", effect: allow }
 ---
 
 # Planner

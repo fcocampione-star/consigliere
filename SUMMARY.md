@@ -7,6 +7,17 @@
 
 <!-- ADVISOR:ENTRIES:START -->
 
+## 2026-11-11 - Migración del harness a OpenCode V2.2.7 (solo V2), versión 2.0.0
+
+topic: release/v2-only
+review_after: 2027-05-11
+**Goal:** migrar el harness a OpenCode V2.2.7 abandonando 1.x y preparar 2.0.0 (rama `dev`, sin commitear).
+**Discoveries:** (sondas CLI 2.2.7) `subagent_depth` raíz se ignoraba (`planner→explore` nunca funcionó); con `experimental.subagent_depth` 1 un subagente no lanza otro, con 2 sí (nivel 3 rechazado). 6 subagentes simultáneos sin errores (N=4 es decisión del harness; coste no medido). Frontmatter V2 y `agent.permission` V1 se SUMAN. Comandos compuestos (`&&`, `;`) denegados contra allowlist `echo ok*` (no probado contra la allowlist real). `debug agents` muestra permisos de frontmatter; `explore` comparte id con el built-in V2. Hueco heredado: `cat **/.env*` no casa `cat .env`.
+**Accomplished:** 7 agentes con `permissions:` V2 nativo (fuente única; `templates/opencode.json` sin permisos por agente); `lib/md.mjs` (`agentPermissions`/`resolvePermission`), `doctor`, contract-tests (`permisos fuente única`); 9 comandos `subtask`→`subagent`; `init.mjs` detecta claves V1 y avisa al `--upgrade`; regla `canon:parallel-fanout` en advisor.md; README/AGENTS/AGENT-PIPELINE/doctor.md actualizados. §2: 4 decisiones nuevas, `advisor-init-shell` cerrada, `advisor-git-readonly` y `e2e-v2-empirico` actualizadas.
+**Next:** commit (exige este `/record`), tag `v2.0.0` y ff `dev`→`main`; pendientes (a)–(f) en §3 (steps hojas, hard-deny F5, model nativo F7, `cat .env`, `lint:ps1`).
+**Files:** `git log --oneline -5` (no listas manuales)
+**Verificación:** `npm test` verde (23/23 archivos, contrato, e2e V2.2.7, `version:check` 2.0.0).
+
 ## 2026-11-11 - Advisor puede ejecutar el instalador (`node init.mjs*`)
 
 topic: agents/advisor-init-shell

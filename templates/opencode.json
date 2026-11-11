@@ -1,135 +1,21 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "default_agent": "advisor",
-  "subagent_depth": 2,
   "instructions": ["AGENTS.md"],
+  "permissions": [
+    { "action": "external_directory", "resource": "*", "effect": "ask" }
+  ],
+  "experimental": {
+    "subagent_depth": 2,
+    "todo": true
+  },
   "agent": {
-    "advisor": {
-      "mode": "primary",
-      "model": "{{MODEL_ADVISOR}}",
-      "permission": {
-        "bash": {
-          "*": "deny",
-          "node .opencode/scripts/git-state.mjs status": "allow",
-          "node .opencode/scripts/git-state.mjs log": "allow",
-          "node .opencode/scripts/git-state.mjs head": "allow",
-          "node .opencode/scripts/git-state.mjs branch": "allow",
-          "node .opencode/scripts/git-state.mjs diff-stat": "allow",
-          "node .opencode/scripts/git-state.mjs ahead-behind": "allow",
-          "node .opencode/scripts/git-state.mjs remote": "allow",
-          "node .opencode/scripts/routine-model.mjs*": "allow",
-          "node init.mjs*": "allow"
-        }
-      }
-    },
-    "planner": {
-      "mode": "subagent",
-      "model": "{{MODEL_PLANNER}}",
-      "permission": {
-        "bash": {
-          "*": "deny",
-          "git status*": "allow",
-          "git diff*": "allow",
-          "git log*": "allow",
-          "node .opencode/scripts/skill-search.mjs": "allow",
-          "node .opencode/scripts/skill-search.mjs --json*": "allow",
-          "node .opencode/scripts/skill-search.mjs --offline*": "allow",
-          "node .opencode/scripts/skill-search.mjs --refresh*": "allow",
-          "node .opencode/scripts/skill-search.mjs --limit*": "allow",
-          "node .opencode/skills/_skill-loader/loader.mjs list*": "allow",
-          "node .opencode/skills/_skill-loader/loader.mjs search*": "allow",
-          "node .opencode/skills/_skill-loader/loader.mjs chunk*": "allow"
-        }
-      }
-    },
-    "builder": {
-      "mode": "subagent",
-      "model": "{{MODEL_BUILDER}}",
-      "permission": {
-        "bash": {
-          "*": "allow",
-          "rm -rf /*": "deny",
-          "rm -rf ~*": "deny",
-          "sudo rm*": "deny",
-          "sudo dd*": "deny",
-          "dd if=* of=/dev/*": "deny",
-          "mkfs*": "deny",
-          "chmod -R 777 /*": "deny",
-          "chmod 777*": "deny",
-          "del /f /s C:\\*": "deny",
-          "rmdir /s* C:\\*": "deny",
-          "Remove-Item* C:\\*": "deny",
-          "Format-Volume*": "deny",
-          "diskpart*": "deny",
-          "cat **/.env*": "ask",
-          "cat **/*.pem": "ask",
-          "cat **/*.key": "ask",
-          "cat **/secrets/*": "ask",
-          "cat ~/.ssh/*": "ask",
-          "cat ~/.aws/credentials*": "ask",
-          "cat ~/.config/gh/hosts.yml": "ask",
-          "git commit*": "ask",
-          "git amend*": "ask",
-          "git push*": "ask"
-        }
-      }
-    },
-    "verifier": {
-      "mode": "subagent",
-      "model": "{{MODEL_VERIFIER}}"
-    },
-    "critic": {
-      "mode": "subagent",
-      "model": "{{MODEL_CRITIC}}"
-    },
-    "summarizer": {
-      "mode": "subagent",
-      "model": "{{MODEL_SUMMARIZER}}",
-      "permission": {
-        "bash": {
-          "*": "allow",
-          "rm -rf /*": "deny",
-          "rm -rf ~*": "deny",
-          "sudo rm*": "deny",
-          "sudo dd*": "deny",
-          "dd if=* of=/dev/*": "deny",
-          "mkfs*": "deny",
-          "chmod -R 777 /*": "deny",
-          "chmod 777*": "deny",
-          "del /f /s C:\\*": "deny",
-          "rmdir /s* C:\\*": "deny",
-          "Remove-Item* C:\\*": "deny",
-          "Format-Volume*": "deny",
-          "diskpart*": "deny",
-          "cat **/.env*": "ask",
-          "cat **/*.pem": "ask",
-          "cat **/*.key": "ask",
-          "cat **/secrets/*": "ask",
-          "cat ~/.ssh/*": "ask",
-          "cat ~/.aws/credentials*": "ask",
-          "cat ~/.config/gh/hosts.yml": "ask",
-          "git commit*": "ask",
-          "git amend*": "ask",
-          "git push*": "ask"
-        }
-      }
-    },
-    "explore": {
-      "mode": "subagent",
-      "model": "{{MODEL_EXPLORE}}",
-      "permission": {
-        "bash": {
-          "*": "deny",
-          "node .opencode/scripts/doctor.mjs*": "allow",
-          "node .opencode/scripts/memory-index.mjs*": "allow",
-          "node .opencode/scripts/memory-stats.mjs*": "allow",
-          "node .opencode/scripts/memory-tokens.mjs*": "allow",
-          "node .opencode/scripts/memory-lock.mjs status": "allow",
-          "node .opencode/skills/_skill-loader/loader.mjs list*": "allow",
-          "node .opencode/skills/_skill-loader/loader.mjs search*": "allow",
-          "node .opencode/skills/_skill-loader/loader.mjs chunk*": "allow"
-        }
-      }
-    }
+    "advisor": { "mode": "primary", "model": "{{MODEL_ADVISOR}}" },
+    "planner": { "mode": "subagent", "model": "{{MODEL_PLANNER}}" },
+    "builder": { "mode": "subagent", "model": "{{MODEL_BUILDER}}" },
+    "verifier": { "mode": "subagent", "model": "{{MODEL_VERIFIER}}" },
+    "critic": { "mode": "subagent", "model": "{{MODEL_CRITIC}}" },
+    "summarizer": { "mode": "subagent", "model": "{{MODEL_SUMMARIZER}}" },
+    "explore": { "mode": "subagent", "model": "{{MODEL_EXPLORE}}" }
   }
 }

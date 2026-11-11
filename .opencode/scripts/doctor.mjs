@@ -18,6 +18,7 @@ import { join } from 'node:path';
 import { fingerprint, isFresh } from './memory-index.mjs';
 import { LOCK_STALE_MS, dirAgeMs } from './memory-lock.mjs';
 import { sectionText } from './memory-stats.mjs';
+import { agentPermissions, resolvePermission } from './lib/md.mjs';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const checks = [];
@@ -28,16 +29,24 @@ function lines(p) { try { return readFileSync(p,'utf8').split('\n').length; } ca
 // 1 opencode.json (config raíz del proyecto; `.opencode/opencode.json` queda como
 // fallback legacy. SIN fallback a `templates/opencode.json`: la config raíz es un
 // prerequisito duro — un clon limpio de este repo da ❌ hasta `npm run dev:config`)
+// V2: `subagent_depth` vive en `experimental.` (en la raíz V2 lo ignora) y los
+// permisos viven SOLO en el frontmatter de cada agente (fuente única).
 try {
   let p = join(ROOT,'opencode.json');
   if (!existsSync(p)) p = join(ROOT,'.opencode','opencode.json');
   const j = JSON.parse(readFileSync(p,'utf8'));
-  if (j.default_agent==='advisor' && j.subagent_depth===2) add('opencode.json','✅','default_agent advisor depth 2');
-  else add('opencode.json','⚠️','default_agent/subagent_depth inesperado','Regenera la config: npx advisor-harness@latest . --upgrade (dev: npm run dev:config)');
-  const b = j.agent?.builder?.permission?.bash;
-  if (b && b['cat **/.env*']==='ask') add('bash harden','✅','deny+ask sensibles presentes');
-  else add('bash harden','⚠️','falta harden v1.0 (cat **/.env* -> ask)','Re-render init.mjs --upgrade');
+  if (j.default_agent==='advisor' && j.experimental?.subagent_depth===2) add('opencode.json','✅','default_agent advisor depth 2');
+  else add('opencode.json','⚠️','default_agent/experimental.subagent_depth inesperado','Regenera la config: npx advisor-harness@latest . --upgrade (dev: npm run dev:config -- --force)');
+  const v1 = [];
+  if (j.subagent_depth !== undefined) v1.push('subagent_depth');
+  for (const [id, a] of Object.entries(j.agent || {})) if (a && a.permission !== undefined) v1.push(`agent.${id}.permission`);
+  if (v1.length) add('opencode.json V1','⚠️',`claves V1 que V2 ignora o duplica: ${v1.join(', ')}`,'Regenera la config: npx advisor-harness@latest . --upgrade (dev: npm run dev:config -- --force)');
 } catch(e){ add('opencode.json','❌',e.message,'npx advisor-harness@latest . --upgrade'); }
+try {
+  const rules = agentPermissions(readFileSync(join(ROOT,'.opencode','agents','builder.md'),'utf8'));
+  if (resolvePermission(rules,'shell','cat a/.env')==='ask' && resolvePermission(rules,'shell','git push origin main')==='ask') add('bash harden','✅','deny+ask sensibles presentes (frontmatter de builder)');
+  else add('bash harden','⚠️','falta harden v1.0 (cat **/.env* / git push -> ask) en builder.md','Re-render init.mjs --upgrade');
+} catch(e){ add('bash harden','⚠️',`builder.md sin permissions V2 legible: ${e.message}`,'Re-render init.mjs --upgrade'); }
 
 // 2 memoria sizes
 const ps = join(ROOT,'PROJECT_STATE.md');

@@ -1,7 +1,7 @@
 ---
 description: Audita el contexto del proyecto y las skills disponibles/faltantes (stack real vs AGENTS.md vs _project-docs vs autoskills) y propone mejoras.
 agent: advisor
-subtask: true
+subagent: true
 ---
 
 Audita el contexto del proyecto y el estado de skills para la carpeta actual. Contexto adicional del usuario: $ARGUMENTS

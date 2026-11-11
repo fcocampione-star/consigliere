@@ -1,7 +1,7 @@
 ---
 description: Registra el progreso de la sesión en la memoria persistente (SUMMARY.md + consolida decisiones en PROJECT_STATE.md).
 agent: summarizer
-subtask: true
+subagent: true
 ---
 
 Registra el progreso de esta sesión en la memoria persistente, siguiendo el sistema de contexto de 3 capas del proyecto.

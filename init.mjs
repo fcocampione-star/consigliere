@@ -27,7 +27,7 @@ import { homedir, platform, tmpdir } from 'node:os';
 import { createInterface } from 'node:readline';
 import { spawnSync } from 'node:child_process';
 
-const VERSION = '1.1.0';
+const VERSION = '2.0.0';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const IS_WIN = platform() === 'win32';
 
@@ -592,10 +592,21 @@ function readAgentModels(file) {
   for (const [nombre, def] of Object.entries(cfg.agent)) {
     if (def && typeof def === 'object' && typeof def.model === 'string' && def.model !== '') models.push([nombre, def.model]);
   }
-  return { ok: true, models };
+  // V2: los permisos viven solo en el frontmatter de los agentes. Lo que el usuario tuviera en el
+  // JSON viejo (permisos V1 por agente, subagent_depth raíz) NO se arrastra: se avisa para que
+  // lo revise en el backup en vez de perderlo en silencio.
+  const descartadas = [];
+  if (cfg.subagent_depth !== undefined) descartadas.push('subagent_depth');
+  for (const [nombre, def] of Object.entries(cfg.agent)) {
+    if (def && typeof def === 'object' && def.permission !== undefined) descartadas.push(`agent.${nombre}.permission`);
+  }
+  return { ok: true, models, descartadas };
 }
 
 function mergeAgentModels(prev, file) {
+  if (prev.ok && prev.descartadas.length) {
+    warn(`Claves V1 de tu opencode.json que no se conservan (V2 las ignora o los permisos viven ahora en .opencode/agents/*.md): ${prev.descartadas.join(', ')}. Están en el backup previo de .advisor/backups/.`);
+  }
   if (!prev.ok) {
     info(`Sin fusión de modelos: ${prev.motivo}. Se deja el opencode.json recién generado tal cual.`);
     return;

@@ -1,7 +1,7 @@
 ---
 description: Consolida la memoria del proyecto (decisión §2, patrón §5, entradas SUMMARY/CHANGELOG y pendientes §3 por topic) en una SKILL real en .opencode/skills/<name>/SKILL.md.
 agent: advisor
-subtask: true
+subagent: true
 ---
 
 Consolida la memoria del proyecto para el topic indicado en una skill REAL (no esqueleto vacío): $ARGUMENTS

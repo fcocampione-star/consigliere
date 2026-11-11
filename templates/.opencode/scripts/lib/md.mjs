@@ -137,3 +137,62 @@ export function todayUTC(now = new Date()) {
   const da = String(d.getUTCDate()).padStart(2, '0');
   return `${y}-${mo}-${da}`;
 }
+
+// ── Frontmatter de agentes: permisos nativos V2 ─────────────────────────────
+
+/**
+ * `frontmatterBlock(text)` → el texto entre el primer `---` y el siguiente, o
+ * `''` si no hay frontmatter. NO es un parser YAML.
+ */
+export function frontmatterBlock(text) {
+  const m = /^---\r?\n([\s\S]*?)\r?\n---/.exec(String(text ?? '').replace(/^\uFEFF/, ''));
+  return m ? m[1] : '';
+}
+
+// Una regla por línea, en flujo YAML: `- { action: shell, resource: "x", effect: deny }`.
+// El resource va SIEMPRE entre comillas dobles (los escapes `\\` y `\"` son JSON válido).
+const RULE_RE = /^[ \t]*-[ \t]*\{[ \t]*action:[ \t]*([A-Za-z0-9_.*-]+)[ \t]*,[ \t]*resource:[ \t]*("(?:[^"\\]|\\.)*")[ \t]*,[ \t]*effect:[ \t]*(allow|deny|ask)[ \t]*\}[ \t]*$/;
+
+/**
+ * `agentPermissions(text)` → reglas `[{ action, resource, effect }]` del bloque
+ * `permissions:` del frontmatter de un agente, EN ORDEN (en V2 gana la última
+ * coincidencia, así que el orden es semántica). `[]` si no hay bloque. Una línea
+ * del bloque que no case con el formato de una regla lanza: un permiso mal
+ * escrito no puede ignorarse en silencio.
+ */
+export function agentPermissions(text) {
+  const lines = frontmatterBlock(text).split(/\r?\n/);
+  const start = lines.findIndex((l) => /^permissions:[ \t]*$/.test(l));
+  if (start === -1) return [];
+  const rules = [];
+  for (let i = start + 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.trim() === '') continue;
+    if (!/^[ \t]/.test(line)) break; // siguiente clave de nivel 0
+    const m = RULE_RE.exec(line);
+    if (!m) throw new Error(`regla de permissions ilegible: ${line.trim()}`);
+    rules.push({ action: m[1], resource: JSON.parse(m[2]), effect: m[3] });
+  }
+  return rules;
+}
+
+function wildcardMatch(pattern, value) {
+  // `*` = cero o más caracteres (incluye `/`), `?` = exactamente uno, el resto literal.
+  const re = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.');
+  if (new RegExp(`^${re}$`).test(value)) return true;
+  // Un patrón que termina en ` *` también casa el comando sin argumentos.
+  return pattern.endsWith(' *') && value === pattern.slice(0, -2);
+}
+
+/**
+ * `resolvePermission(rules, action, resource)` → `'allow' | 'deny' | 'ask'` con
+ * la semántica documentada de V2: la ÚLTIMA regla que casa gana y, sin ninguna,
+ * `ask`. Solo para tests/doctor: no sustituye al motor de opencode.
+ */
+export function resolvePermission(rules, action, resource) {
+  let effect = 'ask';
+  for (const r of rules) {
+    if (wildcardMatch(r.action, action) && wildcardMatch(r.resource, resource)) effect = r.effect;
+  }
+  return effect;
+}

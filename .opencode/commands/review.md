@@ -1,7 +1,7 @@
 ---
 description: Lista decisiones stale con review_after vencido (inspirado Engram mem_review).
 agent: summarizer
-subtask: true
+subagent: true
 ---
 
 Lista decisiones en `PROJECT_STATE.md §2` cuyo `review_after:` esté vencido (fecha < hoy, formato `YYYY-MM-DD`). También revisa `CHANGELOG/DECISIONS-ARCHIVE.md` si existe.

@@ -1,7 +1,7 @@
 ---
 description: Fija el modo de comunicación del advisor (educador|practicante|copiloto|auto) para adaptar tono y detalle a tu nivel. Sin argumento muestra el modo actual.
 agent: advisor
-subtask: true
+subagent: true
 ---
 
 Fija el modo de comunicación del advisor según el argumento:

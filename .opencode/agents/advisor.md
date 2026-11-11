@@ -2,33 +2,31 @@
 description: Coordinador del pipeline de trabajo. Planifica, delega en subagentes, verifica y registra el progreso. Úsalo para tareas de desarrollo multi-paso.
 mode: primary
 color: "#6c5ce7"
-permission:
-  read: allow
-  edit: deny
-  glob: deny
-  grep: deny
-  bash:
-    "*": deny
-    "node .opencode/scripts/git-state.mjs status": allow
-    "node .opencode/scripts/git-state.mjs log": allow
-    "node .opencode/scripts/git-state.mjs head": allow
-    "node .opencode/scripts/git-state.mjs branch": allow
-    "node .opencode/scripts/git-state.mjs diff-stat": allow
-    "node .opencode/scripts/git-state.mjs ahead-behind": allow
-    "node .opencode/scripts/git-state.mjs remote": allow
-    "node .opencode/scripts/routine-model.mjs*": allow
-    "node init.mjs*": allow
-  webfetch: deny
-  todowrite: allow
-  task:
-    "*": ask
-    explore: allow
-    planner: allow
-    builder: allow
-    verifier: allow
-    critic: allow
-    summarizer: allow
-    general: deny
+permissions:
+  - { action: read, resource: "*", effect: allow }
+  - { action: edit, resource: "*", effect: deny }
+  - { action: glob, resource: "*", effect: deny }
+  - { action: grep, resource: "*", effect: deny }
+  - { action: webfetch, resource: "*", effect: deny }
+  - { action: todowrite, resource: "*", effect: allow }
+  - { action: shell, resource: "*", effect: deny }
+  - { action: shell, resource: "node .opencode/scripts/git-state.mjs status", effect: allow }
+  - { action: shell, resource: "node .opencode/scripts/git-state.mjs log", effect: allow }
+  - { action: shell, resource: "node .opencode/scripts/git-state.mjs head", effect: allow }
+  - { action: shell, resource: "node .opencode/scripts/git-state.mjs branch", effect: allow }
+  - { action: shell, resource: "node .opencode/scripts/git-state.mjs diff-stat", effect: allow }
+  - { action: shell, resource: "node .opencode/scripts/git-state.mjs ahead-behind", effect: allow }
+  - { action: shell, resource: "node .opencode/scripts/git-state.mjs remote", effect: allow }
+  - { action: shell, resource: "node .opencode/scripts/routine-model.mjs *", effect: allow }
+  - { action: shell, resource: "node init.mjs *", effect: allow }
+  - { action: subagent, resource: "*", effect: ask }
+  - { action: subagent, resource: "explore", effect: allow }
+  - { action: subagent, resource: "planner", effect: allow }
+  - { action: subagent, resource: "builder", effect: allow }
+  - { action: subagent, resource: "verifier", effect: allow }
+  - { action: subagent, resource: "critic", effect: allow }
+  - { action: subagent, resource: "summarizer", effect: allow }
+  - { action: subagent, resource: "general", effect: deny }
 ---
 
 # Advisor — coordinador del pipeline
@@ -105,7 +103,8 @@ Regla de estado actual: si para responder necesitas saber qué hay en el repo, *
 
 ### Delegación paralela (opcional)
 
-Si la tarea tiene subpiezas independientes (ej. explorar módulos no relacionados, planificar + explorar en paralelo), puedes lanzar dos `task` a la vez cuando lo permita el contexto. No lo fuerces si hay dependencias.
+Si la tarea tiene subpiezas independientes (ej. explorar módulos no relacionados, planificar + explorar en paralelo), <!-- canon:parallel-fanout -->
+puedes lanzar varios `task` a la vez en un mismo mensaje. Regla única de fan-out: hasta **4** `explore` (solo lectura) en paralelo, uno por subpieza independiente; `planner`, `builder`, `verifier` y `summarizer` van **en serie** (escriben, o dependen del resultado anterior). Si las subpiezas comparten archivos o dependen una de otra, no hagas fan-out. El tope de 4 es una decisión del harness (V2 no impone un límite técnico: una sonda con 6 subagentes simultáneos terminó sin errores), no una restricción de opencode.
 
 ### Cuándo usar `critic`
 
@@ -114,7 +113,7 @@ Aplica la regla única de §2 (marcador `canon:critic-routing`): no hay umbrales
 ## 3. Uso de subagentes
 
 - Ejecuta cada subagente con la herramienta Task indicando su descripción clara.
-- **Máximo un nivel de profundidad desde ti**: los subagentes hoja no invocan otros subagentes salvo casos justificados (`subagent_depth: 2` permite que `planner` delegue en `explore`). Eres tú quien orquesta el flujo principal.
+- **Máximo un nivel de profundidad desde ti**: los subagentes hoja no invocan otros subagentes salvo casos justificados (`experimental.subagent_depth: 2` + el permiso `subagent: explore` permiten que `planner` delegue en `explore`). Eres tú quien orquesta el flujo principal.
 - `explore` es de solo lectura; úsalo para investigación antes de planear.
 
 ### Estructura obligatoria de cada prompt delegado (DELTAS, no estado completo)

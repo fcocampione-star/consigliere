@@ -1,18 +1,16 @@
 ---
 description: Verifica los cambios corriendo typecheck, lint y tests; reporta fallos sin editar el código ni commitear.
 mode: subagent
-permission:
-  read: allow
-  edit: deny
-  glob: allow
-  grep: allow
-  list: allow
-  bash:
-    "*": allow
-    "git commit*": deny
-    "git push*": deny
-    "git amend*": deny
-  task: deny
+permissions:
+  - { action: read, resource: "*", effect: allow }
+  - { action: edit, resource: "*", effect: deny }
+  - { action: glob, resource: "*", effect: allow }
+  - { action: grep, resource: "*", effect: allow }
+  - { action: shell, resource: "*", effect: allow }
+  - { action: shell, resource: "git commit*", effect: deny }
+  - { action: shell, resource: "git push*", effect: deny }
+  - { action: shell, resource: "git amend*", effect: deny }
+  - { action: subagent, resource: "*", effect: deny }
 ---
 
 # Verifier

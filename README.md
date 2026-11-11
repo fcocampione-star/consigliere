@@ -73,7 +73,7 @@ Ese es el día a día. Si tu carpeta **no está vacía**, el mismo comando abre 
 │   ├── skill-registry.cache.json  # fingerprint cache v2
 │   └── autoskills-registry.cache.json  # catálogo autoskills (CC-BY-NC-4.0, local/gitignored)
 ├── AGENTS.md                      # instrucciones raíz + stack + comandos dev
-├── opencode.json                  # default_agent, modelos cheap vs strong, bash harden
+├── opencode.json                  # default_agent, modelos cheap vs strong, experimental (permisos: frontmatter de cada agente)
 ├── PROJECT_STATE.md               # CAPA 0 — siempre cargada + review_after
 ├── SUMMARY.md                     # CAPA 1 — última semana + topic (on-demand)
 ├── CHANGELOG/                     # CAPA 2 — historial semanal archivado
@@ -81,6 +81,8 @@ Ese es el día a día. Si tu carpeta **no está vacía**, el mismo comando abre 
 ├── .gitignore
 └── skills-lock.json
 ```
+
+> **Requisito desde 2.0.0: OpenCode >= 2.2.7 (solo V2).** Los permisos de cada agente viven únicamente en el bloque `permissions:` de su frontmatter (formato nativo V2, gana la última regla que casa); `opencode.json` ya no lleva permisos. La profundidad de subagentes es `experimental.subagent_depth: 2` (en V2 la clave raíz se ignora). Si vienes de 1.x: `npx advisor-harness@latest . --upgrade` regenera agentes y `opencode.json` (backup previo, conserva tu `model` por agente y avisa de las claves V1 descartadas). Tabla V1→V2: `bash`→`shell`, `task`→`subagent`, `write`/`patch`→`edit`, `subtask`→`subagent`.
 
 > **Agentes del pipeline**: los 7 agentes listados arriba son los únicos del harness (`advisor` coordina y delega en los otros 6). `general` es un agente built-in de opencode que queda **fuera del pipeline**: el advisor lo deniega por defecto (`task: general: deny`).
 > **Repo público ≠ proyecto instalado.** En este repositorio, `opencode.json`, `skills-lock.json`, `scripts/`, `test/`, `.github/` y la memoria (`PROJECT_STATE.md`, `SUMMARY.md`, `CHANGELOG/`, `.advisor/`) quedan **fuera del paquete público** (`package.json` `files`: `init.sh`, `init.ps1`, `init.cmd`, `init.mjs`, `templates/`, `README.md`, `LICENSE`; `export-ignore` en `git archive`). Salvo `test/` y `.github/`, **todo lo anterior sí se genera** en cada proyecto que instalas: el árbol de arriba es lo que obtiene el proyecto, no lo que se publica en npm. Los dos excluidos son de desarrollo de este repo —la suite propia y los workflows de CI— y no se instalan en ningún proyecto. `.advisor/` tampoco viene de `templates/`: lo crea el instalador en caliente como estado vivo (backups, chunks, cache). La `opencode.json` de **este** repo es la config dev local (gitignored, `{{MODEL_*}}` → `""`) y se genera con `npm run dev:config` desde `templates/opencode.json`; la que se instala en los proyectos es la plantilla.

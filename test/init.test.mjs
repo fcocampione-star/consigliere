@@ -666,6 +666,39 @@ test('--upgrade preserva la memoria, REGENERA AGENTS.md y funde tu modelo de ope
   }
 });
 
+test('--upgrade desde un harness V1: reemplaza agentes y JSON por V2, conserva el modelo y avisa de lo descartado', () => {
+  const base = tmpdir('advisor-init-v1-a-v2');
+  const dir = join(base, 'proyecto');
+  try {
+    if (!TAR) { omitir('tar ausente: --upgrade exige backup previo'); return; }
+    eq(instalar([dir, ...SIN_RED], base).status, 0, 'el install base debe salir con 0');
+    // Estado V1: JSON con permisos por agente + subagent_depth raíz, y frontmatter V1 en builder.
+    const cfgPath = join(dir, 'opencode.json');
+    const v1 = JSON.parse(leer(cfgPath));
+    delete v1.experimental; delete v1.permissions;
+    v1.subagent_depth = 2;
+    v1.agent.builder.model = 'anthropic/claude-sonnet-4-5';
+    v1.agent.builder.permission = { bash: { '*': 'allow', 'git push*': 'ask', 'mi-comando-propio*': 'allow' } };
+    escribir(cfgPath, `${JSON.stringify(v1, null, 2)}\n`);
+    escribir(join(dir, '.opencode', 'agents', 'builder.md'), '---\ndescription: v1\nmode: subagent\npermission:\n  bash:\n    "*": allow\n---\ncuerpo v1\n');
+
+    const res = instalar([dir, '--upgrade', ...SIN_RED], base);
+    eq(res.status, 0, salida(res, '--upgrade V1→V2'));
+    includes(res.out, 'agent.builder.permission', 'avisa de los permisos V1 que no se conservan');
+    includes(res.out, 'subagent_depth', 'avisa del subagent_depth raíz');
+
+    const nuevo = JSON.parse(leer(cfgPath));
+    eq(nuevo.experimental.subagent_depth, 2, 'experimental.subagent_depth restaurado');
+    eq(nuevo.subagent_depth, undefined, 'sin subagent_depth en la raíz');
+    eq(nuevo.agent.builder.permission, undefined, 'el permiso V1 por agente no sobrevive');
+    eq(nuevo.agent.builder.model, 'anthropic/claude-sonnet-4-5', 'el modelo del usuario sí sobrevive');
+    const md = leer(join(dir, '.opencode', 'agents', 'builder.md'));
+    includes(md, 'permissions:', 'builder.md regenerado en V2');
+    assert(!/^permission:/m.test(md), 'sin bloque V1 permission: (formatos no mezclados)');
+  } finally {
+    cleanup(base);
+  }
+});
 test('--upgrade dos veces seguidas deja el árbol idéntico (idempotente)', () => {
   const base = tmpdir('advisor-init-idem');
   const dir = join(base, 'proyecto');

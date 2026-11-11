@@ -1,7 +1,7 @@
 ---
 description: Compacta PROJECT_STATE.md §2 (decisiones) y §5 (patrones) manteniendo solo lo vigente y accionable.
 agent: summarizer
-subtask: true
+subagent: true
 ---
 
 Compacta la memoria de contexto, reduciendo `PROJECT_STATE.md` a lo esencial.

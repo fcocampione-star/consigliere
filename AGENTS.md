@@ -38,7 +38,7 @@
 | DB | N/A — Markdown + grep (PROJECT_STATE.md / SUMMARY.md / CHANGELOG/YYYY-MM-DD.md + memory-index.mjs md+grep, cache .advisor/skill-registry.cache.json; cero dependencias, sin base de datos) |
 | Backend | Node.js >=20.11 ESM (usa `import.meta.dirname`; `.nvmrc` = 20) + Bash 4+ / PowerShell 5.1+ + git/tar — harness CLI (scripts .opencode/scripts/*.mjs, lib/ compartida, loader.mjs) |
 | Frontend | N/A — harness CLI sin UI (genera .opencode/ para opencode TUI; instalador para proyecto vacío) |
-| Auth | N/A — local sin auth; bash harden opencode.json (*:allow, deny rm/dd/mkfs, ask **/.env*/**/*.pem/**/*.key/**/secrets/*/~/.ssh/* + git push) |
+| Auth | N/A — local sin auth; bash harden en el frontmatter `permissions:` de cada agente (V2; *:allow, deny rm/dd/mkfs, ask **/.env*/**/*.pem/**/*.key/**/secrets/*/~/.ssh/* + git push) |
 | Validation | suite propia sin deps: `npm test` = `node --check init.mjs` + `test/run.mjs` + memory-rotate.test + contrato anti-drift + `version:check`; CI con `lint:sh` / `lint:ps1` |
 | Deploy | npm registry advisor-harness@latest via npx / init.mjs + init.sh + init.ps1 + init.cmd per-project (los tres últimos son lanzadores de Node que delegan en init.mjs), --upgrade con backup previo keep 5 en .advisor/backups/ |
 

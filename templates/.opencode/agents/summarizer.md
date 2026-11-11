@@ -1,39 +1,36 @@
 ---
 description: Documenta el progreso en SUMMARY.md y aplica rotación semanal a CHANGELOG/; también consolida decisiones en PROJECT_STATE.md, maneja topic upsert y session summary.
 mode: subagent
-permission:
-  read: allow
-  edit: allow
-  write: allow
-  glob: allow
-  grep: allow
-  list: allow
-  bash:
-    "*": allow
-    "rm -rf /*": deny
-    "rm -rf ~*": deny
-    "sudo rm*": deny
-    "sudo dd*": deny
-    "dd if=* of=/dev/*": deny
-    "mkfs*": deny
-    "chmod -R 777 /*": deny
-    "chmod 777*": deny
-    "del /f /s C:\\*": deny
-    "rmdir /s* C:\\*": deny
-    "Remove-Item* C:\\*": deny
-    "Format-Volume*": deny
-    "diskpart*": deny
-    "cat **/.env*": ask
-    "cat **/*.pem": ask
-    "cat **/*.key": ask
-    "cat **/secrets/*": ask
-    "cat ~/.ssh/*": ask
-    "cat ~/.aws/credentials*": ask
-    "cat ~/.config/gh/hosts.yml": ask
-    "git commit*": ask
-    "git amend*": ask
-    "git push*": ask
-  task: deny
+permissions:
+  - { action: read, resource: "*", effect: allow }
+  - { action: edit, resource: "*", effect: allow }
+  - { action: glob, resource: "*", effect: allow }
+  - { action: grep, resource: "*", effect: allow }
+  - { action: shell, resource: "*", effect: allow }
+  - { action: shell, resource: "rm -rf /*", effect: deny }
+  - { action: shell, resource: "rm -rf ~*", effect: deny }
+  - { action: shell, resource: "sudo rm*", effect: deny }
+  - { action: shell, resource: "sudo dd*", effect: deny }
+  - { action: shell, resource: "dd if=* of=/dev/*", effect: deny }
+  - { action: shell, resource: "mkfs*", effect: deny }
+  - { action: shell, resource: "chmod -R 777 /*", effect: deny }
+  - { action: shell, resource: "chmod 777*", effect: deny }
+  - { action: shell, resource: "del /f /s C:\\*", effect: deny }
+  - { action: shell, resource: "rmdir /s* C:\\*", effect: deny }
+  - { action: shell, resource: "Remove-Item* C:\\*", effect: deny }
+  - { action: shell, resource: "Format-Volume*", effect: deny }
+  - { action: shell, resource: "diskpart*", effect: deny }
+  - { action: shell, resource: "cat **/.env*", effect: ask }
+  - { action: shell, resource: "cat **/*.pem", effect: ask }
+  - { action: shell, resource: "cat **/*.key", effect: ask }
+  - { action: shell, resource: "cat **/secrets/*", effect: ask }
+  - { action: shell, resource: "cat ~/.ssh/*", effect: ask }
+  - { action: shell, resource: "cat ~/.aws/credentials*", effect: ask }
+  - { action: shell, resource: "cat ~/.config/gh/hosts.yml", effect: ask }
+  - { action: shell, resource: "git commit*", effect: ask }
+  - { action: shell, resource: "git amend*", effect: ask }
+  - { action: shell, resource: "git push*", effect: ask }
+  - { action: subagent, resource: "*", effect: deny }
 ---
 
 # Summarizer — Documentador de Memoria 1.0 (md+grep, topic upsert)

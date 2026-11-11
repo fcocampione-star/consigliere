@@ -1,7 +1,7 @@
 ---
 description: Fuerza la rotación semanal de la memoria (SUMMARY → CHANGELOG/) manualmente.
 agent: summarizer
-subtask: true
+subagent: true
 ---
 
 Ejecuta una rotación semanal manual de la memoria persistente.

@@ -55,7 +55,7 @@
 ```
 {{PROJECT_NAME}}/
 ├── AGENTS.md             # este archivo (harness)
-├── opencode.json         # agentes + modelos + bash harden (harness)
+├── opencode.json         # default_agent + modelos por agente + experimental (los permisos viven en .opencode/agents/*.md)
 ├── .opencode/            # agents, commands, skills, scripts del harness
 ├── .agents/skills/       # autoskills autoinstaladas (harness)
 ├── .advisor/             # estado vivo local: backups/, chunks/, caches (gitignored: backups/ y cache)

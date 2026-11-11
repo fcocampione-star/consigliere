@@ -1,24 +1,22 @@
 ---
 description: Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns, search code for keywords, or answer questions about the codebase.
 mode: subagent
-permission:
-  read: allow
-  glob: allow
-  grep: allow
-  list: allow
-  webfetch: allow
-  edit: deny
-  bash:
-    "*": deny
-    "node .opencode/scripts/doctor.mjs*": allow
-    "node .opencode/scripts/memory-index.mjs*": allow
-    "node .opencode/scripts/memory-stats.mjs*": allow
-    "node .opencode/scripts/memory-tokens.mjs*": allow
-    "node .opencode/scripts/memory-lock.mjs status": allow
-    "node .opencode/skills/_skill-loader/loader.mjs list*": allow
-    "node .opencode/skills/_skill-loader/loader.mjs search*": allow
-    "node .opencode/skills/_skill-loader/loader.mjs chunk*": allow
-  task: deny
+permissions:
+  - { action: read, resource: "*", effect: allow }
+  - { action: glob, resource: "*", effect: allow }
+  - { action: grep, resource: "*", effect: allow }
+  - { action: webfetch, resource: "*", effect: allow }
+  - { action: edit, resource: "*", effect: deny }
+  - { action: shell, resource: "*", effect: deny }
+  - { action: shell, resource: "node .opencode/scripts/doctor.mjs *", effect: allow }
+  - { action: shell, resource: "node .opencode/scripts/memory-index.mjs *", effect: allow }
+  - { action: shell, resource: "node .opencode/scripts/memory-stats.mjs *", effect: allow }
+  - { action: shell, resource: "node .opencode/scripts/memory-tokens.mjs *", effect: allow }
+  - { action: shell, resource: "node .opencode/scripts/memory-lock.mjs status", effect: allow }
+  - { action: shell, resource: "node .opencode/skills/_skill-loader/loader.mjs list *", effect: allow }
+  - { action: shell, resource: "node .opencode/skills/_skill-loader/loader.mjs search *", effect: allow }
+  - { action: shell, resource: "node .opencode/skills/_skill-loader/loader.mjs chunk *", effect: allow }
+  - { action: subagent, resource: "*", effect: deny }
 ---
 
 # Explore — Explorador de Codebase

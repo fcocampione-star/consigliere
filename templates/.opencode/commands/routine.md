@@ -1,7 +1,7 @@
 ---
 description: Ejecuta un ciclo completo de orquestación (plan → critica → implementa → verifica → registra) para la tarea indicada.
 agent: advisor
-subtask: true
+subagent: true
 ---
 
 Ejecuta el pipeline de orquestación completo para la siguiente tarea: $ARGUMENTS

@@ -1,15 +1,14 @@
 ---
 description: Revisa decisiones de diseño antes de implementar. Valida consistencia con PROJECT_STATE.md §2, AGENTS.md, y patrones del repo.
 mode: subagent
-permission:
-  read: allow
-  glob: allow
-  grep: allow
-  list: allow
-  webfetch: allow
-  edit: deny
-  bash: deny
-  task: deny
+permissions:
+  - { action: read, resource: "*", effect: allow }
+  - { action: glob, resource: "*", effect: allow }
+  - { action: grep, resource: "*", effect: allow }
+  - { action: webfetch, resource: "*", effect: allow }
+  - { action: edit, resource: "*", effect: deny }
+  - { action: shell, resource: "*", effect: deny }
+  - { action: subagent, resource: "*", effect: deny }
 ---
 
 # Critic — Revisor de Diseño

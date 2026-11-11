@@ -51,6 +51,7 @@ import { fileURLToPath } from 'node:url';
 import {
   suite, test, assert, eq, match, includes, tmpdir, cleanup, runAll,
 } from './harness.mjs';
+import { agentPermissions, resolvePermission } from '../.opencode/scripts/lib/md.mjs';
 
 // ── Rutas derivadas de ESTE archivo (nunca absolutas a un host) ─────────────
 const INIT = fileURLToPath(new URL('../init.mjs', import.meta.url));
@@ -320,19 +321,23 @@ test('init.mjs instala el árbol base completo con los 7 agentes (harness de ver
   const cfg = JSON.parse(leer(OPCFG));
   eq(Object.keys(cfg.agent || {}).sort(), ['advisor', 'builder', 'critic', 'explore', 'planner', 'summarizer', 'verifier'], 'los 7 agentes del pipeline');
   eq(cfg.default_agent, 'advisor', 'default_agent del harness');
-  eq(cfg.subagent_depth, 2, 'subagent_depth==2 en el archivo (contrato one-level + planner→explore)');
+  eq(cfg.experimental.subagent_depth, 2, 'experimental.subagent_depth==2 en el archivo (contrato one-level + planner→explore)');
+  eq(cfg.subagent_depth, undefined, 'sin subagent_depth en la raíz (V2 lo ignora)');
+  eq(cfg.experimental.todo, true, 'experimental.todo (todowrite apagado por defecto en V2)');
   match(cfg.instructions.join(','), /AGENTS\.md/, 'instructions trae AGENTS.md');
   for (const [id, def] of Object.entries(cfg.agent)) {
     eq(def.mode, id === 'advisor' ? 'primary' : 'subagent', `mode de ${id}`);
     eq(def.model, '', `${id} hereda modelo ({{MODEL_*}} → '')`);
   }
-  const bash = cfg.agent.builder.permission.bash;
-  eq(bash['*'], 'allow', 'bash harden: por defecto allow');
-  eq(bash['git push*'], 'ask', 'bash harden: git push → ask');
-  eq(bash['git commit*'], 'ask', 'bash harden: git commit → ask');
-  eq(bash['rm -rf /*'], 'deny', 'bash harden: rm -rf / → deny');
-  eq(bash['cat **/.env*'], 'ask', 'bash harden: .env → ask');
-  eq(bash['cat ~/.ssh/*'], 'ask', 'bash harden: ssh → ask');
+  for (const [id, def] of Object.entries(cfg.agent)) eq(Object.keys(def).sort(), ['mode', 'model'], `${id}: el JSON no lleva permisos (fuente única = frontmatter)`);
+  const rules = agentPermissions(leer(join(PROYECTO, '.opencode', 'agents', 'builder.md')));
+  const shell = (c) => resolvePermission(rules, 'shell', c);
+  eq(shell('npm test'), 'allow', 'bash harden: por defecto allow');
+  eq(shell('git push origin main'), 'ask', 'bash harden: git push → ask');
+  eq(shell('git commit -m x'), 'ask', 'bash harden: git commit → ask');
+  eq(shell('rm -rf /tmp'), 'deny', 'bash harden: rm -rf / → deny');
+  eq(shell('cat a/.env'), 'ask', 'bash harden: .env → ask');
+  eq(shell('cat ~/.ssh/id_rsa'), 'ask', 'bash harden: ssh → ask');
 });
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -366,24 +371,22 @@ test('debug config: default_agent, instructions y los 7 agentes resueltos, stder
   for (const id of ['planner', 'builder', 'verifier', 'critic', 'summarizer', 'explore']) {
     eq(info.agents[id].mode, 'subagent', `${id} subagent`);
   }
-  // PIN de comportamiento v2 2.0.32 (strip silencioso): si una v2 futura
-  // empezara a consumir subagent_depth, hay que migrar el harness (§3).
-  eq(info.subagent_depth, undefined, 'v2 confirma: subagent_depth NO llega a la config resuelta (strip silencioso)');
+  // PIN de comportamiento v2 (2.2.7): la profundidad vive en experimental.subagent_depth.
+  eq(info.experimental?.subagent_depth, 2, 'v2 resuelve experimental.subagent_depth');
 });
 
-test('v2 normaliza permission.bash{} → permissions[] SIN perder ninguna regla deny/ask', () => {
+test('v2 resuelve el frontmatter permissions: de cada agente SIN perder ni reordenar ninguna regla', () => {
   if (!gate()) return;
-  const { docs } = v2ConfigConReintentos(PROYECTO);
-  const cfg = JSON.parse(leer(OPCFG)); // fuente de verdad: lo que escribió el harness
-  const info = docProyecto(docs, PROYECTO);
-  // Wiring fix 2026-10-18: advisor/explore/planner ahora llevan allowlist bash
-  // en el JSON (espejo del frontmatter) → entraron al loop de normalización.
-  for (const id of ['advisor', 'planner', 'builder', 'summarizer', 'explore']) {
-    const esperado = Object.entries(cfg.agent[id].permission.bash)
-      .map(([resource, effect]) => `shell|${resource}|${effect}`).sort();
-    const resuelto = (info.agents[id].permissions || [])
-      .map((p) => `${p.action}|${p.resource}|${p.effect}`).sort();
-    eq(resuelto, esperado, `bash harden de ${id}: V1 perm.bash → v2 permissions[] sin pérdida`);
+  const agentes = v2AgentsConReintentos(PROYECTO);
+  for (const id of ['advisor', 'planner', 'builder', 'verifier', 'critic', 'summarizer', 'explore']) {
+    const esperado = agentPermissions(leer(join(PROYECTO, '.opencode', 'agents', `${id}.md`)))
+      .map((p) => `${p.action}|${p.resource}|${p.effect}`);
+    const resuelto = (agentes.find((x) => x.id === id).permissions || []).map((p) => `${p.action}|${p.resource}|${p.effect}`);
+    // La base por defecto de V2 va ANTES y la config global (external_directory) puede ir después:
+    // el bloque del agente debe aparecer como subsecuencia contigua y en el mismo orden.
+    // (xplore comparte id con el built-in de V2: sus reglas van antes y las del harness se AÑADEN después; V2 añade al final solo browser/skill.)
+    const aparece = resuelto.some((_, i) => resuelto.slice(i, i + esperado.length).join('\n') === esperado.join('\n'));
+    assert(aparece, `: permissions[] del frontmatter íntegro y en orden dentro del resuelto`);
   }
 });
 
@@ -407,12 +410,12 @@ test('debug agents: 7 agentes del pipeline + permisos resueltos (hojas task: den
   // puntuales que hacen ejecutables los comandos sin abrir shell general.
   assert(permiso(de('advisor'), 'shell', 'node .opencode/scripts/git-state.mjs status', 'allow'), 'advisor: allow exacto git-state.mjs status (trámite de rama read-only)');
   assert(permiso(de('advisor'), 'shell', 'node .opencode/scripts/git-state.mjs ahead-behind', 'allow'), 'advisor: allow exacto git-state.mjs ahead-behind (sin fetch)');
-  assert(permiso(de('advisor'), 'shell', 'node .opencode/scripts/routine-model.mjs*', 'allow'), 'advisor: allow puntual routine-model.mjs (wiring /routine)');
+  assert(permiso(de('advisor'), 'shell', 'node .opencode/scripts/routine-model.mjs *', 'allow'), 'advisor: allow puntual routine-model.mjs (wiring /routine)');
   assert(permiso(de('advisor'), 'shell', '*', 'deny'), 'advisor: sigue SIN shell general');
-  assert(permiso(de('explore'), 'shell', 'node .opencode/scripts/doctor.mjs*', 'allow'), 'explore: allow read-only doctor.mjs (wiring /doctor)');
+  assert(permiso(de('explore'), 'shell', 'node .opencode/scripts/doctor.mjs *', 'allow'), 'explore: allow read-only doctor.mjs (wiring /doctor)');
   assert(permiso(de('explore'), 'shell', '*', 'deny'), 'explore: sigue SIN shell general');
-  assert(permiso(de('planner'), 'shell', 'node .opencode/skills/_skill-loader/loader.mjs list*', 'allow'), 'planner: loader.mjs list (wiring /discover)');
-  assert(permiso(de('planner'), 'shell', 'node .opencode/skills/_skill-loader/loader.mjs search*', 'allow'), 'planner: loader.mjs search (wiring /discover)');
+  assert(permiso(de('planner'), 'shell', 'node .opencode/skills/_skill-loader/loader.mjs list *', 'allow'), 'planner: loader.mjs list (wiring /discover)');
+  assert(permiso(de('planner'), 'shell', 'node .opencode/skills/_skill-loader/loader.mjs search *', 'allow'), 'planner: loader.mjs search (wiring /discover)');
 });
 
 test('v2 tolera claves extrañas: strip silencioso, sin ERROR ni stderr', () => {

@@ -11,6 +11,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { agentPermissions, resolvePermission, frontmatterBlock } from './lib/md.mjs';
 
 const ROOT = join(import.meta.dirname, '..', '..');
 const TPL = join(ROOT, 'templates');
@@ -261,30 +262,60 @@ const PLACEHOLDER_SITES = {
 // 4. commit-ask: los commits se proponen (ask), nunca automáticos
 // ─────────────────────────────────────────────────────────────────────────────
 const GIT_PATTERNS = ['git commit*', 'git amend*', 'git push*'];
-try {
-  const cfg = JSON.parse(read(join(TPL, 'opencode.json')));
+// V2: los permisos viven SOLO en el frontmatter de cada agente (`permissions:`, el último
+// match gana). Se resuelven con la misma semántica que documenta V2, no por búsqueda de texto.
+const AGENT_NAMES = ['advisor', 'planner', 'builder', 'verifier', 'critic', 'summarizer', 'explore'];
+function rulesOf(rel) {
+  const t = read(join(ROOT, rel));
+  if (t === null) { fail('commit-ask', `no existe ${rel}`); return null; }
+  try { return agentPermissions(t); } catch (e) { fail('commit-ask', `${rel}: ${e.message}`); return null; }
+}
+for (const base of ['.opencode/agents', 'templates/.opencode/agents']) {
   for (const agent of ['builder', 'summarizer']) {
-    const bash = cfg.agent?.[agent]?.permission?.bash;
+    const rules = rulesOf(`${base}/${agent}.md`);
+    if (!rules) continue;
     for (const pat of GIT_PATTERNS) {
-      if (!bash || bash[pat] !== 'ask') fail('commit-ask', `templates/opencode.json ${agent}.${pat} debe ser ask (es ${bash && bash[pat]})`);
+      const efecto = resolvePermission(rules, 'shell', pat.replace('*', ' x'));
+      if (efecto !== 'ask') fail('commit-ask', `${base}/${agent}.md ${pat} debe resolver a ask (resuelve a ${efecto})`);
     }
   }
-  const vbash = cfg.agent?.verifier?.permission?.bash;
-  for (const pat of GIT_PATTERNS) {
-    if (vbash && vbash[pat] === 'allow') fail('commit-ask', `verifier.${pat} no debe ser allow`);
+  const vrules = rulesOf(`${base}/verifier.md`);
+  if (vrules) for (const pat of GIT_PATTERNS) {
+    if (resolvePermission(vrules, 'shell', pat.replace('*', ' x')) === 'allow') fail('commit-ask', `${base}/verifier.md ${pat} no debe resolver a allow`);
   }
-  pass('commit-ask', 'templates/opencode.json builder+summarizer ask');
+}
+pass('commit-ask', 'builder+summarizer ask y verifier sin allow (frontmatter V2, raíz+template)');
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4b. Fuente única de permisos: ningún permiso fuera del frontmatter de los agentes
+// ─────────────────────────────────────────────────────────────────────────────
+try {
+  const cfg = JSON.parse(read(join(TPL, 'opencode.json')));
+  if (cfg.subagent_depth !== undefined) fail('permisos fuente única', 'templates/opencode.json: subagent_depth en la raíz lo ignora V2 (usa experimental.subagent_depth)');
+  if (cfg.experimental?.subagent_depth !== 2) fail('permisos fuente única', 'templates/opencode.json: experimental.subagent_depth debe ser 2 (planner→explore)');
+  for (const [id, a] of Object.entries(cfg.agent || {})) {
+    for (const k of Object.keys(a)) {
+      if (!['mode', 'model'].includes(k)) fail('permisos fuente única', `templates/opencode.json agent.${id}.${k}: solo mode y model; los permisos viven en el frontmatter de ${id}.md`);
+    }
+  }
+  for (const rule of cfg.permissions || []) {
+    if (rule.action !== 'external_directory') fail('permisos fuente única', `templates/opencode.json permissions global solo admite external_directory (hay ${rule.action})`);
+  }
 } catch (e) {
-  fail('commit-ask', `templates/opencode.json: ${e.message}`);
+  fail('permisos fuente única', `templates/opencode.json: ${e.message}`);
 }
-for (const rel of ['.opencode/agents/summarizer.md', 'templates/.opencode/agents/summarizer.md']) {
-  const t = read(join(ROOT, rel));
-  if (t === null) { fail('commit-ask', `no existe ${rel}`); continue; }
-  for (const pat of GIT_PATTERNS) {
-    if (!t.includes(`"${pat}": ask`)) fail('commit-ask', `${rel} falta "${pat}": ask`);
+for (const base of ['.opencode/agents', 'templates/.opencode/agents']) {
+  for (const agent of AGENT_NAMES) {
+    const t = read(join(ROOT, base, `${agent}.md`));
+    if (t === null) { fail('permisos fuente única', `no existe ${base}/${agent}.md`); continue; }
+    const fm = frontmatterBlock(t);
+    if (/^(permission|tools|name):/m.test(fm)) fail('permisos fuente única', `${base}/${agent}.md mezcla claves V1 (permission/tools/name) con V2`);
+    try {
+      if (agentPermissions(t).length === 0) fail('permisos fuente única', `${base}/${agent}.md sin bloque permissions:`);
+    } catch (e) { fail('permisos fuente única', `${base}/${agent}.md: ${e.message}`); }
   }
 }
-pass('commit-ask', 'summarizer.md (raíz+template) git */amend/push = ask');
+pass('permisos fuente única', 'permissions solo en frontmatter V2; JSON del template sin permisos por agente');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 5. Campos de entrada de sesión: nº canónico real y consistencia docs/plantilla

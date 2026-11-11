@@ -59,8 +59,7 @@ process.on('exit', () => cleanup(TEMPS));
 
 const OPENCODE_OK = JSON.stringify({
   default_agent: 'advisor',
-  subagent_depth: 2,
-  agent: { builder: { permission: { bash: { 'cat **/.env*': 'ask' } } } },
+  experimental: { subagent_depth: 2 },
 }, null, 2);
 
 const STATE_OK = [
@@ -125,6 +124,9 @@ function montar(dir, esc) {
   mkdirSync(join(dir, '.opencode', 'scripts'), { recursive: true });
   mkdirSync(join(dir, '.advisor'), { recursive: true });
   writeFileSync(join(dir, 'opencode.json'), esc.opencode ?? OPENCODE_OK, 'utf8');
+  // V2: el harden vive en el frontmatter de builder.md (fuente unica de permisos).
+  mkdirSync(join(dir, '.opencode', 'agents'), { recursive: true });
+  copyFileSync(join(import.meta.dirname, '..', 'templates', '.opencode', 'agents', 'builder.md'), join(dir, '.opencode', 'agents', 'builder.md'));
   writeFileSync(join(dir, 'PROJECT_STATE.md'), esc.state ?? STATE_OK, 'utf8');
   writeFileSync(join(dir, 'SUMMARY.md'), esc.summary ?? SUMMARY_OK, 'utf8');
   const omit = esc.omit ?? [];
