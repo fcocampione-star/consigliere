@@ -32,7 +32,8 @@ const GIT_STATE_SUBS = ['status', 'log', 'head', 'branch', 'diff-stat', 'ahead-b
 // `routine-model.mjs` recibe ids de modelo LIBRES (`MODEL_RE`), 7 agentes y 4
 // formas de flag, así que no existe un conjunto finito de entradas exactas.
 // Cualquier OTRO `*` en una entrada allow hace fallar el test.
-const ALLOW_WILDCARDS = new Set(['node .opencode/scripts/routine-model.mjs*']);
+// `node init.mjs*` (instalador/upgrade) admite flags y rutas libres: segunda excepción.
+const ALLOW_WILDCARDS = new Set(['node .opencode/scripts/routine-model.mjs*', 'node init.mjs*']);
 
 // Frontmatter delgado: el bloque entre el primer `---` y el siguiente. NO es un parser YAML.
 function frontmatter(text) {
@@ -99,7 +100,7 @@ test('advisor: mode primary + bash deny "*" + 7 trámites git-state exactos + ex
   const fm = frontmatter(agentMd('advisor'));
   includes(fm, 'mode: primary', 'advisor es el agente primario');
   const bash = blockPairs(fm, 'bash');
-  const esperado = { '*': 'deny', 'node .opencode/scripts/routine-model.mjs*': 'allow' };
+  const esperado = { '*': 'deny', 'node .opencode/scripts/routine-model.mjs*': 'allow', 'node init.mjs*': 'allow' };
   for (const sub of GIT_STATE_SUBS) esperado[`node .opencode/scripts/git-state.mjs ${sub}`] = 'allow';
   eq(bash, esperado, 'deny por defecto + trámites git-state exactos + excepción routine-model');
   assert(existsSync(join(SCRIPTS_DIR, 'git-state.mjs')), 'el script de los trámites existe');

@@ -17,7 +17,8 @@
           "node .opencode/scripts/git-state.mjs diff-stat": "allow",
           "node .opencode/scripts/git-state.mjs ahead-behind": "allow",
           "node .opencode/scripts/git-state.mjs remote": "allow",
-          "node .opencode/scripts/routine-model.mjs*": "allow"
+          "node .opencode/scripts/routine-model.mjs*": "allow",
+          "node init.mjs*": "allow"
         }
       }
     },

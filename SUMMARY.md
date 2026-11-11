@@ -7,6 +7,17 @@
 
 <!-- ADVISOR:ENTRIES:START -->
 
+## 2026-11-11 - Advisor puede ejecutar el instalador (`node init.mjs*`)
+
+topic: agents/advisor-init-shell
+review_after: 2027-05-11
+**Goal:** que el `advisor` ejecute `init.mjs` (`--status`/`--upgrade`) sin delegar en `builder`.
+**Discoveries:** los permisos del advisor existen duplicados (frontmatter del `.md` y `opencode.json`) con tests de paridad; no se sabe qué fuente prevalece si discrepan. Abierto, sin refactor decidido: probar empíricamente con el CLI antes de unificar (riesgo alto, planner+critic).
+**Accomplished:** entrada estrecha `"node init.mjs*": allow` con `"*": deny` intacto, en `advisor.md` + espejo `templates/`, `templates/opencode.json` (`agent.advisor.permission.bash`) y `opencode.json` raíz (gitignored); §0 actualizado; `test/wiring-basic.test.mjs` ajustado (`ALLOW_WILDCARDS` + `esperado`). Supersede PARCIAL de `agents/advisor-git-readonly` (ahora 2 comodines: `routine-model.mjs*` e `init.mjs*`). Corregidas afirmaciones obsoletas de «único comodín» en README y PROJECT_STATE §3.
+**Next:** si se quiere unificar permisos advisor (.md vs opencode.json), medir primero cuál prevalece.
+**Files:** `git log --oneline -5` (no listas manuales)
+**Verificación:** `npm test` verde; `node init.mjs <dir> --status` funcionó; `--upgrade` (con backup) de AsistConfgPc y su advisor.md lleva la entrada (líneas 20 y 43).
+
 ## 2026-11-11 - Sync dev/main, validación VERDE, fan-out empírico y piloto T1 del bench A/B (no discrimina)
 
 topic: process/bench-ab
