@@ -105,6 +105,9 @@ test('orden de reglas (gana la última): "*" va PRIMERO en cada bloque shell y n
     eq(resolvePermission(rules, 'shell', 'git commit -m x'), 'ask', `${nombre}: git commit → ask`);
     eq(resolvePermission(rules, 'shell', 'rm -rf /tmp'), 'deny', `${nombre}: rm -rf / → deny`);
     eq(resolvePermission(rules, 'shell', 'cat a/.env'), 'ask', `${nombre}: cat **/.env* → ask`);
+    for (const cmd of ['cat .env', 'cat .env.local', 'cat server.pem', 'cat id.key', 'cat secrets/token']) {
+      eq(resolvePermission(rules, 'shell', cmd), 'ask', `${nombre}: ${cmd} (sin carpeta) → ask`);
+    }
     eq(resolvePermission(rules, 'shell', 'npm test'), 'allow', `${nombre}: shell general allow`);
   }
 });

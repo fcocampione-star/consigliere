@@ -258,7 +258,7 @@ export function resolveOpencode() {
   // En win32 el ejecutable del PATH casi nunca lleva extension implicita: hay
   // que probar cada PATHEXT (opencode.cmd/opencode.exe).
   const exts = process.platform === 'win32'
-    ? ['', ...String(process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean)]
+    ? [...String(process.env.PATHEXT || '.COM;.EXE;.BAT;.CMD').split(';').filter(Boolean), '']
     : [''];
   for (const dir of String(process.env.PATH || '').split(delimiter).filter(Boolean)) {
     for (const ext of exts) {
@@ -305,13 +305,25 @@ export function exportSession(id, { sanitize = true } = {}) {
   ];
   let why = 'sin salida';
   for (const args of candidates) {
-    const res = spawnSync(bin, args, {
-      encoding: 'utf8',
-      maxBuffer: MAX_BUFFER,
-      timeout: EXPORT_TIMEOUT_MS,
-      shell: false,
-      windowsHide: true,
-    });
+    // Node no lanza .cmd/.bat sin shell en win32 (ENOENT/EINVAL): se pasa por
+    // cmd.exe. Seguro porque `id` ya cumple SESSION_ID_RE y las flags son fijas.
+    const viaCmd = process.platform === 'win32' && /\.(cmd|bat)$/i.test(bin);
+    const res = viaCmd
+      ? spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', `"${bin}" ${args.join(' ')}`], {
+        encoding: 'utf8',
+        maxBuffer: MAX_BUFFER,
+        timeout: EXPORT_TIMEOUT_MS,
+        shell: false,
+        windowsHide: true,
+        windowsVerbatimArguments: true,
+      })
+      : spawnSync(bin, args, {
+        encoding: 'utf8',
+        maxBuffer: MAX_BUFFER,
+        timeout: EXPORT_TIMEOUT_MS,
+        shell: false,
+        windowsHide: true,
+      });
     if (res.error && res.error.code === 'ENOENT') {
       fail('session-metrics', `no se pudo ejecutar "${bin}": ${res.error.message}`, EXIT_CODES.DEPENDENCIA);
     }

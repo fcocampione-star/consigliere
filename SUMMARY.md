@@ -7,6 +7,17 @@
 
 <!-- ADVISOR:ENTRIES:START -->
 
+## 2026-11-12 - Rutas sensibles sin carpeta en shell y `session-metrics --session` en Windows
+
+topic: agents/shell-sensitive-paths, tools/session-metrics-win32
+review_after: 2027-05-12
+**Goal:** cerrar §3 (d) `cat .env` sin carpeta no casaba `cat **/.env*` y el sub-pendiente (1) del benchmark: `session-metrics --session` fallaba en Windows (ENOENT).
+**Discoveries:** (1) `cat **/X` no casa rutas sin carpeta; como `shell *` es allow, `cat .env`, `cat server.pem`, `cat secrets/x` corrían sin preguntar. (2) `session-metrics` tenía dos fallos: el resolvedor probaba primero la extensión vacía y elegía el script sh de npm (`...\npm\opencode`) en vez de `opencode.cmd`, y Node no lanza .cmd/.bat sin shell. (3) Una sesión real medida con `--session`: ~12M tokens, casi todo caché.
+**Accomplished:** 4 reglas `ask` (`cat .env*`, `cat *.pem`, `cat *.key`, `cat secrets/*`) en builder y summarizer (raíz + templates) con aserción en `test/wiring-basic.test.mjs` (5 comandos sin carpeta → ask). `session-metrics.mjs` (raíz + templates): extensión vacía al final en PATHEXT y .cmd/.bat vía `ComSpec /d /s /c` (seguro: id validado por `SESSION_ID_RE`, flags fijas).
+**Next:** `type`, `Get-Content`, `less`, `head` NO cubiertos (solo `cat`; requiere decisión de diseño); el texto de builder.md:65 no lista las rutas sin `**/`; sin test unitario del caso .cmd; siguen publicar 2.0.0, `lint:ps1`, benchmark T2, compactar PROJECT_STATE.
+**Files:** `git diff` (no listas manuales)
+**Verificación:** `npm test` verde (23/23, contrato 45 espejos, versión 2.0.0); `doctor` 0 errores previo; `session-metrics --session` real exit 0.
+
 ## 2026-11-11 - Migración del harness a OpenCode V2.2.7 (solo V2), versión 2.0.0
 
 topic: release/v2-only

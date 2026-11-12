@@ -25,6 +25,10 @@ permissions:
   - { action: shell, resource: "cat **/*.pem", effect: ask }
   - { action: shell, resource: "cat **/*.key", effect: ask }
   - { action: shell, resource: "cat **/secrets/*", effect: ask }
+  - { action: shell, resource: "cat .env*", effect: ask }
+  - { action: shell, resource: "cat *.pem", effect: ask }
+  - { action: shell, resource: "cat *.key", effect: ask }
+  - { action: shell, resource: "cat secrets/*", effect: ask }
   - { action: shell, resource: "cat ~/.ssh/*", effect: ask }
   - { action: shell, resource: "cat ~/.aws/credentials*", effect: ask }
   - { action: shell, resource: "cat ~/.config/gh/hosts.yml", effect: ask }
