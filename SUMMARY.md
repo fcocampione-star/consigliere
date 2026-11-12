@@ -7,6 +7,17 @@
 
 <!-- ADVISOR:ENTRIES:START -->
 
+## 2026-11-12 - Publicación de advisor-harness@2.0.0
+
+topic: release/npm-publish
+review_after: 2027-05-12
+**Goal:** publicar 2.0.0 (solo V2) desde `main` vía Trusted Publishing OIDC.
+**Discoveries:** el Trusted Publisher funcionó tal cual (provenance OIDC, sin tokens). Incongruencia ABIERTA: el dry-run 43275316389 terminó en FAILURE (16 min) ANTES de que el run del tag terminara, sin que nadie lo re-disparara ni cancelara, corriendo en paralelo con él; causa NO diagnosticada (sospecha: los 2 jobs macOS cancelados por contención/cola, igual que en la CI de main). Hueco: NINGÚN test custodia los títulos de versión del README (`version:check` no los vigila); el tarball 2.0.0 congeló el título viejo, npmjs.com muestra «Consigliere 1.0» hasta la próxima versión.
+**Accomplished:** secuencia del día: push dev (041b424..0d62db4) → CI dev verde (43255891660, 18/18 tras re-run macOS) → ff main → CI main verde (43262113190 tras re-run --failed de 2 jobs macOS) → dry-run release (43275316389, workflow_dispatch dry-run=true) → tag v2.0.0 → publish. Run 43276187963 success: gate 19/19 ✅, job publish ✅ (33 steps: pack, publish con provenance OIDC, verificación en registry con bucle, GitHub Release con tarball). Registry pasó de latest=1.1.0 a 2.0.0; GitHub Release v2.0.0 marcada Latest (18:13:48Z). README corregido (título «Consigliere 2.0», «Notas de diseño v2.0» + cross-ref), SIN commit aún. §1/§2/§3 de PROJECT_STATE actualizados; abiertos (g)-(j).
+**Next:** (g) diagnosticar failure del dry-run 43275316389 si recurre; (h) aserción de forma en contract-tests para títulos del README; (i) `version:bump patch` en el próximo ciclo para el README de npmjs.com; (j) decisión sobre banners «Consigliere 1.0» (~30 ficheros); commit pendiente del README.
+**Files:** `git log --oneline -5` (no listas manuales)
+**Verificación:** run 43276187963 success (verifier); `npm view advisor-harness dist-tags.latest` = 2.0.0; `gh release list` v2.0.0 Latest.
+
 ## 2026-11-12 - Preparación de la publicación 2.0.0 (docs y verificación previa)
 
 topic: release/v2.0.0-prep

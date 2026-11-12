@@ -1,4 +1,4 @@
-# Consigliere 1.0 (Advisor Harness) — Harness de agentes + memoria persistente para opencode
+# Consigliere 2.0 (Advisor Harness) — Harness de agentes + memoria persistente para opencode
 
 > **Solo por proyecto.** Un scaffold reutilizable que deja cada proyecto listo para trabajar con opencode: agentes orquestados, memoria que recuerda decisiones entre sesiones y comandos para auditar, registrar y revisar el progreso. Sin dependencias globales de runtime, sin servicios: es Markdown + scripts que se instalan **dentro** del proyecto.
 
@@ -266,7 +266,7 @@ Lo que **no** es una solución: el harness solo valida la *forma* de un id de mo
 
 - `/discover [foco]` — audita stack real vs declarado + skills presentes/faltantes. Incluye **búsqueda real** en el registry público de autoskills (`skill-search.mjs`, no simulada) y propone crear skills de proyecto con `skill-scaffold.mjs`.
 - `/skill-capture <topic>` — consolida la memoria de un topic en una **SKILL real** (no esqueleto) en `.opencode/skills/<name>/SKILL.md`: decisión §2 (`[topic:]` y plural `[topics:]`, fuente primaria), patrón §5, entradas SUMMARY/CHANGELOG (match exacto o por prefijo de categoría, dedup por id) e ítems §3 marcados *(pendiente)*. Dry-run por defecto (`--write [--force]` escribe vía `skill-capture.mjs`); **fail-closed**: sin ≥1 fuente consolidable sale con uso — un topic que solo existe como pendiente §3 no genera skill.
-- `/routine <tarea> [--parallel --skip-verify --skip-critic]` — enruta la tarea por sí solo: pocos archivos → directo; muchos → delega en subagentes (plan → revisión → implementación → verificación → registro). Para los detalles técnicos, ver *Notas de diseño v1.0*.
+- `/routine <tarea> [--parallel --skip-verify --skip-critic]` — enruta la tarea por sí solo: pocos archivos → directo; muchos → delega en subagentes (plan → revisión → implementación → verificación → registro). Para los detalles técnicos, ver *Notas de diseño v2.0*.
 - `/doctor` — diagnóstico del harness y la memoria: `opencode.json` (default agent, profundidad, harden bash), tamaños y `topic:` de la memoria, lock huérfano, hook post-commit, cache de skills, scripts, directorios de estado y artefactos derivados (manifest, índice, `review_after` vencidos). Los artefactos regenerables son ℹ️ y nunca rompen; el exit code es 0 (ok), 1 (warnings) o 2 (errores).
 - `/record <contexto>` — persiste con formato 6 campos `Goal/Discoveries/Accomplished/Next/Files/Verificación` (compat `Qué/Verificación`).
 - `/review` — lista decisiones stale (`review_after` +90d).
@@ -431,7 +431,7 @@ El repo tiene su propia suite, sin dependencias externas (nada de `npm ci`: no h
 
 > `prepublishOnly` **no** corre al publicar un tarball (`npm publish <tarball>`), que es exactamente lo que hace el workflow: la cobertura real son los steps de `release.yml` (`version:check`, `test:contract`, `npm test`), no el hook del `package.json`.
 
-## Notas de diseño v1.0 (detalle técnico)
+## Notas de diseño v2.0 (detalle técnico)
 
 - **Solo por proyecto**: cero `~/.local/bin`, sin modificar el `PATH`, cero drift (una instalación global es opcional y la gestiona npm, no el harness).
 - **Routing orgánico**: el advisor decide por **clase de riesgo** (esquema/auth/contrato/migración/irreversible/arquitectura → delegated/spec-lite; bajo riesgo y pocos files → direct), con el **conteo de files como desempate**. Sin burocracia en tareas pequeñas.
