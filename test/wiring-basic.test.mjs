@@ -112,6 +112,35 @@ test('orden de reglas (gana la última): "*" va PRIMERO en cada bloque shell y n
   }
 });
 
+test('rutas sensibles piden ask con cualquier lector, no solo cat (builder, summarizer, verifier)', () => {
+  const lectores = ['type', 'Get-Content', 'gc', 'less', 'more', 'head -n 5', 'tail -f', 'grep KEY', 'cat'];
+  const rutas = ['.env', 'app\\.env.local', 'cfg/.env', 'server.pem', 'id.key', 'secrets/token', 'secrets\\token', '~/.ssh/id_rsa', 'C:\\u\\.ssh\\id', '~/.aws/credentials'];
+  for (const nombre of ['builder', 'summarizer', 'verifier']) {
+    const rules = shellRules(nombre);
+    for (const l of lectores) for (const r of rutas) {
+      eq(resolvePermission(rules, 'shell', `${l} ${r}`), 'ask', `${nombre}: "${l} ${r}" → ask`);
+    }
+  }
+});
+
+test('read: los 7 agentes piden ask en rutas sensibles (el read * allow no anula la política base de V2)', () => {
+  const sensibles = ['.env', 'app/.env', '.env.local', 'cfg/.env.production', 'server.pem', 'keys/id.key', 'secrets/token', 'a/secrets/token', '.ssh/id_rsa', 'C:/Users/u/.ssh/id_rsa', '.aws/credentials'];
+  const normales = ['src/index.ts', 'README.md', '.env.example', 'cfg/.env.example', 'package.json', 'docs/environment.md'];
+  for (const nombre of [...LEAVES, 'advisor', 'planner']) {
+    const rules = rulesOf(nombre).filter((r) => r.action === 'read');
+    for (const p of sensibles) eq(resolvePermission(rules, 'read', p), 'ask', `${nombre}: read ${p} → ask`);
+    for (const p of normales) eq(resolvePermission(rules, 'read', p), 'allow', `${nombre}: read ${p} → allow`);
+  }
+});
+
+test('las reglas de rutas sensibles no dan falsos positivos en comandos normales', () => {
+  const normales = ['npm test', 'node -e "console.log(process.env.HOME)"', 'git status', 'node .opencode/scripts/doctor.mjs --json', 'cat README.md', 'ls src'];
+  for (const nombre of ['builder', 'summarizer', 'verifier']) {
+    const rules = shellRules(nombre);
+    for (const cmd of normales) eq(resolvePermission(rules, 'shell', cmd), 'allow', `${nombre}: "${cmd}" sigue allow`);
+  }
+});
+
 test('el escape de backslash de Windows llega íntegro (del /f /s C:\\*) en builder y summarizer', () => {
   for (const name of ['builder', 'summarizer']) {
     const res = shellRules(name).map((r) => r.resource);

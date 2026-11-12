@@ -3,10 +3,28 @@ description: Verifica los cambios corriendo typecheck, lint y tests; reporta fal
 mode: subagent
 permissions:
   - { action: read, resource: "*", effect: allow }
+  - { action: read, resource: "*.env", effect: ask }
+  - { action: read, resource: "*.env.*", effect: ask }
+  - { action: read, resource: "*.env.example", effect: allow }
+  - { action: read, resource: "*.pem", effect: ask }
+  - { action: read, resource: "*.key", effect: ask }
+  - { action: read, resource: "*secrets/*", effect: ask }
+  - { action: read, resource: "*.ssh/*", effect: ask }
+  - { action: read, resource: "*.aws/credentials*", effect: ask }
   - { action: edit, resource: "*", effect: deny }
   - { action: glob, resource: "*", effect: allow }
   - { action: grep, resource: "*", effect: allow }
   - { action: shell, resource: "*", effect: allow }
+  - { action: shell, resource: "* .env*", effect: ask }
+  - { action: shell, resource: "*/.env*", effect: ask }
+  - { action: shell, resource: "*\\.env*", effect: ask }
+  - { action: shell, resource: "*.pem*", effect: ask }
+  - { action: shell, resource: "*.key*", effect: ask }
+  - { action: shell, resource: "*secrets/*", effect: ask }
+  - { action: shell, resource: "*secrets\\*", effect: ask }
+  - { action: shell, resource: "*/.ssh/*", effect: ask }
+  - { action: shell, resource: "*\\.ssh\\*", effect: ask }
+  - { action: shell, resource: "*.aws/credentials*", effect: ask }
   - { action: shell, resource: "git commit*", effect: deny }
   - { action: shell, resource: "git push*", effect: deny }
   - { action: shell, resource: "git amend*", effect: deny }

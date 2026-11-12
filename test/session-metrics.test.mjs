@@ -221,6 +221,45 @@ test('binario con un export v2 válido: exit 0 y mide la delegación', () => {
   }
 });
 
+/** Binario opencode falso para win32: un `.cmd` que imprime `payload`, más un `opencode` sh sin extensión (como deja npm). */
+function fakeCmd(payload) {
+  const dir = tmpdir('session-metrics');
+  const file = join(dir, 'payload.json');
+  writeFileSync(file, payload);
+  const bin = join(dir, 'opencode.cmd');
+  writeFileSync(bin, `@echo off\r\ntype "${file}"\r\n`);
+  writeFileSync(join(dir, 'opencode'), '#!/bin/sh\nexit 1\n');
+  return { dir, bin, limpiar: () => cleanup(dir) };
+}
+
+test('win32: un .cmd vía ADVISOR_OPENCODE se ejecuta (cmd.exe) y mide', () => {
+  if (process.platform !== 'win32') return;
+  const f = fakeCmd(V2_CON_TOKENS);
+  try {
+    const r = ejecutar(['--session', 'ses_abcdefghijklmnop', '--json'], { ADVISOR_OPENCODE: f.bin });
+    eq(r.status, 0, `un .cmd debe poder lanzarse: ${r.out}${r.err}`);
+    eq(JSON.parse(r.out).delegations, { critic: 1 }, 'la delegación del .cmd se mide');
+  } finally {
+    f.limpiar();
+  }
+});
+
+test('win32: en el PATH gana opencode.cmd sobre el script sh sin extensión', () => {
+  if (process.platform !== 'win32') return;
+  const f = fakeCmd(V2_CON_TOKENS);
+  try {
+    const r = ejecutar(['--session', 'ses_abcdefghijklmnop', '--json'], {
+      ADVISOR_OPENCODE: '',
+      PATH: f.dir,
+      PATHEXT: '.COM;.EXE;.BAT;.CMD',
+    });
+    eq(r.status, 0, `no debe elegir el opencode sin extensión: ${r.out}${r.err}`);
+    eq(JSON.parse(r.out).delegations, { critic: 1 }, 'se ejecutó opencode.cmd');
+  } finally {
+    f.limpiar();
+  }
+});
+
 test('--json es parseable y schema 1; analyze funciona como alias', () => {
   const f = fixture(V1_CON_TOKENS);
   try {

@@ -4,6 +4,14 @@ mode: primary
 color: "#6c5ce7"
 permissions:
   - { action: read, resource: "*", effect: allow }
+  - { action: read, resource: "*.env", effect: ask }
+  - { action: read, resource: "*.env.*", effect: ask }
+  - { action: read, resource: "*.env.example", effect: allow }
+  - { action: read, resource: "*.pem", effect: ask }
+  - { action: read, resource: "*.key", effect: ask }
+  - { action: read, resource: "*secrets/*", effect: ask }
+  - { action: read, resource: "*.ssh/*", effect: ask }
+  - { action: read, resource: "*.aws/credentials*", effect: ask }
   - { action: edit, resource: "*", effect: deny }
   - { action: glob, resource: "*", effect: deny }
   - { action: grep, resource: "*", effect: deny }

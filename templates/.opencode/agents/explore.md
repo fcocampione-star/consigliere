@@ -3,6 +3,14 @@ description: Fast agent specialized for exploring codebases. Use this when you n
 mode: subagent
 permissions:
   - { action: read, resource: "*", effect: allow }
+  - { action: read, resource: "*.env", effect: ask }
+  - { action: read, resource: "*.env.*", effect: ask }
+  - { action: read, resource: "*.env.example", effect: allow }
+  - { action: read, resource: "*.pem", effect: ask }
+  - { action: read, resource: "*.key", effect: ask }
+  - { action: read, resource: "*secrets/*", effect: ask }
+  - { action: read, resource: "*.ssh/*", effect: ask }
+  - { action: read, resource: "*.aws/credentials*", effect: ask }
   - { action: glob, resource: "*", effect: allow }
   - { action: grep, resource: "*", effect: allow }
   - { action: webfetch, resource: "*", effect: allow }

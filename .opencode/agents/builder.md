@@ -3,6 +3,14 @@ description: Implementa los cambios de código que diseñó el planner/critic si
 mode: subagent
 permissions:
   - { action: read, resource: "*", effect: allow }
+  - { action: read, resource: "*.env", effect: ask }
+  - { action: read, resource: "*.env.*", effect: ask }
+  - { action: read, resource: "*.env.example", effect: allow }
+  - { action: read, resource: "*.pem", effect: ask }
+  - { action: read, resource: "*.key", effect: ask }
+  - { action: read, resource: "*secrets/*", effect: ask }
+  - { action: read, resource: "*.ssh/*", effect: ask }
+  - { action: read, resource: "*.aws/credentials*", effect: ask }
   - { action: edit, resource: "*", effect: allow }
   - { action: glob, resource: "*", effect: allow }
   - { action: grep, resource: "*", effect: allow }
@@ -25,10 +33,16 @@ permissions:
   - { action: shell, resource: "cat **/*.pem", effect: ask }
   - { action: shell, resource: "cat **/*.key", effect: ask }
   - { action: shell, resource: "cat **/secrets/*", effect: ask }
-  - { action: shell, resource: "cat .env*", effect: ask }
-  - { action: shell, resource: "cat *.pem", effect: ask }
-  - { action: shell, resource: "cat *.key", effect: ask }
-  - { action: shell, resource: "cat secrets/*", effect: ask }
+  - { action: shell, resource: "* .env*", effect: ask }
+  - { action: shell, resource: "*/.env*", effect: ask }
+  - { action: shell, resource: "*\\.env*", effect: ask }
+  - { action: shell, resource: "*.pem*", effect: ask }
+  - { action: shell, resource: "*.key*", effect: ask }
+  - { action: shell, resource: "*secrets/*", effect: ask }
+  - { action: shell, resource: "*secrets\\*", effect: ask }
+  - { action: shell, resource: "*/.ssh/*", effect: ask }
+  - { action: shell, resource: "*\\.ssh\\*", effect: ask }
+  - { action: shell, resource: "*.aws/credentials*", effect: ask }
   - { action: shell, resource: "cat ~/.ssh/*", effect: ask }
   - { action: shell, resource: "cat ~/.aws/credentials*", effect: ask }
   - { action: shell, resource: "cat ~/.config/gh/hosts.yml", effect: ask }
@@ -66,7 +80,7 @@ La spec es el contrato: `critic` la valida y `verifier` la usa como base.
 
 Eres **autosuficiente** en cualquier OS/stack: `bash: "*": allow`. Solo lo **irreparable** está bloqueado (`deny` muy específico). `ASK` para los `git` que publican/reescriben historia (`git commit*`, `git amend*`, `git push*`) y las rutas sensibles.
 
-**Bloqueados (`deny`):** `rm -rf /*`, `rm -rf ~*`, `sudo rm*`/`sudo dd*`, `dd if=* of=/dev/*`, `mkfs*`, `chmod -R 777 /*`/`chmod 777*`, `del /f /s C:\*`, `rmdir /s* C:\*`, `Remove-Item* C:\*`, `Format-Volume*`, `diskpart*`. **Sensibles (`ask`):** `cat **/.env*`, `**/*.pem`, `**/*.key`, `**/secrets/*`, `~/.ssh/*`, `~/.aws/credentials`, `~/.config/gh/hosts.yml`, `git commit*`, `git amend*`, `git push*`. Todo lo demás (incluido `rm -rf ./dist`, `npm/python/go`) está permitido sin fricción. El detalle reparable se recupera vía `git restore`/`stash`.
+**Bloqueados (`deny`):** `rm -rf /*`, `rm -rf ~*`, `sudo rm*`/`sudo dd*`, `dd if=* of=/dev/*`, `mkfs*`, `chmod -R 777 /*`/`chmod 777*`, `del /f /s C:\*`, `rmdir /s* C:\*`, `Remove-Item* C:\*`, `Format-Volume*`, `diskpart*`. **Sensibles (`ask`):** `cat **/.env*`, `**/*.pem`, `**/*.key`, `**/secrets/*`, `~/.ssh/*`, `~/.aws/credentials`, `~/.config/gh/hosts.yml`, `git commit*`, `git amend*`, `git push*`. Además, **cualquier comando** (`type`, `Get-Content`, `less`, `head`, `grep`…) que mencione `.env`, `*.pem`, `*.key`, `secrets/`, `.ssh/` o `.aws/credentials` pide confirmación. Todo lo demás (incluido `rm -rf ./dist`, `npm/python/go`) está permitido sin fricción. El detalle reparable se recupera vía `git restore`/`stash`.
 
 ## Skills
 
