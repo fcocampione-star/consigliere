@@ -26,7 +26,8 @@
 - **One level of depth** (advisor delega); leaf agents `task: deny` (except `planner→explore` depth 2).
 - `general` (built-in de opencode) queda fuera del pipeline de 7 agentes y denegado en advisor (`task: general: deny`).
 - **Models**: per-agent `model:` en `opencode.json` (placeholders `{{MODEL_*}}` → cheap=verifier/summarizer/explore, strong=builder/planner/critic). El harness solo valida la forma del id, nunca si tiene entitlement: si sale `OpenCode's free tier can only be used from within OpenCode`, ver la sección del README "Modelos del free tier" (es opencode, no el harness).
-- **Builder safety**: bash harden `*: allow`, `deny` irreparable + `ask` sensibles (`**/.env*`, `**/*.pem`, `**/*.key`, `**/secrets/*`, `~/.ssh/*`, `git commit/amend/push`).
+- **Builder safety**: `permissions:` V2 en el frontmatter: `*: allow`, `deny` irreparable, `ask` para `git commit/amend/push` y para cualquier comando de shell que mencione rutas sensibles (`.env`, `*.pem`, `*.key`, `secrets/`, `.ssh/`, `.aws/credentials`), más `read ask` en esas rutas (`*.env.example` → allow).
+- **Delegate-on-deny** (`canon:delegate-on-deny`): ante `Permission denied` el advisor delega en builder/verifier/explore y no pide permisos al usuario; su `shell *: deny` es diseño.
 - **Commits proposed, never automatic** (`git commit/push/amend → ask`) y **solo tras cerrar memoria**: si hubo cambios, primero `/record` (paso `summarizer`) — el summarizer es el cierre; nunca propongas commit con la memoria sin registrar.
 - Quick commands: `/discover [foco]`, `/routine <tarea> [--parallel --skip-verify --skip-critic]` (routing+spec-lite integrado), `/doctor`, `/record <contexto>` (6 campos + topic), `/review`, `/rotate-memory`, `/compact-state`, `/skill-capture <topic>`, `/modo <educador|practicante|copiloto|auto>`.
 - **Comunicación adaptativa**: Advisor detecta nivel por señales (educador→copiloto), nunca pregunta nivel; reglas anti-molestia en `advisor.md §8`.
@@ -38,7 +39,7 @@
 | DB | N/A — Markdown + grep (PROJECT_STATE.md / SUMMARY.md / CHANGELOG/YYYY-MM-DD.md + memory-index.mjs md+grep, cache .advisor/skill-registry.cache.json; cero dependencias, sin base de datos) |
 | Backend | Node.js >=20.11 ESM (usa `import.meta.dirname`; `.nvmrc` = 20) + Bash 4+ / PowerShell 5.1+ + git/tar — harness CLI (scripts .opencode/scripts/*.mjs, lib/ compartida, loader.mjs) |
 | Frontend | N/A — harness CLI sin UI (genera .opencode/ para opencode TUI; instalador para proyecto vacío) |
-| Auth | N/A — local sin auth; bash harden en el frontmatter `permissions:` de cada agente (V2; *:allow, deny rm/dd/mkfs, ask **/.env*/**/*.pem/**/*.key/**/secrets/*/~/.ssh/* + git push) |
+| Auth | N/A — local sin auth; bash harden en el frontmatter `permissions:` de cada agente (V2; *:allow, deny rm/dd/mkfs, ask git push + comandos que mencionan rutas sensibles + read ask en ellas) |
 | Validation | suite propia sin deps: `npm test` = `node --check init.mjs` + `test/run.mjs` + memory-rotate.test + contrato anti-drift + `version:check`; CI con `lint:sh` / `lint:ps1` |
 | Deploy | npm registry advisor-harness@latest via npx / init.mjs + init.sh + init.ps1 + init.cmd per-project (los tres últimos son lanzadores de Node que delegan en init.mjs), --upgrade con backup previo keep 5 en .advisor/backups/ |
 

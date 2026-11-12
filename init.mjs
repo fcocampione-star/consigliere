@@ -773,7 +773,7 @@ function finish(projectName, targetDir) {
   console.log(`  /review                Listar decisiones stale (review_after)`);
   console.log(`  /rotate-memory         Rotación semanal manual`);
   console.log(`  /compact-state         Compactar PROJECT_STATE.md\n`);
-  console.log(`${C.dim}Instalación 100% por proyecto — sin binario global. Actualiza con: npx advisor-harness@latest ${targetDir} --upgrade${C.reset}\n`);
+  console.log(`${C.dim}Instalación 100% por proyecto — con npx no hace falta instalación global. Actualiza con: npx advisor-harness@latest ${targetDir} --upgrade${C.reset}\n`);
 }
 
 // Un dry-run no escribe nada: jamás debe cantar éxito ni la lista de próximos
@@ -1370,7 +1370,8 @@ Estado: vivo en .advisor/.
 Genera (por defecto, --part all): .opencode/ (agents, commands, plans, skills, scripts),
 AGENTS.md, PROJECT_STATE.md, SUMMARY.md, CHANGELOG/, .advisor/, .gitignore, skills-lock.json.
 
-Instalación: solo por proyecto, sin binario global.
+Instalación: por proyecto; con npx no hace falta instalación global
+(el paquete expone los bins advisor, advisor-harness y consigliere-harness).
   npx advisor-harness@latest /ruta/proyecto
   node ./init.mjs /ruta/proyecto
 

@@ -2,7 +2,7 @@
 
 > **Solo por proyecto.** Un scaffold reutilizable que deja cada proyecto listo para trabajar con opencode: agentes orquestados, memoria que recuerda decisiones entre sesiones y comandos para auditar, registrar y revisar el progreso. Sin dependencias globales de runtime, sin servicios: es Markdown + scripts que se instalan **dentro** del proyecto.
 
-> **✅ Publicado en npm:** el paquete `advisor-harness` ([v1.1.0](https://www.npmjs.com/package/advisor-harness)) ya está en el registry, así que `npx advisor-harness@latest <dir>` funciona directamente. La versión publicada sale de `package.json` y de ningún otro sitio: las copias que la repiten las sincroniza `npm run version:bump`. También puedes instalarlo global (`npm install -g advisor-harness`) o clonar el repo (`git clone` + `node init.mjs` / `./init.sh` / `powershell -File init.ps1`).
+> **✅ Publicado en npm:** el paquete `advisor-harness` ([v2.0.0](https://www.npmjs.com/package/advisor-harness), requiere OpenCode >= 2.2.7) ya está en el registry, así que `npx advisor-harness@latest <dir>` funciona directamente. La versión publicada sale de `package.json` y de ningún otro sitio: las copias que la repiten las sincroniza `npm run version:bump`. También puedes instalarlo global (`npm install -g advisor-harness`) o clonar el repo (`git clone` + `node init.mjs` / `./init.sh` / `powershell -File init.ps1`).
 
 ## Requisitos
 
@@ -37,7 +37,7 @@ Ese es el día a día. Si tu carpeta **no está vacía**, el mismo comando abre 
 │   │   ├── explore.md             # audita contexto + skills (leaf, depth 2)
 │   │   ├── planner.md             # diseña + spec Given/When/Then (≤650w)
 │   │   ├── critic.md              # revisa decisiones de diseño
-│   │   ├── builder.md             # implementa (bash harden)
+│   │   ├── builder.md             # implementa (permisos V2: ver «Rutas sensibles y límites»)
 │   │   ├── verifier.md            # typecheck/lint/tests
 │   │   └── summarizer.md          # memoria 3 capas + topic upsert + session summary
 │   ├── commands/
@@ -86,6 +86,23 @@ Ese es el día a día. Si tu carpeta **no está vacía**, el mismo comando abre 
 
 > **Agentes del pipeline**: los 7 agentes listados arriba son los únicos del harness (`advisor` coordina y delega en los otros 6). `general` es un agente built-in de opencode que queda **fuera del pipeline**: el advisor lo deniega por defecto (`task: general: deny`).
 > **Repo público ≠ proyecto instalado.** En este repositorio, `opencode.json`, `skills-lock.json`, `scripts/`, `test/`, `.github/` y la memoria (`PROJECT_STATE.md`, `SUMMARY.md`, `CHANGELOG/`, `.advisor/`) quedan **fuera del paquete público** (`package.json` `files`: `init.sh`, `init.ps1`, `init.cmd`, `init.mjs`, `templates/`, `README.md`, `LICENSE`; `export-ignore` en `git archive`). Salvo `test/` y `.github/`, **todo lo anterior sí se genera** en cada proyecto que instalas: el árbol de arriba es lo que obtiene el proyecto, no lo que se publica en npm. Los dos excluidos son de desarrollo de este repo —la suite propia y los workflows de CI— y no se instalan en ningún proyecto. `.advisor/` tampoco viene de `templates/`: lo crea el instalador en caliente como estado vivo (backups, chunks, cache). La `opencode.json` de **este** repo es la config dev local (gitignored, `{{MODEL_*}}` → `""`) y se genera con `npm run dev:config` desde `templates/opencode.json`; la que se instala en los proyectos es la plantilla.
+
+### Rutas sensibles y límites
+
+Los permisos viven en el frontmatter `permissions:` de cada agente (lista `{action,resource,effect}`; gana la **última** regla que casa):
+
+- **Shell**: `deny` para lo irreparable (`rm -rf /*`, `mkfs*`, `dd … of=/dev/*`…) y `ask` para `git commit/amend/push`. En `builder`, `summarizer` y `verifier`, **cualquier** comando que *mencione* `.env`, `*.pem`, `*.key`, `secrets/`, `.ssh/` o `.aws/credentials` pide confirmación (`cat`, `type`, `Get-Content`, `head`…).
+- **Lectura**: en los 7 agentes, tras `read * allow` se restauran `read ask` para `*.env`, `*.env.*`, `*.pem`, `*.key`, `*secrets/*`, `*.ssh/*` y `*.aws/credentials*`; `*.env.example` vuelve a `allow`. El `read * allow` anulaba la política base de V2, de ahí la restauración.
+- **Límites conocidos**: `grep` y `glob` no se pueden proteger por ruta; hay falsos positivos aceptados (`git add .env.example` pide `ask`); el `shell *: deny` del `advisor` es diseño (ante `Permission denied` delega en `builder`/`verifier`/`explore`, no pide permisos).
+- **Sin probar**: que «Allow always» pueda anular los `ask` de estas rutas. No des por hecha la protección si lo usas.
+
+## Novedades 2.0.0 / Migración desde 1.x
+
+- **Ruptura**: solo OpenCode V2 (>= 2.2.7); ya no hay compatibilidad V1.
+- **Permisos** en el `permissions:` del frontmatter de cada agente, no en `opencode.json`. La tabla V1→V2 de claves está en la nota «Requisito desde 2.0.0», más arriba.
+- **Profundidad de subagentes**: `experimental.subagent_depth: 2` (la clave raíz se ignora en V2).
+- **Rutas sensibles**: `ask` por mención de ruta en shell y `read ask` (ver arriba).
+- **Migrar**: `npx advisor-harness@latest . --upgrade` hace backup previo, conserva tu `model` por agente y avisa de las claves V1 descartadas.
 
 ## Instalación
 
@@ -420,7 +437,7 @@ El repo tiene su propia suite, sin dependencias externas (nada de `npm ci`: no h
 - **Routing orgánico**: el advisor decide por **clase de riesgo** (esquema/auth/contrato/migración/irreversible/arquitectura → delegated/spec-lite; bajo riesgo y pocos files → direct), con el **conteo de files como desempate**. Sin burocracia en tareas pequeñas.
 - **SDD-lite integrado en `routine`** (≤650w Given/When/Then), no 10 fases pesadas.
 - **Modelos cheap vs strong**: `{{MODEL_*}}` en `opencode.json` — cheap=verifier/summarizer/explore, strong=builder/planner/critic. El harness valida la forma del id, nunca el derecho a usarlo (ver § *Modelos del free tier*).
-- **Harden bash**: deny extendido `**/*.pem,**/*.key,**/.env*,~/.ssh/*,**/secrets/*`.
+- **Permisos V2**: `permissions:` en el frontmatter de cada agente — `deny` irreparable + `ask` en sensibles (por mención de ruta en shell y `read` ask); detalle en § *Rutas sensibles y límites*.
 - **Memoria md+grep**: topic upsert + stale + sync local, cero dependencias (inspirada en Engram, sin su base de datos).
 - **Ops**: `/doctor` + backup previo obligatorio keep 5 + `--upgrade` (preserva la memoria, regenera la config) + `--part/--status/--restore/--uninstall` modulares.
 - **Rename**: display `Advisor`, npm `advisor-harness` (con bin alias `consigliere-harness`), estado vivo solo en `.advisor/`, cache v2 (ver § Compatibilidad rename).

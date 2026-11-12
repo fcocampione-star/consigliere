@@ -5,6 +5,7 @@ Flujo de desarrollo del harness. Esto es un repo **sin dependencias**: no hay `p
 ## Requisitos
 
 - **Node.js >= 20.11.0** (`.nvmrc` = 20). Es el suelo duro: el harness usa `import.meta.dirname`, disponible desde 20.11.
+- **OpenCode >= 2.2.7** (solo V2) para ejecutar el harness generado; no hay compatibilidad V1.
 - Bash 4+ o PowerShell 5.1+ (solo para los lanzadores y los scripts de shell), `git` y `tar`.
 
 ## Antes de tocar nada

@@ -7,6 +7,39 @@
 
 <!-- ADVISOR:ENTRIES:START -->
 
+## 2026-11-12 - Preparación de la publicación 2.0.0 (docs y verificación previa)
+
+topic: release/v2.0.0-prep
+review_after: 2027-05-12
+**Goal:** cerrar docs y memoria de `dev` antes de promover a `main` y publicar 2.0.0.
+**Discoveries:** informe del verifier: empaquetado OK (55 archivos, 153 kB), `version:check` 2.0.0, `main` es ancestro de `dev` (ff-only posible), el tag `v2.0.0` no existe, npm `latest` = 1.1.0. El CI de `dev` tiene un run en cola >19 h y ningún run para los commits de hoy. El Trusted Publisher de npmjs.com NO es verificable desde aquí; `lint:ps1` sin verificar.
+**Accomplished:** README (línea 5 v2.0.0 / requisito >=2.2.7, sección «Rutas sensibles y límites», «Novedades 2.0.0 / Migración desde 1.x»), AGENTS.md, CONTRIBUTING (requisito V2) y redacción de «sin binario global» en `init.mjs`. SUMMARY/PROJECT_STATE puestos al día.
+**Next:** push `dev` → CI verde → ff `main` → (dry-run de `release.yml`) → tag `v2.0.0`.
+**Files:** `git log --oneline -5` (no listas manuales)
+**Verificación:** informe del verifier (arriba); `npm test` verde; nada publicado ni pusheado.
+
+## 2026-11-12 - El advisor delega ante `Permission denied` en vez de pedir permisos
+
+topic: agents/delegate-on-deny
+review_after: 2027-05-12
+**Goal:** que el advisor, ante un `deny`, delegue en lugar de pedir al usuario que habilite el shell.
+**Discoveries:** el advisor había pedido al usuario habilitar el shell. El texto no garantiza conducta; lo que protege es el `deny` (su `shell *: deny` es diseño).
+**Accomplished:** marcador `canon:delegate-on-deny` en §0 de `advisor.md` (+ espejo), aclaración de «Needs your decision» (permiso para algo destructivo/sensible, no permisos de herramienta) y chequeo `(a-bis)` en `contract-tests.mjs` con prueba de mutación. Commit `dc171a7`.
+**Next:** abierto: por qué el advisor tuvo Edit/Bash en esta sesión (revisar con `opencode debug agents`); los commits de permisos no pasaron por critic → sugerir `/review`.
+**Files:** `git log --oneline -5` (no listas manuales)
+**Verificación:** `npm test` verde; el chequeo `(a-bis)` falla al mutar el marcador.
+
+## 2026-11-12 - Rutas sensibles por mención de ruta y `read ask` restaurado
+
+topic: agents/sensitive-path-mention
+review_after: 2027-05-12
+**Goal:** que builder/summarizer/verifier pregunten ante cualquier comando que nombre una ruta sensible, sin enumerar lectores, y recuperar la política `read ask`.
+**Discoveries:** enumerar lectores (`cat`, etc.) es incompleto; el verifier no tenía ninguna regla. El `read * allow` del frontmatter, añadido después, anulaba la política base de V2 en los 7 agentes. Límites: `grep`/`glob` evalúan la regex/patrón, no la ruta ⇒ no protegibles por ruta; falsos positivos aceptados (`git add .env.example`). Riesgo SIN probar: «Allow always» podría guardar un prefijo como allow posterior y anular los `ask` (gana la última).
+**Accomplished:** 10 reglas `ask` por mención (`* .env*`, no `*.env*` por `process.env`) en el shell de builder/summarizer/verifier; `read ask` restaurado en los 7 agentes (`*.env`, `*.env.*`, `*.pem`, `*.key`, `*secrets/*`, `*.ssh/*`, `*.aws/credentials*` → ask; `*.env.example` → allow). Commits `ec774f6` y `c1dedb4`.
+**Next:** sondear «Allow always» contra los `ask`; el verifier no cubre `grep`/`glob`.
+**Files:** `git log --oneline -5` (no listas manuales)
+**Verificación:** 9 lectores × 10 rutas × 3 agentes; 11 rutas sensibles + 6 normales × 7 agentes; `opencode debug agents` (12 reglas read por agente); `npm test` verde.
+
 ## 2026-11-12 - Rutas sensibles sin carpeta en shell y `session-metrics --session` en Windows
 
 topic: agents/shell-sensitive-paths, tools/session-metrics-win32
@@ -14,7 +47,7 @@ review_after: 2027-05-12
 **Goal:** cerrar §3 (d) `cat .env` sin carpeta no casaba `cat **/.env*` y el sub-pendiente (1) del benchmark: `session-metrics --session` fallaba en Windows (ENOENT).
 **Discoveries:** (1) `cat **/X` no casa rutas sin carpeta; como `shell *` es allow, `cat .env`, `cat server.pem`, `cat secrets/x` corrían sin preguntar. (2) `session-metrics` tenía dos fallos: el resolvedor probaba primero la extensión vacía y elegía el script sh de npm (`...\npm\opencode`) en vez de `opencode.cmd`, y Node no lanza .cmd/.bat sin shell. (3) Una sesión real medida con `--session`: ~12M tokens, casi todo caché.
 **Accomplished:** 4 reglas `ask` (`cat .env*`, `cat *.pem`, `cat *.key`, `cat secrets/*`) en builder y summarizer (raíz + templates) con aserción en `test/wiring-basic.test.mjs` (5 comandos sin carpeta → ask). `session-metrics.mjs` (raíz + templates): extensión vacía al final en PATHEXT y .cmd/.bat vía `ComSpec /d /s /c` (seguro: id validado por `SESSION_ID_RE`, flags fijas).
-**Next:** `type`, `Get-Content`, `less`, `head` NO cubiertos (solo `cat`; requiere decisión de diseño); el texto de builder.md:65 no lista las rutas sin `**/`; sin test unitario del caso .cmd; siguen publicar 2.0.0, `lint:ps1`, benchmark T2, compactar PROJECT_STATE.
+**Next:** la cobertura de otros lectores (`type`, `Get-Content`, `less`, `head`) quedó superada por la regla de mención de `agents/sensitive-path-mention` (ver entrada de hoy); sin test unitario del caso .cmd; siguen publicar 2.0.0, `lint:ps1`, benchmark T2.
 **Files:** `git diff` (no listas manuales)
 **Verificación:** `npm test` verde (23/23, contrato 45 espejos, versión 2.0.0); `doctor` 0 errores previo; `session-metrics --session` real exit 0.
 
