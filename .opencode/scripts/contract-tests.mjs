@@ -479,6 +479,21 @@ const ROUTING_DOCS = [
   if (!bad) pass('routing-contract', 'marcadores canon:critic-routing + canon:fast-lane con su regla en advisor.md (raíz+template)');
 }
 
+// (a-bis) Regla única ante denegación: delegar, nunca pedir al usuario que habilite permisos.
+{
+  const DENY_MARKER = '<!-- canon:delegate-on-deny -->';
+  const FRAGS_DENY = ['Permission denied', 'Nunca pidas al usuario que habilite permisos'];
+  let bad = 0;
+  for (const rel of ADVISOR_DOCS) {
+    const txt = read(join(ROOT, rel));
+    if (txt === null) { fail('routing-contract', `no existe ${rel}`); bad++; continue; }
+    const rule = markerLine(txt, DENY_MARKER);
+    if (rule === null) { fail('routing-contract', `${rel}: falta ${DENY_MARKER} o está duplicado`); bad++; }
+    else for (const f of FRAGS_DENY) if (!rule.includes(f)) { fail('routing-contract', `${rel}: la regla tras ${DENY_MARKER} no dice "${f}"`); bad++; }
+  }
+  if (!bad) pass('routing-contract', 'marcador canon:delegate-on-deny con su regla en advisor.md (raíz+template)');
+}
+
 // (c-bis) Los punteros de routine/AGENT-PIPELINE apuntan a un marcador que existe.
 {
   let bad = 0;
